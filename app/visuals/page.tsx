@@ -1,13 +1,13 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import VisualsGrid, { type VisualWithUrl } from "@/components/VisualsGrid";
-import type { Visual } from "@/lib/types";
+import type { Visual, VisualCollection } from "@/lib/types";
 
 export default async function VisualsPage() {
   const supabase = createServerSupabaseClient();
-  const { data: visuals } = await supabase
-    .from("visuals")
-    .select("*")
-    .order("name", { ascending: true });
+  const [{ data: visuals }, { data: collections }] = await Promise.all([
+    supabase.from("visuals").select("*").order("name", { ascending: true }),
+    supabase.from("visual_collections").select("*").order("name", { ascending: true }),
+  ]);
 
   const rows = (visuals as Visual[]) ?? [];
 
@@ -18,5 +18,5 @@ export default async function VisualsPage() {
     })
   );
 
-  return <VisualsGrid visuals={withUrls} />;
+  return <VisualsGrid visuals={withUrls} collections={(collections as VisualCollection[]) ?? []} />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Visual } from "@/lib/types";
+import type { Visual, VisualCollection } from "@/lib/types";
 
 function stripExtension(filename: string): string {
   const idx = filename.lastIndexOf(".");
@@ -11,15 +11,18 @@ function stripExtension(filename: string): string {
 export default function VisualForm({
   visual,
   currentFileUrl,
+  collections,
   onSuccess,
 }: {
   visual?: Visual;
   currentFileUrl?: string | null;
+  collections: VisualCollection[];
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(visual);
   const [name, setName] = useState(visual?.name ?? "");
   const [nameTouched, setNameTouched] = useState(isEditing);
+  const [collectionId, setCollectionId] = useState(visual?.collection_id ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,6 +54,7 @@ export default function VisualForm({
     if (isEditing || files.length <= 1) {
       const formData = new FormData();
       formData.append("name", name);
+      formData.append("collectionId", collectionId);
       if (files[0]) formData.append("file", files[0]);
 
       const res = await fetch(isEditing ? `/api/visuals/${visual!.id}` : "/api/visuals", {
@@ -75,6 +79,7 @@ export default function VisualForm({
       const f = files[i];
       const formData = new FormData();
       formData.append("name", stripExtension(f.name));
+      formData.append("collectionId", collectionId);
       formData.append("file", f);
       const res = await fetch("/api/visuals", { method: "POST", body: formData });
       if (!res.ok) failed.push(f.name);
@@ -129,6 +134,22 @@ export default function VisualForm({
         ) : currentFileUrl ? (
           <img src={currentFileUrl} alt="Fichier actuel" className="mt-3 max-h-48 rounded border" />
         ) : null}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Collection</label>
+        <select
+          value={collectionId}
+          onChange={(e) => setCollectionId(e.target.value)}
+          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+        >
+          <option value="">— Aucune —</option>
+          {collections.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {progress && (

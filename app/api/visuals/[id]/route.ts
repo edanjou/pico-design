@@ -13,12 +13,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const formData = await request.formData();
   const name = formData.get("name");
   const file = formData.get("file");
+  const collectionId = formData.get("collectionId");
 
   if (typeof name !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (name)." }, { status: 400 });
   }
 
-  const update: Record<string, unknown> = { name };
+  const update: Record<string, unknown> = {
+    name,
+    collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
+  };
 
   if (file instanceof File && file.size > 0) {
     if (!ALLOWED_TYPES.includes(file.type)) {

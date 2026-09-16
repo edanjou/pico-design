@@ -31,11 +31,19 @@ export interface Template {
 export type VisualMode = "full" | "tile";
 export type LogoShape = "logo" | "pastille";
 
+export interface VisualCollection {
+  id: string;
+  name: string;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface Visual {
   id: string;
   name: string;
   file_path: string;
   mime_type: string;
+  collection_id: string | null;
   created_at: string;
   created_by: string | null;
 }

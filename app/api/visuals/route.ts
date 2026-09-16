@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const name = formData.get("name");
   const file = formData.get("file");
+  const collectionId = formData.get("collectionId");
 
   if (typeof name !== "string" || !(file instanceof File)) {
     return NextResponse.json({ error: "Paramètres manquants (name, file)." }, { status: 400 });
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       name,
       file_path: filePath,
       mime_type: file.type,
+      collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
       created_by: user.id,
     })
     .select()

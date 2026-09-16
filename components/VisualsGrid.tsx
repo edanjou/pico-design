@@ -3,23 +3,43 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VisualForm from "@/components/VisualForm";
+import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
 import { FilePenIcon, TrashIcon } from "@/components/icons";
-import type { Visual } from "@/lib/types";
+import type { Visual, VisualCollection } from "@/lib/types";
 
 export type VisualWithUrl = Visual & { fileUrl: string | null };
 
-type ModalState = { mode: "create" } | { mode: "edit"; visual: VisualWithUrl } | null;
+type ModalState =
+  | { mode: "create" }
+  | { mode: "edit"; visual: VisualWithUrl }
+  | { mode: "collections" }
+  | null;
 
-export default function VisualsGrid({ visuals }: { visuals: VisualWithUrl[] }) {
+export default function VisualsGrid({
+  visuals,
+  collections,
+}: {
+  visuals: VisualWithUrl[];
+  collections: VisualCollection[];
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [collectionId, setCollectionId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const collectionName = useMemo(() => {
+    const map = new Map(collections.map((c) => [c.id, c.name]));
+    return (id: string | null) => (id ? map.get(id) ?? null : null);
+  }, [collections]);
+
   const filtered = useMemo(
-    () => visuals.filter((v) => v.name.toLowerCase().includes(search.trim().toLowerCase())),
-    [visuals, search]
+    () =>
+      visuals
+        .filter((v) => (collectionId ? v.collection_id === collectionId : true))
+        .filter((v) => v.name.toLowerCase().includes(search.trim().toLowerCase())),
+    [visuals, search, collectionId]
   );
 
   function handleSuccess() {
@@ -61,26 +81,52 @@ export default function VisualsGrid({ visuals }: { visuals: VisualWithUrl[] }) {
         </button>
       </div>
 
-      <div className="relative mb-4 max-w-xs">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex-1 sm:max-w-xs">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+            />
+          </svg>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher (nom)..."
+            className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
           />
-        </svg>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher (nom)..."
-          className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
-        />
+        </div>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="block text-xs font-medium text-neutral-500">Collection</label>
+            <select
+              value={collectionId}
+              onChange={(e) => setCollectionId(e.target.value)}
+              className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— Toutes —</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal({ mode: "collections" })}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
+          >
+            Gérer les collections
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -102,34 +148,47 @@ export default function VisualsGrid({ visuals }: { visuals: VisualWithUrl[] }) {
                   <div className="h-full w-full rounded bg-neutral-100" />
                 )}
               </div>
-              <div className="flex items-center justify-between gap-2 p-3">
-                <span className="truncate text-sm font-medium text-pico-black">{v.name}</span>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    onClick={() => setModal({ mode: "edit", visual: v })}
-                    title="Modifier"
-                    aria-label="Modifier"
-                    className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
-                  >
-                    <FilePenIcon className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(v)}
-                    disabled={deletingId === v.id}
-                    title="Supprimer"
-                    aria-label="Supprimer"
-                    className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
+              <div className="p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-pico-black">{v.name}</span>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      onClick={() => setModal({ mode: "edit", visual: v })}
+                      title="Modifier"
+                      aria-label="Modifier"
+                      className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+                    >
+                      <FilePenIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(v)}
+                      disabled={deletingId === v.id}
+                      title="Supprimer"
+                      aria-label="Supprimer"
+                      className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
+                {collectionName(v.collection_id) && (
+                  <span className="mt-1 inline-block truncate text-xs text-neutral-500">
+                    {collectionName(v.collection_id)}
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {modal && (
+      {modal?.mode === "collections" && (
+        <Modal title="Gérer les collections" onClose={() => setModal(null)}>
+          <CollectionsManager collections={collections} onChanged={() => router.refresh()} />
+        </Modal>
+      )}
+
+      {(modal?.mode === "create" || modal?.mode === "edit") && (
         <Modal
           title={modal.mode === "create" ? "Nouveau visuel" : `Modifier « ${modal.visual.name} »`}
           onClose={() => setModal(null)}
@@ -137,6 +196,7 @@ export default function VisualsGrid({ visuals }: { visuals: VisualWithUrl[] }) {
           <VisualForm
             visual={modal.mode === "edit" ? modal.visual : undefined}
             currentFileUrl={modal.mode === "edit" ? modal.visual.fileUrl : null}
+            collections={collections}
             onSuccess={handleSuccess}
           />
         </Modal>

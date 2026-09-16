@@ -31,6 +31,12 @@ export async function generateTemplatePreviewPng(
   const trimW = Math.max(0, pageWidthPx - bleedPx * 2);
   const trimH = Math.max(0, pageHeightPx - bleedPx * 2);
 
+  const safetyPx = mmToPx(template.safety_margin_mm, previewDpi);
+  const safetyX = trimX + safetyPx;
+  const safetyY = trimY + safetyPx;
+  const safetyW = Math.max(0, trimW - safetyPx * 2);
+  const safetyH = Math.max(0, trimH - safetyPx * 2);
+
   const backgroundSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
       <defs>
@@ -43,6 +49,11 @@ export async function generateTemplatePreviewPng(
       ${
         template.bleed_mm > 0
           ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 4"/>`
+          : ""
+      }
+      ${
+        template.safety_margin_mm > 0
+          ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }
       <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(

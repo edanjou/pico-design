@@ -32,7 +32,8 @@ export default function TemplateForm({
     category_id: template?.category_id ?? categories[0]?.id ?? "",
     width_mm: template?.width_mm ?? 90,
     height_mm: template?.height_mm ?? 50,
-    bleed_mm: template?.bleed_mm ?? 3,
+    bleed_mm: template?.bleed_mm ?? 3.175,
+    safety_margin_mm: template?.safety_margin_mm ?? 3.175,
     dpi: template?.dpi ?? 300,
     logo_h_align: template?.logo_h_align ?? ("right" as LogoHAlign),
     logo_v_align: template?.logo_v_align ?? ("bottom" as LogoVAlign),
@@ -42,7 +43,7 @@ export default function TemplateForm({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unit, setUnit] = useState<Unit>("mm");
+  const [unit, setUnit] = useState<Unit>("in");
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -56,7 +57,14 @@ export default function TemplateForm({
   }
 
   function updateFromDisplay(
-    key: "width_mm" | "height_mm" | "bleed_mm" | "logo_width_mm" | "logo_margin_x_mm" | "logo_margin_y_mm",
+    key:
+      | "width_mm"
+      | "height_mm"
+      | "bleed_mm"
+      | "safety_margin_mm"
+      | "logo_width_mm"
+      | "logo_margin_x_mm"
+      | "logo_margin_y_mm",
     value: number
   ) {
     update(key, unit === "mm" ? value : inToMm(value));
@@ -166,6 +174,18 @@ export default function TemplateForm({
               step={unit === "mm" ? "0.1" : "0.01"}
               value={toDisplay(form.bleed_mm)}
               onChange={(e) => updateFromDisplay("bleed_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">
+              Marge de protection ({unit === "mm" ? "mm" : "po"})
+            </label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.safety_margin_mm)}
+              onChange={(e) => updateFromDisplay("safety_margin_mm", parseFloat(e.target.value) || 0)}
               className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
             />
           </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
-import type { Template } from "@/lib/types";
+import type { Product, Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
 
@@ -18,44 +18,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
   }
 
-  const formData = await request.formData();
-  const templateId = formData.get("templateId");
-  const file = formData.get("image");
+  const body = await request.json();
+  const productId = body?.productId;
 
-  if (typeof templateId !== "string" || !(file instanceof File)) {
-    return NextResponse.json(
-      { error: "Paramètres manquants (templateId, image)." },
-      { status: 400 }
-    );
+  if (typeof productId !== "string") {
+    return NextResponse.json({ error: "Paramètre manquant (productId)." }, { status: 400 });
   }
 
-  const { data: template, error: templateError } = await supabase
-    .from("templates")
-    .select("*")
-    .eq("id", templateId)
-    .single<Template>();
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .select("*, template:templates(*)")
+    .eq("id", productId)
+    .single<Product & { template: Template | null }>();
 
-  if (templateError || !template) {
-    return NextResponse.json({ error: "Modèle introuvable." }, { status: 404 });
+  if (productError || !product || !product.template) {
+    return NextResponse.json({ error: "Produit ou modèle introuvable." }, { status: 404 });
   }
 
+  const template = product.template;
   const admin = createAdminSupabaseClient();
-  const sourceBuffer = Buffer.from(await file.arrayBuffer());
+
+  const { data: sourceData, error: sourceError } = await admin.storage
+    .from("uploads")
+    .download(product.image_path);
+  if (sourceError || !sourceData) {
+    return NextResponse.json({ error: "Image du produit introuvable." }, { status: 404 });
+  }
+  const sourceBuffer = Buffer.from(await sourceData.arrayBuffer());
 
   // Logo Pico : à uploader une fois dans le bucket "assets" (voir README).
-  const { data: logoData } = await admin.storage
-    .from("assets")
-    .download(LOGO_STORAGE_PATH);
+  const { data: logoData } = await admin.storage.from("assets").download(LOGO_STORAGE_PATH);
   const logoBuffer = logoData ? Buffer.from(await logoData.arrayBuffer()) : null;
 
   const jobId = randomUUID();
-  const sourcePath = `${user.id}/${jobId}/source-${file.name}`;
   const outputPath = `${user.id}/${jobId}/output.pdf`;
 
   const { error: insertError } = await admin.from("jobs").insert({
     id: jobId,
     template_id: template.id,
-    source_image_path: sourcePath,
+    product_id: product.id,
+    source_image_path: product.image_path,
     status: "processing",
     created_by: user.id,
   });
@@ -64,11 +66,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    await admin.storage.from("uploads").upload(sourcePath, sourceBuffer, {
-      contentType: file.type || "image/jpeg",
-      upsert: true,
-    });
-
     const pdfBuffer = await generatePrintReadyPdf({
       template,
       sourceImage: sourceBuffer,

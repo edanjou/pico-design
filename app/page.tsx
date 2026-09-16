@@ -3,23 +3,9 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const links = [
   {
-    href: "/generate",
-    title: "Générer un PDF",
-    description: "Envoyer une image et obtenir un PDF prêt pour impression.",
-    gradient: "from-orange-400 to-red-500",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M12 4.5v11m0 0 4-4m-4 4-4-4M5 16.5v1.75A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25V16.5"
-      />
-    ),
-  },
-  {
     href: "/templates",
     title: "Modèles",
-    description: "Voir et ajouter des formats de produits.",
+    description: "Dimensions, fond perdu et positionnement du logo.",
     gradient: "from-teal-400 to-emerald-600",
     icon: (
       <path
@@ -27,6 +13,34 @@ const links = [
         strokeLinejoin="round"
         strokeWidth={1.5}
         d="M4 5.75A1.75 1.75 0 0 1 5.75 4h4.5A1.75 1.75 0 0 1 12 5.75v4.5A1.75 1.75 0 0 1 10.25 12h-4.5A1.75 1.75 0 0 1 4 10.25v-4.5ZM4 18.25A1.75 1.75 0 0 1 5.75 16.5h4.5A1.75 1.75 0 0 1 12 18.25v.5A1.75 1.75 0 0 1 10.25 20.5h-4.5A1.75 1.75 0 0 1 4 18.75v-.5ZM12 13.75A1.75 1.75 0 0 1 13.75 12h4.5A1.75 1.75 0 0 1 20 13.75v4.5A1.75 1.75 0 0 1 18.25 20h-4.5A1.75 1.75 0 0 1 12 18.25v-4.5ZM12 5.75A1.75 1.75 0 0 1 13.75 4h4.5A1.75 1.75 0 0 1 20 5.75v.5A1.75 1.75 0 0 1 18.25 8h-4.5A1.75 1.75 0 0 1 12 6.25v-.5Z"
+      />
+    ),
+  },
+  {
+    href: "/products",
+    title: "Produits",
+    description: "Créer des produits à partir d'un modèle et d'une image.",
+    gradient: "from-pink-400 to-rose-500",
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25V6.75ZM4 15l4-4 3 3 4.5-4.5L20 14M9 9.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"
+      />
+    ),
+  },
+  {
+    href: "/generate",
+    title: "Générer un PDF",
+    description: "Choisir un produit et obtenir un PDF prêt pour impression.",
+    gradient: "from-orange-400 to-red-500",
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M12 4.5v11m0 0 4-4m-4 4-4-4M5 16.5v1.75A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25V16.5"
       />
     ),
   },
@@ -80,7 +94,7 @@ export default async function DashboardPage() {
       </div>
 
       <p className="mb-3 mt-8 text-xs font-semibold tracking-widest text-neutral-500">PAGES</p>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {links.map((link) => (
           <Link
             key={link.href}

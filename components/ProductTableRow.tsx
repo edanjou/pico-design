@@ -3,16 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TEMPLATE_CATEGORY_LABELS, type Template } from "@/lib/types";
+import type { Product } from "@/lib/types";
 
-export default function TemplateRow({ template }: { template: Template }) {
+export default function ProductTableRow({
+  product,
+  templateName,
+  imageUrl,
+}: {
+  product: Product;
+  templateName: string;
+  imageUrl: string | null;
+}) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Supprimer le modèle « ${template.name} » ?`)) return;
+    if (!confirm(`Supprimer le produit « ${product.name} » ?`)) return;
     setDeleting(true);
-    const res = await fetch(`/api/templates/${template.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
     setDeleting(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -24,17 +32,19 @@ export default function TemplateRow({ template }: { template: Template }) {
 
   return (
     <tr className="border-t border-neutral-200">
-      <td className="p-3 font-medium">{template.name}</td>
-      <td className="p-3 text-neutral-600">{TEMPLATE_CATEGORY_LABELS[template.category]}</td>
-      <td className="p-3 text-neutral-600">
-        {template.width_mm}×{template.height_mm}mm
+      <td className="p-3">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt={product.name} className="h-12 w-12 rounded object-cover" />
+        ) : (
+          <div className="h-12 w-12 rounded bg-neutral-100" />
+        )}
       </td>
-      <td className="p-3 text-neutral-600">{template.bleed_mm}mm</td>
-      <td className="p-3 text-neutral-600">{template.dpi} dpi</td>
-      <td className="p-3 text-neutral-600">{template.logo_position}</td>
+      <td className="p-3 font-medium">{product.name}</td>
+      <td className="p-3 text-neutral-600">{templateName}</td>
       <td className="p-3 text-right">
         <div className="flex justify-end gap-3 text-sm">
-          <Link href={`/templates/${template.id}/edit`} className="text-pico-black hover:underline">
+          <Link href={`/products/${product.id}/edit`} className="text-pico-black hover:underline">
             Modifier
           </Link>
           <button

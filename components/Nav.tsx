@@ -22,11 +22,14 @@ export default function Nav() {
             <img src="/pico-noir.svg" alt="Pico Design" className="h-6 w-auto" />
           </Link>
           <nav className="flex gap-4 text-sm text-neutral-600">
-            <Link href="/generate" className="hover:text-pico-accent">
-              Générer un PDF
-            </Link>
             <Link href="/templates" className="hover:text-pico-accent">
               Modèles
+            </Link>
+            <Link href="/products" className="hover:text-pico-accent">
+              Produits
+            </Link>
+            <Link href="/generate" className="hover:text-pico-accent">
+              Générer un PDF
             </Link>
             <Link href="/history" className="hover:text-pico-accent">
               Historique

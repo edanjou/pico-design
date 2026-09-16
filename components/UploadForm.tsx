@@ -1,40 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { TEMPLATE_CATEGORY_LABELS, type Template, type TemplateCategory } from "@/lib/types";
+import Link from "next/link";
+import {
+  TEMPLATE_CATEGORY_LABELS,
+  type Product,
+  type TemplateCategory,
+} from "@/lib/types";
 
 const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
 
-export default function UploadForm({ templates }: { templates: Template[] }) {
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+type ProductOption = Product & {
+  imageUrl: string | null;
+  template: { name: string; category: TemplateCategory; width_mm: number; height_mm: number; dpi: number } | null;
+};
+
+export default function UploadForm({ products }: { products: ProductOption[] }) {
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setDownloadUrl(null);
-    setError(null);
-    setPreview(f ? URL.createObjectURL(f) : null);
-  }
+  const selected = products.find((p) => p.id === productId) ?? null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !templateId) return;
+    if (!productId) return;
 
     setLoading(true);
     setError(null);
     setDownloadUrl(null);
 
-    const formData = new FormData();
-    formData.append("templateId", templateId);
-    formData.append("image", file);
-
     try {
-      const res = await fetch("/api/generate", { method: "POST", body: formData });
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur lors de la génération.");
       setDownloadUrl(data.downloadUrl);
@@ -45,13 +47,13 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
     }
   }
 
-  if (templates.length === 0) {
+  if (products.length === 0) {
     return (
       <p className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-        Aucun modèle configuré. Crée d'abord un modèle dans{" "}
-        <a href="/templates" className="underline">
-          Modèles
-        </a>
+        Aucun produit configuré. Crée d&apos;abord un produit dans{" "}
+        <Link href="/products" className="underline">
+          Produits
+        </Link>
         .
       </p>
     );
@@ -60,20 +62,23 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label className="block text-sm font-medium">Modèle de produit</label>
+        <label className="block text-sm font-medium">Produit</label>
         <select
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value)}
+          value={productId}
+          onChange={(e) => {
+            setProductId(e.target.value);
+            setDownloadUrl(null);
+          }}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
           {CATEGORY_ORDER.map((category) => {
-            const items = templates.filter((t) => t.category === category);
+            const items = products.filter((p) => p.template?.category === category);
             if (items.length === 0) return null;
             return (
               <optgroup key={category} label={TEMPLATE_CATEGORY_LABELS[category]}>
-                {items.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} — {t.width_mm}×{t.height_mm}mm ({t.dpi} dpi)
+                {items.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {p.template?.name}
                   </option>
                 ))}
               </optgroup>
@@ -82,26 +87,29 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium">Image source</label>
-        <input
-          type="file"
-          accept="image/*"
-          required
-          onChange={handleFileChange}
-          className="mt-1 w-full text-sm"
-        />
-        {preview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Aperçu" className="mt-3 max-h-64 rounded border" />
-        )}
-      </div>
+      {selected && (
+        <div>
+          {selected.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={selected.imageUrl}
+              alt={selected.name}
+              className="max-h-64 rounded border"
+            />
+          )}
+          {selected.template && (
+            <p className="mt-2 text-sm text-neutral-500">
+              {selected.template.width_mm}×{selected.template.height_mm}mm · {selected.template.dpi} dpi
+            </p>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button
         type="submit"
-        disabled={loading || !file}
+        disabled={loading}
         className="rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
       >
         {loading ? "Génération en cours..." : "Générer le PDF"}

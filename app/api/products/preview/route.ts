@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
-import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
-import type { LogoVariant, Template, VisualMode } from "@/lib/types";
+import { loadLogoImage } from "@/lib/pdf/logo";
+import type { LogoShape, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
 
@@ -20,7 +20,8 @@ export async function POST(request: Request) {
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
-  const logoVariant = formData.get("logoVariant");
+  const logoShape = formData.get("logoShape");
+  const logoColor = formData.get("logoColor");
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -50,14 +51,9 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminSupabaseClient();
-  const variant: LogoVariant =
-    typeof logoVariant === "string" && logoVariant in LOGO_VARIANT_FILES
-      ? (logoVariant as LogoVariant)
-      : "noir";
-  const { data: logoData } = await admin.storage
-    .from("assets")
-    .download(LOGO_VARIANT_FILES[variant]);
-  const logoBuffer = logoData ? Buffer.from(await logoData.arrayBuffer()) : null;
+  const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
+  const color = typeof logoColor === "string" ? logoColor : "#000000";
+  const logoBuffer = await loadLogoImage(admin, shape, color);
 
   const png = await generateTemplatePreviewPng(template, logoBuffer, resolved.buffer);
 

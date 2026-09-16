@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
-import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
+import { loadLogoImage } from "@/lib/pdf/logo";
 import type { Product, Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
@@ -45,10 +45,9 @@ export async function POST(request: Request) {
   }
   const sourceBuffer = Buffer.from(await sourceData.arrayBuffer());
 
-  // Logo Pico : à uploader une fois dans le bucket "assets" (voir README).
-  const logoPath = LOGO_VARIANT_FILES[product.logo_variant] ?? LOGO_VARIANT_FILES.noir;
-  const { data: logoData } = await admin.storage.from("assets").download(logoPath);
-  const logoBuffer = logoData ? Buffer.from(await logoData.arrayBuffer()) : null;
+  // Logo Pico : forme + couleur choisies sur le produit (fichiers "neutres"
+  // du bucket "assets", recolorés dynamiquement).
+  const logoBuffer = await loadLogoImage(admin, product.logo_shape, product.logo_color);
 
   const jobId = randomUUID();
   const outputPath = `${user.id}/${jobId}/output.pdf`;

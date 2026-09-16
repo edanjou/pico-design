@@ -29,7 +29,7 @@ export interface Template {
 }
 
 export type VisualMode = "full" | "tile";
-export type LogoVariant = "noir" | "blanc" | "icon_cercle";
+export type LogoShape = "logo" | "pastille";
 
 export interface Visual {
   id: string;
@@ -48,7 +48,8 @@ export interface Product {
   visual_id: string | null;
   visual_mode: VisualMode | null;
   tile_size_mm: number | null;
-  logo_variant: LogoVariant;
+  logo_shape: LogoShape;
+  logo_color: string;
   created_at: string;
   created_by: string | null;
 }

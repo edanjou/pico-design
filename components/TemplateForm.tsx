@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { LogoPosition } from "@/lib/types";
+import type { LogoPosition, Template } from "@/lib/types";
 
 const LOGO_POSITIONS: LogoPosition[] = [
   "top-left",
@@ -12,17 +12,18 @@ const LOGO_POSITIONS: LogoPosition[] = [
   "center",
 ];
 
-export default function TemplateForm() {
+export default function TemplateForm({ template }: { template?: Template }) {
   const router = useRouter();
+  const isEditing = Boolean(template);
   const [form, setForm] = useState({
-    name: "",
-    width_mm: 90,
-    height_mm: 50,
-    bleed_mm: 3,
-    dpi: 300,
-    logo_position: "bottom-right" as LogoPosition,
-    logo_width_mm: 20,
-    logo_margin_mm: 5,
+    name: template?.name ?? "",
+    width_mm: template?.width_mm ?? 90,
+    height_mm: template?.height_mm ?? 50,
+    bleed_mm: template?.bleed_mm ?? 3,
+    dpi: template?.dpi ?? 300,
+    logo_position: template?.logo_position ?? ("bottom-right" as LogoPosition),
+    logo_width_mm: template?.logo_width_mm ?? 20,
+    logo_margin_mm: template?.logo_margin_mm ?? 5,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,16 +37,19 @@ export default function TemplateForm() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    const res = await fetch(
+      isEditing ? `/api/templates/${template!.id}` : "/api/templates",
+      {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      }
+    );
     const data = await res.json();
 
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? "Erreur lors de la création.");
+      setError(data.error ?? "Erreur lors de l'enregistrement.");
       return;
     }
     router.push("/templates");
@@ -151,7 +155,7 @@ export default function TemplateForm() {
         disabled={loading}
         className="rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
       >
-        {loading ? "Création..." : "Créer le modèle"}
+        {loading ? "Enregistrement..." : isEditing ? "Enregistrer" : "Créer le modèle"}
       </button>
     </form>
   );

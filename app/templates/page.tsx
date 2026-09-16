@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import TemplateRow from "@/components/TemplateRow";
 import type { Template } from "@/lib/types";
 
 export default async function TemplatesPage() {
@@ -23,13 +24,7 @@ export default async function TemplatesPage() {
 
       <div className="divide-y rounded border border-neutral-200 bg-white">
         {((templates as Template[]) ?? []).map((t) => (
-          <div key={t.id} className="p-4">
-            <p className="font-medium">{t.name}</p>
-            <p className="text-sm text-neutral-500">
-              {t.width_mm}×{t.height_mm}mm · fond perdu {t.bleed_mm}mm · {t.dpi} dpi · logo{" "}
-              {t.logo_position}
-            </p>
-          </div>
+          <TemplateRow key={t.id} template={t} />
         ))}
         {(!templates || templates.length === 0) && (
           <p className="p-4 text-sm text-neutral-500">Aucun modèle pour l'instant.</p>

@@ -61,6 +61,8 @@ export default function ProductForm({
   const [logoSecondaryColor, setLogoSecondaryColor] = useState(
     product?.logo_secondary_color ?? "#FFFFFF"
   );
+  const [imagePositionX, setImagePositionX] = useState(product?.image_position_x ?? 0.5);
+  const [imagePositionY, setImagePositionY] = useState(product?.image_position_y ?? 0.5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
@@ -105,6 +107,8 @@ export default function ProductForm({
       formData.append("logoShape", logoShape);
       formData.append("logoColor", logoColor);
       formData.append("logoSecondaryColor", logoSecondaryColor);
+      formData.append("positionX", String(imagePositionX));
+      formData.append("positionY", String(imagePositionY));
       if (sourceMode === "upload") {
         if (file) formData.append("image", file);
       } else {
@@ -131,7 +135,18 @@ export default function ProductForm({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [previewTemplateId, sourceMode, visualId, tileSizeMm, file, logoShape, logoColor, logoSecondaryColor]);
+  }, [
+    previewTemplateId,
+    sourceMode,
+    visualId,
+    tileSizeMm,
+    file,
+    logoShape,
+    logoColor,
+    logoSecondaryColor,
+    imagePositionX,
+    imagePositionY,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -160,6 +175,14 @@ export default function ProductForm({
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     setPreview(f ? URL.createObjectURL(f) : null);
+    setImagePositionX(0.5);
+    setImagePositionY(0.5);
+  }
+
+  function handleVisualChange(id: string) {
+    setVisualId(id);
+    setImagePositionX(0.5);
+    setImagePositionY(0.5);
   }
 
   function toggleTemplate(id: string, checked: boolean) {
@@ -175,6 +198,8 @@ export default function ProductForm({
     formData.append("logoShape", logoShape);
     formData.append("logoColor", logoColor);
     formData.append("logoSecondaryColor", logoSecondaryColor);
+    formData.append("positionX", String(imagePositionX));
+    formData.append("positionY", String(imagePositionY));
     if (cId) formData.append("collectionId", cId);
     if (sourceMode === "upload") {
       if (file) formData.append("image", file);
@@ -218,6 +243,9 @@ export default function ProductForm({
         setError(data.error ?? "Erreur lors de l'enregistrement.");
         return;
       }
+      if (data.pdfError) {
+        alert(`Le produit a été enregistré, mais le PDF n'a pas pu être généré : ${data.pdfError}`);
+      }
       onSuccess();
       return;
     }
@@ -245,14 +273,17 @@ export default function ProductForm({
     const total = selectedTemplateIds.length;
     setCreateProgress({ done: 0, total });
     const failures: string[] = [];
+    const pdfWarnings: string[] = [];
     for (const tId of selectedTemplateIds) {
       const templateName = templates.find((t) => t.id === tId)?.name ?? "";
       const productName = name.trim() ? `${name.trim()} — ${templateName}` : templateName;
       const formData = buildFormData(productName, tId, targetCollectionId);
       const res = await fetch("/api/products", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         failures.push(`${templateName} : ${data.error ?? "erreur inconnue"}`);
+      } else if (data.pdfError) {
+        pdfWarnings.push(`${templateName} : ${data.pdfError}`);
       }
       setCreateProgress((p) => (p ? { done: p.done + 1, total: p.total } : { done: 1, total }));
     }
@@ -261,6 +292,13 @@ export default function ProductForm({
     if (failures.length > 0) {
       setError(`Certains produits n'ont pas pu être créés — ${failures.join(" · ")}`);
       return;
+    }
+    if (pdfWarnings.length > 0) {
+      alert(
+        `Les produits ont été créés, mais certains PDF n'ont pas pu être générés :\n${pdfWarnings.join(
+          "\n"
+        )}`
+      );
     }
     onSuccess();
   }
@@ -276,6 +314,20 @@ export default function ProductForm({
       </p>
     );
   }
+
+  const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
+  const positionAspectRatio = previewTemplate
+    ? (previewTemplate.width_mm + previewTemplate.bleed_mm * 2) /
+      (previewTemplate.height_mm + previewTemplate.bleed_mm * 2)
+    : 1;
+  const selectedVisual = visuals.find((v) => v.id === visualId) ?? null;
+  const positionImageUrl =
+    sourceMode === "upload"
+      ? preview ?? currentImageUrl ?? null
+      : sourceMode === "full"
+      ? selectedVisual?.fileUrl ?? null
+      : null;
+  const showPositionPad = !isMultiTemplate && Boolean(previewTemplateId) && Boolean(positionImageUrl);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -437,7 +489,7 @@ export default function ProductForm({
             <label className="block text-sm font-medium">Visuel</label>
             <select
               value={visualId}
-              onChange={(e) => setVisualId(e.target.value)}
+              onChange={(e) => handleVisualChange(e.target.value)}
               className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
             >
               {visuals.map((v) => (
@@ -462,6 +514,36 @@ export default function ProductForm({
             </div>
           )}
 
+        </div>
+      )}
+
+      {showPositionPad && (
+        <div>
+          <label className="mb-1 block text-sm font-medium">Positionnement de l&apos;image</label>
+          <p className="mb-2 text-xs text-neutral-500">
+            Glisse l&apos;image pour ajuster ce qui sera visible dans le cadrage (fond perdu
+            compris).
+          </p>
+          <PositionPad
+            imageUrl={positionImageUrl!}
+            aspectRatio={positionAspectRatio}
+            x={imagePositionX}
+            y={imagePositionY}
+            onChange={(pos) => {
+              setImagePositionX(pos.x);
+              setImagePositionY(pos.y);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setImagePositionX(0.5);
+              setImagePositionY(0.5);
+            }}
+            className="mt-2 text-xs text-neutral-500 underline hover:text-pico-black"
+          >
+            Recentrer
+          </button>
         </div>
       )}
 
@@ -583,5 +665,71 @@ export default function ProductForm({
           : "Créer le produit"}
       </button>
     </form>
+  );
+}
+
+// Pavé de positionnement : affiche l'image en plein format (object-fit:
+// cover, comme le sera le recadrage final) et laisse glisser pour choisir
+// le point focal — le drag est traduit en delta de position (0..1) plutôt
+// qu'en position absolue, pour un geste "attraper la photo" naturel.
+function PositionPad({
+  imageUrl,
+  aspectRatio,
+  x,
+  y,
+  onChange,
+}: {
+  imageUrl: string;
+  aspectRatio: number;
+  x: number;
+  y: number;
+  onChange: (pos: { x: number; y: number }) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    draggingRef.current = true;
+    lastPointRef.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draggingRef.current || !lastPointRef.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const dx = (e.clientX - lastPointRef.current.x) / rect.width;
+    const dy = (e.clientY - lastPointRef.current.y) / rect.height;
+    lastPointRef.current = { x: e.clientX, y: e.clientY };
+    onChange({
+      x: Math.min(1, Math.max(0, x - dx)),
+      y: Math.min(1, Math.max(0, y - dy)),
+    });
+  }
+
+  function handlePointerUp() {
+    draggingRef.current = false;
+    lastPointRef.current = null;
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      style={{ aspectRatio: String(aspectRatio), touchAction: "none" }}
+      className="relative w-full max-w-xs select-none overflow-hidden rounded border border-neutral-300 bg-neutral-100"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imageUrl}
+        alt="Positionnement de l'image"
+        draggable={false}
+        className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
+        style={{ objectPosition: `${x * 100}% ${y * 100}%` }}
+      />
+    </div>
   );
 }

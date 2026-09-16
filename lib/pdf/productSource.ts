@@ -9,6 +9,8 @@ export interface ResolveProductImageInput {
   visualId: string | null;
   visualMode: VisualMode | null;
   tileSizeMm: number | null;
+  positionX?: number;
+  positionY?: number;
 }
 
 export interface ResolvedProductImage {
@@ -77,6 +79,12 @@ export async function resolveProductImage(
     return { buffer, contentType: "image/jpeg", filename: "visual-tile.jpg" };
   }
 
-  const buffer = await composeFullCoverImage(visualBuffer, targetWidthPx, targetHeightPx);
+  const buffer = await composeFullCoverImage(
+    visualBuffer,
+    targetWidthPx,
+    targetHeightPx,
+    input.positionX,
+    input.positionY
+  );
   return { buffer, contentType: "image/jpeg", filename: "visual-full.jpg" };
 }

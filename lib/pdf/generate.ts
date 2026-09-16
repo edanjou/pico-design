@@ -2,12 +2,15 @@ import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { mmToPt, mmToPx } from "./units";
 import { rasterizeLogoToPng } from "./logo";
+import { coverCropToBuffer } from "./crop";
 import type { LogoHAlign, LogoVAlign, Template } from "../types";
 
 export interface GeneratePdfInput {
   template: Template;
   sourceImage: Buffer;
   logoImage: Buffer | null;
+  positionX?: number;
+  positionY?: number;
 }
 
 /**
@@ -20,6 +23,8 @@ export async function generatePrintReadyPdf({
   template,
   sourceImage,
   logoImage,
+  positionX = 0.5,
+  positionY = 0.5,
 }: GeneratePdfInput): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -28,9 +33,10 @@ export async function generatePrintReadyPdf({
   const targetPxHeight = mmToPx(pageHeightMm, template.dpi);
 
   // 1. Recadrer/redimensionner l'image source pour couvrir exactement la
-  //    page (fond perdu compris) à la résolution d'impression.
-  const fittedImage = await sharp(sourceImage)
-    .resize(targetPxWidth, targetPxHeight, { fit: "cover", position: "attention" })
+  //    page (fond perdu compris) à la résolution d'impression, au point
+  //    focal choisi par l'utilisateur.
+  const cropped = await coverCropToBuffer(sourceImage, targetPxWidth, targetPxHeight, positionX, positionY);
+  const fittedImage = await sharp(cropped)
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: 92 })
     .toBuffer();

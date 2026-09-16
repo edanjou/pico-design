@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { isSvg } from "./logo";
+import { coverCropToBuffer } from "./crop";
 
 // Rastérise une image (SVG ou raster) en PNG, avec le SVG rendu à la
 // densité qui donne approximativement la largeur cible (avant tout
@@ -20,11 +21,13 @@ async function toPngBuffer(image: Buffer, approxTargetWidthPx: number): Promise<
 export async function composeFullCoverImage(
   visual: Buffer,
   targetWidthPx: number,
-  targetHeightPx: number
+  targetHeightPx: number,
+  positionX = 0.5,
+  positionY = 0.5
 ): Promise<Buffer> {
   const png = await toPngBuffer(visual, targetWidthPx);
-  return sharp(png)
-    .resize(targetWidthPx, targetHeightPx, { fit: "cover" })
+  const cropped = await coverCropToBuffer(png, targetWidthPx, targetHeightPx, positionX, positionY);
+  return sharp(cropped)
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: 92 })
     .toBuffer();

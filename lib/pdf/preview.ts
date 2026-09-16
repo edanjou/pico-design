@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { mmToPx } from "./units";
 import { rasterizeLogoToPng } from "./logo";
+import { coverCropToBuffer } from "./crop";
 import type { Template } from "../types";
 
 const PREVIEW_MAX_DIM_PX = 900;
@@ -19,7 +20,9 @@ export async function generateTemplatePreviewPng(
   template: Template,
   logoImage: Buffer | null,
   sourceImage?: Buffer | null,
-  overlayImage?: Buffer | null
+  overlayImage?: Buffer | null,
+  positionX = 0.5,
+  positionY = 0.5
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -69,8 +72,7 @@ export async function generateTemplatePreviewPng(
   `;
 
   const base = sourceImage
-    ? await sharp(sourceImage)
-        .resize(pageWidthPx, pageHeightPx, { fit: "cover" })
+    ? await sharp(await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY))
         .flatten({ background: "#ffffff" })
         .png()
         .toBuffer()

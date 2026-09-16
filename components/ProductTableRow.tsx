@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
-import { FilePenIcon, TrashIcon } from "@/components/icons";
+import { DownloadIcon, FilePenIcon, TrashIcon } from "@/components/icons";
 
 export default function ProductTableRow({
   product,
@@ -58,6 +58,24 @@ export default function ProductTableRow({
       <td className="p-4 text-neutral-500">{collectionLabel ?? "—"}</td>
       <td className="p-4 text-right">
         <div className="flex justify-end gap-1">
+          {product.pdf_path ? (
+            <a
+              href={`/api/products/${product.id}/pdf`}
+              title="Télécharger le PDF"
+              aria-label="Télécharger le PDF"
+              className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+            >
+              <DownloadIcon className="h-4 w-4" />
+            </a>
+          ) : (
+            <span
+              title="PDF pas encore généré"
+              aria-label="PDF pas encore généré"
+              className="inline-flex rounded-lg p-1.5 text-neutral-300"
+            >
+              <DownloadIcon className="h-4 w-4" />
+            </span>
+          )}
           <button
             onClick={() => onEdit(product)}
             title="Modifier"

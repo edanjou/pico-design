@@ -48,7 +48,7 @@ export async function generateTemplatePreviewPng(
       <rect width="100%" height="100%" fill="url(#bg)"/>
       ${
         template.bleed_mm > 0
-          ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 4"/>`
+          ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="6 4"/>`
           : ""
       }
       ${

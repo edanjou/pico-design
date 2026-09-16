@@ -1,12 +1,8 @@
 // Types partagés avec le schéma Supabase (voir supabase/migrations/0001_init.sql).
 // À régénérer plus précisément plus tard avec `supabase gen types typescript`.
 
-export type LogoPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right"
-  | "center";
+export type LogoHAlign = "left" | "center" | "right";
+export type LogoVAlign = "top" | "bottom";
 
 export interface Category {
   id: string;
@@ -22,9 +18,11 @@ export interface Template {
   height_mm: number;
   bleed_mm: number;
   dpi: number;
-  logo_position: LogoPosition;
+  logo_h_align: LogoHAlign;
+  logo_v_align: LogoVAlign;
   logo_width_mm: number;
-  logo_margin_mm: number;
+  logo_margin_x_mm: number;
+  logo_margin_y_mm: number;
   created_at: string;
   created_by: string | null;
 }

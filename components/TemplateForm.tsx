@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import type { Category, LogoPosition, Template } from "@/lib/types";
+import type { Category, LogoHAlign, LogoVAlign, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 
 type Unit = "mm" | "in";
 
-const LOGO_POSITIONS: LogoPosition[] = [
-  "top-left",
-  "top-right",
-  "bottom-left",
-  "bottom-right",
-  "center",
+const H_ALIGNS: { value: LogoHAlign; label: string }[] = [
+  { value: "left", label: "Gauche" },
+  { value: "center", label: "Centre" },
+  { value: "right", label: "Droite" },
+];
+
+const V_ALIGNS: { value: LogoVAlign; label: string }[] = [
+  { value: "top", label: "Haut" },
+  { value: "bottom", label: "Bas" },
 ];
 
 export default function TemplateForm({
@@ -31,9 +34,11 @@ export default function TemplateForm({
     height_mm: template?.height_mm ?? 50,
     bleed_mm: template?.bleed_mm ?? 3,
     dpi: template?.dpi ?? 300,
-    logo_position: template?.logo_position ?? ("bottom-right" as LogoPosition),
+    logo_h_align: template?.logo_h_align ?? ("right" as LogoHAlign),
+    logo_v_align: template?.logo_v_align ?? ("bottom" as LogoVAlign),
     logo_width_mm: template?.logo_width_mm ?? 20,
-    logo_margin_mm: template?.logo_margin_mm ?? 5,
+    logo_margin_x_mm: template?.logo_margin_x_mm ?? 5,
+    logo_margin_y_mm: template?.logo_margin_y_mm ?? 5,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +55,10 @@ export default function TemplateForm({
     return Math.round(mmToIn(mm) * 1000) / 1000;
   }
 
-  function updateFromDisplay(key: "width_mm" | "height_mm" | "bleed_mm" | "logo_width_mm" | "logo_margin_mm", value: number) {
+  function updateFromDisplay(
+    key: "width_mm" | "height_mm" | "bleed_mm" | "logo_width_mm" | "logo_margin_x_mm" | "logo_margin_y_mm",
+    value: number
+  ) {
     update(key, unit === "mm" ? value : inToMm(value));
   }
 
@@ -173,40 +181,81 @@ export default function TemplateForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium">Position du logo</label>
-          <select
-            value={form.logo_position}
-            onChange={(e) => update("logo_position", e.target.value as LogoPosition)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          >
-            {LOGO_POSITIONS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+      <div>
+        <label className="mb-2 block text-sm font-medium">Position du logo</label>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-neutral-500">Alignement horizontal</label>
+            <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+              {H_ALIGNS.map((h) => (
+                <button
+                  key={h.value}
+                  type="button"
+                  onClick={() => update("logo_h_align", h.value)}
+                  className={`flex-1 rounded-md px-2 py-1.5 ${
+                    form.logo_h_align === h.value
+                      ? "bg-pico-black text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-neutral-500">Alignement vertical</label>
+            <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+              {V_ALIGNS.map((v) => (
+                <button
+                  key={v.value}
+                  type="button"
+                  onClick={() => update("logo_v_align", v.value)}
+                  className={`flex-1 rounded-md px-2 py-1.5 ${
+                    form.logo_v_align === v.value
+                      ? "bg-pico-black text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium">Largeur logo ({unit === "mm" ? "mm" : "po"})</label>
-          <input
-            type="number"
-            step={unit === "mm" ? "0.1" : "0.01"}
-            value={toDisplay(form.logo_width_mm)}
-            onChange={(e) => updateFromDisplay("logo_width_mm", parseFloat(e.target.value) || 0)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Marge logo ({unit === "mm" ? "mm" : "po"})</label>
-          <input
-            type="number"
-            step={unit === "mm" ? "0.1" : "0.01"}
-            value={toDisplay(form.logo_margin_mm)}
-            onChange={(e) => updateFromDisplay("logo_margin_mm", parseFloat(e.target.value) || 0)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
+
+        <div className="mt-4 grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Largeur logo ({unit === "mm" ? "mm" : "po"})</label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.logo_width_mm)}
+              onChange={(e) => updateFromDisplay("logo_width_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Marge côtés ({unit === "mm" ? "mm" : "po"})</label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.logo_margin_x_mm)}
+              onChange={(e) => updateFromDisplay("logo_margin_x_mm", parseFloat(e.target.value) || 0)}
+              disabled={form.logo_h_align === "center"}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 disabled:bg-neutral-100 disabled:text-neutral-400"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Marge hauteur ({unit === "mm" ? "mm" : "po"})</label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.logo_margin_y_mm)}
+              onChange={(e) => updateFromDisplay("logo_margin_y_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
         </div>
       </div>
 

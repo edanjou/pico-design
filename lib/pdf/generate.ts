@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { mmToPt, mmToPx } from "./units";
-import type { LogoPosition, Template } from "../types";
+import type { LogoHAlign, LogoVAlign, Template } from "../types";
 
 export interface GeneratePdfInput {
   template: Template;
@@ -53,15 +53,18 @@ export async function generatePrintReadyPdf({
     const embeddedLogo = await embedRasterImage(pdfDoc, logoImage, logoTargetPx);
     const logoAspect = embeddedLogo.height / embeddedLogo.width;
     const logoHeightPt = logoWidthPt * logoAspect;
-    const marginPt = mmToPt(template.logo_margin_mm + template.bleed_mm);
+    const marginXPt = mmToPt(template.logo_margin_x_mm + template.bleed_mm);
+    const marginYPt = mmToPt(template.logo_margin_y_mm + template.bleed_mm);
 
     const { x, y } = logoPosition(
-      template.logo_position,
+      template.logo_h_align,
+      template.logo_v_align,
       pageWidthPt,
       pageHeightPt,
       logoWidthPt,
       logoHeightPt,
-      marginPt
+      marginXPt,
+      marginYPt
     );
 
     page.drawImage(embeddedLogo, {
@@ -97,30 +100,23 @@ function isSvg(buffer: Buffer): boolean {
 }
 
 function logoPosition(
-  position: LogoPosition,
+  hAlign: LogoHAlign,
+  vAlign: LogoVAlign,
   pageWidthPt: number,
   pageHeightPt: number,
   logoWidthPt: number,
   logoHeightPt: number,
-  marginPt: number
+  marginXPt: number,
+  marginYPt: number
 ): { x: number; y: number } {
-  switch (position) {
-    case "top-left":
-      return { x: marginPt, y: pageHeightPt - marginPt - logoHeightPt };
-    case "top-right":
-      return {
-        x: pageWidthPt - marginPt - logoWidthPt,
-        y: pageHeightPt - marginPt - logoHeightPt,
-      };
-    case "bottom-left":
-      return { x: marginPt, y: marginPt };
-    case "bottom-right":
-      return { x: pageWidthPt - marginPt - logoWidthPt, y: marginPt };
-    case "center":
-    default:
-      return {
-        x: (pageWidthPt - logoWidthPt) / 2,
-        y: (pageHeightPt - logoHeightPt) / 2,
-      };
-  }
+  const x =
+    hAlign === "left"
+      ? marginXPt
+      : hAlign === "right"
+      ? pageWidthPt - marginXPt - logoWidthPt
+      : (pageWidthPt - logoWidthPt) / 2;
+
+  const y = vAlign === "top" ? pageHeightPt - marginYPt - logoHeightPt : marginYPt;
+
+  return { x, y };
 }

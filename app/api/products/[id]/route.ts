@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { resolveProductImage } from "@/lib/pdf/productSource";
+import type { VisualMode } from "@/lib/types";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -12,6 +14,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const name = formData.get("name");
   const templateId = formData.get("templateId");
   const file = formData.get("image");
+  const visualId = formData.get("visualId");
+  const visualMode = formData.get("visualMode");
+  const tileSizeMm = formData.get("tileSizeMm");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -21,17 +26,41 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   const update: Record<string, unknown> = { name, template_id: templateId };
+  const hasNewSource = file instanceof File && file.size > 0
+    ? true
+    : typeof visualId === "string" && typeof visualMode === "string";
 
-  if (file instanceof File && file.size > 0) {
-    const imagePath = `products/${params.id}/source-${file.name}`;
-    const imageBuffer = Buffer.from(await file.arrayBuffer());
+  if (hasNewSource) {
+    let resolved;
+    try {
+      resolved = await resolveProductImage(supabase, {
+        templateId,
+        file: file instanceof File && file.size > 0 ? file : null,
+        visualId: typeof visualId === "string" ? visualId : null,
+        visualMode: typeof visualMode === "string" ? (visualMode as VisualMode) : null,
+        tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    const imagePath = `products/${params.id}/source-${resolved.filename}`;
     const { error: uploadError } = await supabase.storage
       .from("uploads")
-      .upload(imagePath, imageBuffer, { contentType: file.type || "image/jpeg", upsert: true });
+      .upload(imagePath, resolved.buffer, { contentType: resolved.contentType, upsert: true });
     if (uploadError) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
     update.image_path = imagePath;
+    update.visual_id = file instanceof File && file.size > 0 ? null : (visualId as string);
+    update.visual_mode = file instanceof File && file.size > 0 ? null : (visualMode as string);
+    update.tile_size_mm =
+      file instanceof File && file.size > 0
+        ? null
+        : typeof tileSizeMm === "string"
+        ? parseFloat(tileSizeMm)
+        : null;
   }
 
   const { data, error } = await supabase

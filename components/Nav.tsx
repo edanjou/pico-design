@@ -25,6 +25,9 @@ export default function Nav() {
             <Link href="/templates" className="hover:text-pico-accent">
               Modèles
             </Link>
+            <Link href="/visuals" className="hover:text-pico-accent">
+              Visuels
+            </Link>
             <Link href="/products" className="hover:text-pico-accent">
               Produits
             </Link>

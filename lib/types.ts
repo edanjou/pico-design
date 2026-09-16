@@ -28,11 +28,25 @@ export interface Template {
   created_by: string | null;
 }
 
+export type VisualMode = "full" | "tile";
+
+export interface Visual {
+  id: string;
+  name: string;
+  file_path: string;
+  mime_type: string;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface Product {
   id: string;
   name: string;
   template_id: string;
   image_path: string;
+  visual_id: string | null;
+  visual_mode: VisualMode | null;
+  tile_size_mm: number | null;
   created_at: string;
   created_by: string | null;
 }

@@ -17,6 +17,20 @@ const links = [
     ),
   },
   {
+    href: "/visuals",
+    title: "Visuels",
+    description: "Une banque de patterns réutilisables sur les produits.",
+    gradient: "from-amber-400 to-yellow-500",
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25V6.75ZM8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM4.5 16.5l5-5 3.5 3.5L16.5 11l3.5 4"
+      />
+    ),
+  },
+  {
     href: "/products",
     title: "Produits",
     description: "Créer des produits à partir d'un modèle et d'une image.",
@@ -94,7 +108,7 @@ export default async function DashboardPage() {
       </div>
 
       <p className="mb-3 mt-8 text-xs font-semibold tracking-widest text-neutral-500">PAGES</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {links.map((link) => (
           <Link
             key={link.href}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { resolveProductImage } from "@/lib/pdf/productSource";
+import type { VisualMode } from "@/lib/types";
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
@@ -24,21 +26,37 @@ export async function POST(request: Request) {
   const name = formData.get("name");
   const templateId = formData.get("templateId");
   const file = formData.get("image");
+  const visualId = formData.get("visualId");
+  const visualMode = formData.get("visualMode");
+  const tileSizeMm = formData.get("tileSizeMm");
 
-  if (typeof name !== "string" || typeof templateId !== "string" || !(file instanceof File)) {
+  if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
-      { error: "Paramètres manquants (name, templateId, image)." },
+      { error: "Paramètres manquants (name, templateId)." },
       { status: 400 }
     );
   }
 
+  let resolved;
+  try {
+    resolved = await resolveProductImage(supabase, {
+      templateId,
+      file: file instanceof File ? file : null,
+      visualId: typeof visualId === "string" ? visualId : null,
+      visualMode: typeof visualMode === "string" ? (visualMode as VisualMode) : null,
+      tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
   const productId = randomUUID();
-  const imagePath = `products/${productId}/source-${file.name}`;
-  const imageBuffer = Buffer.from(await file.arrayBuffer());
+  const imagePath = `products/${productId}/source-${resolved.filename}`;
 
   const { error: uploadError } = await supabase.storage
     .from("uploads")
-    .upload(imagePath, imageBuffer, { contentType: file.type || "image/jpeg", upsert: true });
+    .upload(imagePath, resolved.buffer, { contentType: resolved.contentType, upsert: true });
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
@@ -50,6 +68,9 @@ export async function POST(request: Request) {
       name,
       template_id: templateId,
       image_path: imagePath,
+      visual_id: typeof visualId === "string" ? visualId : null,
+      visual_mode: typeof visualMode === "string" ? visualMode : null,
+      tile_size_mm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
       created_by: user.id,
     })
     .select()

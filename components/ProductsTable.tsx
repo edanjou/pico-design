@@ -6,6 +6,7 @@ import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
 import Modal from "@/components/Modal";
 import type { Category, Product, Template } from "@/lib/types";
+import type { VisualWithUrl } from "@/components/VisualsGrid";
 
 export type ProductWithTemplate = Product & {
   imageUrl: string | null;
@@ -26,10 +27,12 @@ export default function ProductsTable({
   products,
   templates,
   categories,
+  visuals,
 }: {
   products: ProductWithTemplate[];
   templates: Template[];
   categories: Category[];
+  visuals: VisualWithUrl[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -161,6 +164,7 @@ export default function ProductsTable({
           <ProductForm
             templates={templates}
             categories={categories}
+            visuals={visuals}
             product={modal.mode === "edit" ? modal.product : undefined}
             currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
             onSuccess={handleSuccess}

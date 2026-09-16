@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { LogoPosition, Template } from "@/lib/types";
+import type { LogoPosition, Template, TemplateCategory } from "@/lib/types";
+import { TEMPLATE_CATEGORY_LABELS } from "@/lib/types";
 
 const LOGO_POSITIONS: LogoPosition[] = [
   "top-left",
@@ -12,11 +13,14 @@ const LOGO_POSITIONS: LogoPosition[] = [
   "center",
 ];
 
+const CATEGORIES = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
+
 export default function TemplateForm({ template }: { template?: Template }) {
   const router = useRouter();
   const isEditing = Boolean(template);
   const [form, setForm] = useState({
     name: template?.name ?? "",
+    category: template?.category ?? ("autre" as TemplateCategory),
     width_mm: template?.width_mm ?? 90,
     height_mm: template?.height_mm ?? 50,
     bleed_mm: template?.bleed_mm ?? 3,
@@ -67,6 +71,21 @@ export default function TemplateForm({ template }: { template?: Template }) {
           placeholder="Ex. Cartes d'affaires 90×50mm"
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Catégorie</label>
+        <select
+          value={form.category}
+          onChange={(e) => update("category", e.target.value as TemplateCategory)}
+          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {TEMPLATE_CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

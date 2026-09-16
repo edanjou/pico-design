@@ -8,9 +8,19 @@ export type LogoPosition =
   | "bottom-right"
   | "center";
 
+export type TemplateCategory = "etuis_telephone" | "tasses" | "papeterie" | "autre";
+
+export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  etuis_telephone: "Étuis de téléphone",
+  tasses: "Tasses",
+  papeterie: "Papeterie",
+  autre: "Autres produits personnalisables",
+};
+
 export interface Template {
   id: string;
   name: string;
+  category: TemplateCategory;
   width_mm: number;
   height_mm: number;
   bleed_mm: number;

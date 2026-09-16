@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Template } from "@/lib/types";
+import { TEMPLATE_CATEGORY_LABELS, type Template, type TemplateCategory } from "@/lib/types";
+
+const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
 
 export default function UploadForm({ templates }: { templates: Template[] }) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -64,11 +66,19 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
           onChange={(e) => setTemplateId(e.target.value)}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} — {t.width_mm}×{t.height_mm}mm ({t.dpi} dpi)
-            </option>
-          ))}
+          {CATEGORY_ORDER.map((category) => {
+            const items = templates.filter((t) => t.category === category);
+            if (items.length === 0) return null;
+            return (
+              <optgroup key={category} label={TEMPLATE_CATEGORY_LABELS[category]}>
+                {items.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} — {t.width_mm}×{t.height_mm}mm ({t.dpi} dpi)
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
       </div>
 

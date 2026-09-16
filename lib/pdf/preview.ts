@@ -7,12 +7,15 @@ const PREVIEW_MAX_DIM_PX = 900;
 
 /**
  * Génère un aperçu PNG d'un modèle : la page (avec la ligne de coupe si
- * fond perdu) et le logo Pico positionné exactement comme sur le PDF final,
- * sur un fond neutre "Exemple" en l'absence d'image produit réelle.
+ * fond perdu) et le logo Pico positionné exactement comme sur le PDF final.
+ * Si `sourceImage` est fourni (aperçu d'un produit avant enregistrement),
+ * il est recadré en "cover" pour remplir la page, comme le fera la
+ * génération de PDF réelle ; sinon un fond neutre "Exemple" est utilisé.
  */
 export async function generateTemplatePreviewPng(
   template: Template,
-  logoImage: Buffer | null
+  logoImage: Buffer | null,
+  sourceImage?: Buffer | null
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -37,15 +40,19 @@ export async function generateTemplatePreviewPng(
   const safetyW = Math.max(0, trimW - safetyPx * 2);
   const safetyH = Math.max(0, trimH - safetyPx * 2);
 
-  const backgroundSvg = `
+  const linesSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#f3f4f6"/>
-          <stop offset="1" stop-color="#e2e4e8"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
+      ${
+        !sourceImage
+          ? `<defs>
+               <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+                 <stop offset="0" stop-color="#f3f4f6"/>
+                 <stop offset="1" stop-color="#e2e4e8"/>
+               </linearGradient>
+             </defs>
+             <rect width="100%" height="100%" fill="url(#bg)"/>`
+          : ""
+      }
       ${
         template.bleed_mm > 0
           ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ef4444" stroke-width="1.5"/>`
@@ -56,16 +63,27 @@ export async function generateTemplatePreviewPng(
           ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }
-      <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(
-        14,
-        Math.round(pageWidthPx * 0.06)
-      )}" fill="#9ca3af">Exemple</text>
+      ${
+        !sourceImage
+          ? `<text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(
+              14,
+              Math.round(pageWidthPx * 0.06)
+            )}" fill="#9ca3af">Exemple</text>`
+          : ""
+      }
     </svg>
   `;
 
-  const base = await sharp(Buffer.from(backgroundSvg)).png().toBuffer();
+  const base = sourceImage
+    ? await sharp(sourceImage)
+        .resize(pageWidthPx, pageHeightPx, { fit: "cover" })
+        .png()
+        .toBuffer()
+    : await sharp(Buffer.from(linesSvg)).png().toBuffer();
 
-  const composites: sharp.OverlayOptions[] = [];
+  const composites: sharp.OverlayOptions[] = sourceImage
+    ? [{ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 }]
+    : [];
 
   if (logoImage && template.logo_width_mm > 0) {
     const logoWidthPx = Math.max(1, Math.round(mmToPx(template.logo_width_mm, previewDpi)));

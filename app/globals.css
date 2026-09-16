@@ -3,5 +3,14 @@
 @tailwind utilities;
 
 body {
-  @apply bg-neutral-50 text-neutral-900;
+  @apply bg-pico-cream text-neutral-900;
+  font-family: var(--font-body), sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading), serif;
+  letter-spacing: 0.02em;
 }

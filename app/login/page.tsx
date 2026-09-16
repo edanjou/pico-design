@@ -30,7 +30,7 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="mb-6 text-xl font-semibold text-pico-700">Connexion — Pico Design</h1>
+      <h1 className="mb-6 text-xl font-semibold text-pico-black">Connexion — Pico Design</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium">Courriel</label>
@@ -56,7 +56,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded bg-pico-700 px-4 py-2 text-white hover:bg-pico-600 disabled:opacity-50"
+          className="w-full rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
         >
           {loading ? "Connexion..." : "Se connecter"}
         </button>

@@ -11,7 +11,7 @@ export default async function GeneratePage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold text-pico-700">
+      <h1 className="mb-6 text-xl font-semibold text-pico-black">
         Générer un PDF prêt pour impression
       </h1>
       <UploadForm templates={(templates as Template[]) ?? []} />

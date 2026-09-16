@@ -10,7 +10,7 @@ export default async function HistoryPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold text-pico-700">Historique des générations</h1>
+      <h1 className="mb-6 text-xl font-semibold text-pico-black">Historique des générations</h1>
       <div className="divide-y rounded border border-neutral-200 bg-white">
         {(jobs ?? []).map((job: any) => (
           <div key={job.id} className="flex items-center justify-between p-4 text-sm">

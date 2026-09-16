@@ -92,7 +92,7 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
       <button
         type="submit"
         disabled={loading || !file}
-        className="rounded bg-pico-700 px-4 py-2 text-white hover:bg-pico-600 disabled:opacity-50"
+        className="rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
       >
         {loading ? "Génération en cours..." : "Générer le PDF"}
       </button>
@@ -104,7 +104,7 @@ export default function UploadForm({ templates }: { templates: Template[] }) {
             href={downloadUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-sm font-medium text-pico-700 underline"
+            className="text-sm font-medium text-pico-black underline"
           >
             Télécharger le PDF prêt pour impression
           </a>

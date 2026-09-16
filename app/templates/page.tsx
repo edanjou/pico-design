@@ -12,10 +12,10 @@ export default async function TemplatesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-pico-700">Modèles de produits</h1>
+        <h1 className="text-xl font-semibold text-pico-black">Modèles de produits</h1>
         <Link
           href="/templates/new"
-          className="rounded bg-pico-700 px-3 py-1.5 text-sm text-white hover:bg-pico-600"
+          className="rounded bg-pico-black px-3 py-1.5 text-sm text-white hover:bg-neutral-800"
         >
           + Nouveau modèle
         </Link>

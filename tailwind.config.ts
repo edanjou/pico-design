@@ -6,9 +6,13 @@ const config: Config = {
     extend: {
       colors: {
         pico: {
-          600: "#0f766e",
-          700: "#115e59",
+          black: "#0a0a0a",
+          cream: "#f8f1e9",
+          accent: "#f07544",
         },
+      },
+      fontFamily: {
+        heading: ["var(--font-heading)", "serif"],
       },
     },
   },

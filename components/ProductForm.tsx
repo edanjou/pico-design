@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { TEMPLATE_CATEGORY_LABELS, type Product, type Template, type TemplateCategory } from "@/lib/types";
 
 const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
@@ -10,12 +9,13 @@ export default function ProductForm({
   templates,
   product,
   currentImageUrl,
+  onSuccess,
 }: {
   templates: Template[];
   product?: Product;
   currentImageUrl?: string | null;
+  onSuccess: () => void;
 }) {
-  const router = useRouter();
   const isEditing = Boolean(product);
   const [name, setName] = useState(product?.name ?? "");
   const [templateId, setTemplateId] = useState(product?.template_id ?? templates[0]?.id ?? "");
@@ -55,8 +55,7 @@ export default function ProductForm({
       setError(data.error ?? "Erreur lors de l'enregistrement.");
       return;
     }
-    router.push("/products");
-    router.refresh();
+    onSuccess();
   }
 
   if (templates.length === 0) {

@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import TemplateRow from "@/components/TemplateRow";
+import TemplateForm from "@/components/TemplateForm";
+import Modal from "@/components/Modal";
 import { TEMPLATE_CATEGORY_LABELS, type Template, type TemplateCategory } from "@/lib/types";
 
 const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
@@ -14,10 +17,14 @@ function SortIcon() {
   );
 }
 
+type ModalState = { mode: "create" } | { mode: "edit"; template: Template } | null;
+
 export default function TemplatesTable({ templates }: { templates: Template[] }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<TemplateCategory | "">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [modal, setModal] = useState<ModalState>(null);
 
   const filtered = useMemo(() => {
     return templates
@@ -26,8 +33,31 @@ export default function TemplatesTable({ templates }: { templates: Template[] })
       .sort((a, b) => (sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
   }, [templates, search, category, sortDir]);
 
+  function handleSuccess() {
+    setModal(null);
+    router.refresh();
+  }
+
   return (
     <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-pico-black">Modèles</h1>
+          <p className="text-sm text-neutral-500">
+            {templates.length} modèle{templates.length > 1 ? "s" : ""} au catalogue.
+          </p>
+        </div>
+        <button
+          onClick={() => setModal({ mode: "create" })}
+          className="flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
+          </svg>
+          Nouveau modèle
+        </button>
+      </div>
+
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="relative flex-1 sm:max-w-xs">
           <svg
@@ -95,11 +125,23 @@ export default function TemplatesTable({ templates }: { templates: Template[] })
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <TemplateRow key={t.id} template={t} />
+                <TemplateRow key={t.id} template={t} onEdit={(tpl) => setModal({ mode: "edit", template: tpl })} />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {modal && (
+        <Modal
+          title={modal.mode === "create" ? "Nouveau modèle" : `Modifier « ${modal.template.name} »`}
+          onClose={() => setModal(null)}
+        >
+          <TemplateForm
+            template={modal.mode === "edit" ? modal.template : undefined}
+            onSuccess={handleSuccess}
+          />
+        </Modal>
       )}
     </div>
   );

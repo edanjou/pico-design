@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { LogoPosition, Template, TemplateCategory } from "@/lib/types";
 import { TEMPLATE_CATEGORY_LABELS } from "@/lib/types";
 
@@ -15,8 +14,13 @@ const LOGO_POSITIONS: LogoPosition[] = [
 
 const CATEGORIES = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
 
-export default function TemplateForm({ template }: { template?: Template }) {
-  const router = useRouter();
+export default function TemplateForm({
+  template,
+  onSuccess,
+}: {
+  template?: Template;
+  onSuccess: () => void;
+}) {
   const isEditing = Boolean(template);
   const [form, setForm] = useState({
     name: template?.name ?? "",
@@ -56,8 +60,7 @@ export default function TemplateForm({ template }: { template?: Template }) {
       setError(data.error ?? "Erreur lors de l'enregistrement.");
       return;
     }
-    router.push("/templates");
-    router.refresh();
+    onSuccess();
   }
 
   return (

@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import ProductTableRow from "@/components/ProductTableRow";
-import { TEMPLATE_CATEGORY_LABELS, type Product, type TemplateCategory } from "@/lib/types";
+import ProductForm from "@/components/ProductForm";
+import Modal from "@/components/Modal";
+import { TEMPLATE_CATEGORY_LABELS, type Product, type Template, type TemplateCategory } from "@/lib/types";
 
 const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
 
@@ -19,10 +22,20 @@ function SortIcon() {
   );
 }
 
-export default function ProductsTable({ products }: { products: ProductWithTemplate[] }) {
+type ModalState = { mode: "create" } | { mode: "edit"; product: ProductWithTemplate } | null;
+
+export default function ProductsTable({
+  products,
+  templates,
+}: {
+  products: ProductWithTemplate[];
+  templates: Template[];
+}) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<TemplateCategory | "">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [modal, setModal] = useState<ModalState>(null);
 
   const filtered = useMemo(() => {
     return products
@@ -31,8 +44,31 @@ export default function ProductsTable({ products }: { products: ProductWithTempl
       .sort((a, b) => (sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
   }, [products, search, category, sortDir]);
 
+  function handleSuccess() {
+    setModal(null);
+    router.refresh();
+  }
+
   return (
     <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-pico-black">Produits</h1>
+          <p className="text-sm text-neutral-500">
+            {products.length} produit{products.length > 1 ? "s" : ""} au catalogue.
+          </p>
+        </div>
+        <button
+          onClick={() => setModal({ mode: "create" })}
+          className="flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
+          </svg>
+          Nouveau produit
+        </button>
+      </div>
+
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="relative flex-1 sm:max-w-xs">
           <svg
@@ -104,11 +140,26 @@ export default function ProductsTable({ products }: { products: ProductWithTempl
                   templateName={p.template?.name ?? "Modèle supprimé"}
                   categoryLabel={p.template ? TEMPLATE_CATEGORY_LABELS[p.template.category] : "—"}
                   imageUrl={p.imageUrl}
+                  onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
                 />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {modal && (
+        <Modal
+          title={modal.mode === "create" ? "Nouveau produit" : `Modifier « ${modal.product.name} »`}
+          onClose={() => setModal(null)}
+        >
+          <ProductForm
+            templates={templates}
+            product={modal.mode === "edit" ? modal.product : undefined}
+            currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
+            onSuccess={handleSuccess}
+          />
+        </Modal>
       )}
     </div>
   );

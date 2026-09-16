@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TEMPLATE_CATEGORY_LABELS, type Template } from "@/lib/types";
+import { mmToIn } from "@/lib/pdf/units";
+
+function formatIn(mm: number): string {
+  return `${Math.round(mmToIn(mm) * 100) / 100}"`;
+}
 
 export default function TemplateRow({
   template,
@@ -32,11 +37,8 @@ export default function TemplateRow({
       <td className="p-4 font-semibold text-pico-black">{template.name}</td>
       <td className="p-4 text-neutral-500">{TEMPLATE_CATEGORY_LABELS[template.category]}</td>
       <td className="p-4 text-neutral-700">
-        {template.width_mm}×{template.height_mm}mm
+        {formatIn(template.width_mm)}×{formatIn(template.height_mm)}
       </td>
-      <td className="p-4 text-neutral-700">{template.bleed_mm}mm</td>
-      <td className="p-4 text-neutral-700">{template.dpi} dpi</td>
-      <td className="p-4 text-neutral-500">{template.logo_position}</td>
       <td className="p-4 text-right">
         <div className="flex justify-end gap-1">
           <button

@@ -117,9 +117,6 @@ export default function TemplatesTable({ templates }: { templates: Template[] })
                 </th>
                 <th className="p-4">Catégorie</th>
                 <th className="p-4">Dimensions</th>
-                <th className="p-4">Fond perdu</th>
-                <th className="p-4">Résolution</th>
-                <th className="p-4">Logo</th>
                 <th className="p-4"></th>
               </tr>
             </thead>

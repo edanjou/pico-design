@@ -23,16 +23,16 @@ export default function TemplateRow({ template }: { template: Template }) {
   }
 
   return (
-    <tr className="border-t border-neutral-200">
-      <td className="p-3 font-medium">{template.name}</td>
-      <td className="p-3 text-neutral-600">{TEMPLATE_CATEGORY_LABELS[template.category]}</td>
-      <td className="p-3 text-neutral-600">
+    <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+      <td className="p-4 font-semibold text-pico-black">{template.name}</td>
+      <td className="p-4 text-neutral-500">{TEMPLATE_CATEGORY_LABELS[template.category]}</td>
+      <td className="p-4 text-neutral-700">
         {template.width_mm}×{template.height_mm}mm
       </td>
-      <td className="p-3 text-neutral-600">{template.bleed_mm}mm</td>
-      <td className="p-3 text-neutral-600">{template.dpi} dpi</td>
-      <td className="p-3 text-neutral-600">{template.logo_position}</td>
-      <td className="p-3 text-right">
+      <td className="p-4 text-neutral-700">{template.bleed_mm}mm</td>
+      <td className="p-4 text-neutral-700">{template.dpi} dpi</td>
+      <td className="p-4 text-neutral-500">{template.logo_position}</td>
+      <td className="p-4 text-right">
         <div className="flex justify-end gap-3 text-sm">
           <Link href={`/templates/${template.id}/edit`} className="text-pico-black hover:underline">
             Modifier

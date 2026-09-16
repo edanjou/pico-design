@@ -8,10 +8,12 @@ import type { Product } from "@/lib/types";
 export default function ProductTableRow({
   product,
   templateName,
+  categoryLabel,
   imageUrl,
 }: {
   product: Product;
   templateName: string;
+  categoryLabel: string;
   imageUrl: string | null;
 }) {
   const router = useRouter();
@@ -31,18 +33,19 @@ export default function ProductTableRow({
   }
 
   return (
-    <tr className="border-t border-neutral-200">
-      <td className="p-3">
+    <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+      <td className="p-4">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={product.name} className="h-12 w-12 rounded object-cover" />
+          <img src={imageUrl} alt={product.name} className="h-12 w-12 rounded-lg object-cover" />
         ) : (
-          <div className="h-12 w-12 rounded bg-neutral-100" />
+          <div className="h-12 w-12 rounded-lg bg-neutral-100" />
         )}
       </td>
-      <td className="p-3 font-medium">{product.name}</td>
-      <td className="p-3 text-neutral-600">{templateName}</td>
-      <td className="p-3 text-right">
+      <td className="p-4 font-semibold text-pico-black">{product.name}</td>
+      <td className="p-4 text-neutral-700">{templateName}</td>
+      <td className="p-4 text-neutral-500">{categoryLabel}</td>
+      <td className="p-4 text-right">
         <div className="flex justify-end gap-3 text-sm">
           <Link href={`/products/${product.id}/edit`} className="text-pico-black hover:underline">
             Modifier

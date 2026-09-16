@@ -5,7 +5,7 @@ import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
 
-const LOGO_STORAGE_PATH = "assets/pico-noir.svg"; // dans le bucket "assets"
+const LOGO_STORAGE_PATH = "pico-noir.svg"; // dans le bucket "assets"
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();

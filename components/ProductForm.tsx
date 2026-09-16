@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Category, Product, Template, VisualMode } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
@@ -30,6 +30,7 @@ export default function ProductForm({
 }) {
   const isEditing = Boolean(product);
   const [name, setName] = useState(product?.name ?? "");
+  const [nameTouched, setNameTouched] = useState(isEditing);
   const [templateId, setTemplateId] = useState(product?.template_id ?? templates[0]?.id ?? "");
   const [sourceMode, setSourceMode] = useState<SourceMode>(product?.visual_mode ?? "upload");
   const [file, setFile] = useState<File | null>(null);
@@ -38,6 +39,16 @@ export default function ProductForm({
   const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? inToMm(1));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Construit le nom automatiquement (Modèle — Visuel) tant que
+  // l'utilisateur n'a pas modifié le champ à la main.
+  useEffect(() => {
+    if (nameTouched) return;
+    const templateName = templates.find((t) => t.id === templateId)?.name ?? "";
+    const visualName =
+      sourceMode !== "upload" ? visuals.find((v) => v.id === visualId)?.name ?? "" : "";
+    setName(visualName ? `${templateName} — ${visualName}` : templateName);
+  }, [templateId, sourceMode, visualId, templates, visuals, nameTouched]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -104,10 +115,18 @@ export default function ProductForm({
         <input
           required
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameTouched(true);
+          }}
           placeholder="Ex. Étui iPhone 15 — motif floral"
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         />
+        {!nameTouched && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Généré automatiquement à partir du modèle et du visuel — modifiable.
+          </p>
+        )}
       </div>
 
       <div>

@@ -1,6 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { mmToPt, mmToPx } from "./units";
+import { rasterizeLogoToPng } from "./logo";
 import type { LogoHAlign, LogoVAlign, Template } from "../types";
 
 export interface GeneratePdfInput {
@@ -50,7 +51,8 @@ export async function generatePrintReadyPdf({
   if (logoImage) {
     const logoWidthPt = mmToPt(template.logo_width_mm);
     const logoTargetPx = mmToPx(template.logo_width_mm, template.dpi);
-    const embeddedLogo = await embedRasterImage(pdfDoc, logoImage, logoTargetPx);
+    const logoPng = await rasterizeLogoToPng(logoImage, logoTargetPx);
+    const embeddedLogo = await pdfDoc.embedPng(logoPng);
     const logoAspect = embeddedLogo.height / embeddedLogo.width;
     const logoHeightPt = logoWidthPt * logoAspect;
     const marginXPt = mmToPt(template.logo_margin_x_mm + template.bleed_mm);
@@ -77,26 +79,6 @@ export async function generatePrintReadyPdf({
 
   const bytes = await pdfDoc.save();
   return Buffer.from(bytes);
-}
-
-async function embedRasterImage(pdfDoc: PDFDocument, image: Buffer, targetWidthPx: number) {
-  // Normalise en PNG (avec transparence préservée) avant d'intégrer, pour
-  // accepter n'importe quel format de logo en entrée (raster ou SVG).
-  if (isSvg(image)) {
-    // Le SVG est vectoriel : on le rastérise à la densité qui donne la
-    // largeur cible en pixels, pour un rendu net à la résolution d'impression.
-    const nativeWidthPx = (await sharp(image).metadata()).width ?? targetWidthPx;
-    const density = 72 * (targetWidthPx / nativeWidthPx);
-    const png = await sharp(image, { density }).png().toBuffer();
-    return pdfDoc.embedPng(png);
-  }
-
-  const png = await sharp(image).png().toBuffer();
-  return pdfDoc.embedPng(png);
-}
-
-function isSvg(buffer: Buffer): boolean {
-  return buffer.subarray(0, 512).toString("utf8").includes("<svg");
 }
 
 function logoPosition(

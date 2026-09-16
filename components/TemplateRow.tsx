@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
 import { mmToIn } from "@/lib/pdf/units";
-import { FilePenIcon, TrashIcon } from "@/components/icons";
+import { EyeIcon, FilePenIcon, TrashIcon } from "@/components/icons";
 
 function formatIn(mm: number): string {
   return `${Math.round(mmToIn(mm) * 100) / 100}"`;
@@ -13,10 +13,12 @@ function formatIn(mm: number): string {
 export default function TemplateRow({
   template,
   categoryName,
+  onPreview,
   onEdit,
 }: {
   template: Template;
   categoryName: string;
+  onPreview: (template: Template) => void;
   onEdit: (template: Template) => void;
 }) {
   const router = useRouter();
@@ -44,6 +46,14 @@ export default function TemplateRow({
       </td>
       <td className="p-4 text-right">
         <div className="flex justify-end gap-1">
+          <button
+            onClick={() => onPreview(template)}
+            title="Visualiser"
+            aria-label="Visualiser"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+          >
+            <EyeIcon className="h-4 w-4" />
+          </button>
           <button
             onClick={() => onEdit(template)}
             title="Modifier"

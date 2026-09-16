@@ -1,0 +1,92 @@
+import sharp from "sharp";
+import { mmToPx } from "./units";
+import { rasterizeLogoToPng } from "./logo";
+import type { Template } from "../types";
+
+const PREVIEW_MAX_DIM_PX = 900;
+
+/**
+ * Génère un aperçu PNG d'un modèle : la page (avec la ligne de coupe si
+ * fond perdu) et le logo Pico positionné exactement comme sur le PDF final,
+ * sur un fond neutre "Exemple" en l'absence d'image produit réelle.
+ */
+export async function generateTemplatePreviewPng(
+  template: Template,
+  logoImage: Buffer | null
+): Promise<Buffer> {
+  const pageWidthMm = template.width_mm + template.bleed_mm * 2;
+  const pageHeightMm = template.height_mm + template.bleed_mm * 2;
+
+  const fullWidthPx = mmToPx(pageWidthMm, template.dpi);
+  const fullHeightPx = mmToPx(pageHeightMm, template.dpi);
+  const scale = Math.min(1, PREVIEW_MAX_DIM_PX / Math.max(fullWidthPx, fullHeightPx, 1));
+  const previewDpi = template.dpi * scale;
+
+  const pageWidthPx = Math.max(1, Math.round(mmToPx(pageWidthMm, previewDpi)));
+  const pageHeightPx = Math.max(1, Math.round(mmToPx(pageHeightMm, previewDpi)));
+  const bleedPx = mmToPx(template.bleed_mm, previewDpi);
+
+  const trimX = bleedPx;
+  const trimY = bleedPx;
+  const trimW = Math.max(0, pageWidthPx - bleedPx * 2);
+  const trimH = Math.max(0, pageHeightPx - bleedPx * 2);
+
+  const backgroundSvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f3f4f6"/>
+          <stop offset="1" stop-color="#e2e4e8"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      ${
+        template.bleed_mm > 0
+          ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 4"/>`
+          : ""
+      }
+      <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(
+        14,
+        Math.round(pageWidthPx * 0.06)
+      )}" fill="#9ca3af">Exemple</text>
+    </svg>
+  `;
+
+  const base = await sharp(Buffer.from(backgroundSvg)).png().toBuffer();
+
+  const composites: sharp.OverlayOptions[] = [];
+
+  if (logoImage && template.logo_width_mm > 0) {
+    const logoWidthPx = Math.max(1, Math.round(mmToPx(template.logo_width_mm, previewDpi)));
+    const rawLogoPng = await rasterizeLogoToPng(logoImage, logoWidthPx);
+    const meta = await sharp(rawLogoPng).metadata();
+    const nativeW = meta.width ?? logoWidthPx;
+    const nativeH = meta.height ?? logoWidthPx;
+    const logoHeightPx = Math.max(1, Math.round(nativeH * (logoWidthPx / nativeW)));
+    const logoPng = await sharp(rawLogoPng).resize(logoWidthPx, logoHeightPx).png().toBuffer();
+
+    const marginXPx = mmToPx(template.logo_margin_x_mm + template.bleed_mm, previewDpi);
+    const marginYPx = mmToPx(template.logo_margin_y_mm + template.bleed_mm, previewDpi);
+
+    const left =
+      template.logo_h_align === "left"
+        ? marginXPx
+        : template.logo_h_align === "right"
+        ? pageWidthPx - marginXPx - logoWidthPx
+        : (pageWidthPx - logoWidthPx) / 2;
+
+    // Contrairement au PDF (origine en bas), l'image raster a son origine
+    // en haut : "top" correspond donc directement à la petite marge, sans
+    // inversion.
+    const top =
+      template.logo_v_align === "top" ? marginYPx : pageHeightPx - marginYPx - logoHeightPx;
+
+    composites.push({
+      input: logoPng,
+      left: Math.round(Math.min(Math.max(left, 0), Math.max(pageWidthPx - logoWidthPx, 0))),
+      top: Math.round(Math.min(Math.max(top, 0), Math.max(pageHeightPx - logoHeightPx, 0))),
+    });
+  }
+
+  return sharp(base).composite(composites).png().toBuffer();
+}

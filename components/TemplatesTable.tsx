@@ -16,7 +16,12 @@ function SortIcon() {
   );
 }
 
-type ModalState = { mode: "create" } | { mode: "edit"; template: Template } | { mode: "categories" } | null;
+type ModalState =
+  | { mode: "create" }
+  | { mode: "edit"; template: Template }
+  | { mode: "preview"; template: Template; nonce: number }
+  | { mode: "categories" }
+  | null;
 
 export default function TemplatesTable({
   templates,
@@ -145,6 +150,7 @@ export default function TemplatesTable({
                   key={t.id}
                   template={t}
                   categoryName={categoryName(t.category_id)}
+                  onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
                 />
               ))}
@@ -161,6 +167,20 @@ export default function TemplatesTable({
               router.refresh();
             }}
           />
+        </Modal>
+      )}
+
+      {modal?.mode === "preview" && (
+        <Modal title={`Aperçu — ${modal.template.name}`} onClose={() => setModal(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/templates/${modal.template.id}/preview?t=${modal.nonce}`}
+            alt={`Aperçu du modèle ${modal.template.name}`}
+            className="mx-auto max-h-[70vh] w-auto rounded border border-neutral-200"
+          />
+          <p className="mt-3 text-center text-xs text-neutral-500">
+            Fond gris = image du produit. Le logo Pico est affiché à sa position réelle.
+          </p>
         </Modal>
       )}
 

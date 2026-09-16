@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Category, Product, Template, VisualMode } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
+import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
 
 type SourceMode = "upload" | VisualMode;
 
@@ -34,7 +35,7 @@ export default function ProductForm({
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [visualId, setVisualId] = useState(product?.visual_id ?? visuals[0]?.id ?? "");
-  const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? 25);
+  const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? inToMm(1));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,7 +124,7 @@ export default function ProductForm({
               <optgroup key={category.id} label={category.name}>
                 {items.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} — {t.width_mm}×{t.height_mm}mm
+                    {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
                   </option>
                 ))}
               </optgroup>
@@ -197,13 +198,13 @@ export default function ProductForm({
 
           {sourceMode === "tile" && (
             <div>
-              <label className="block text-sm font-medium">Taille de répétition (mm)</label>
+              <label className="block text-sm font-medium">Taille de répétition (po)</label>
               <input
                 type="number"
-                step="1"
-                min="1"
-                value={tileSizeMm}
-                onChange={(e) => setTileSizeMm(parseFloat(e.target.value) || 1)}
+                step="0.01"
+                min="0.01"
+                value={Math.round(mmToIn(tileSizeMm) * 100) / 100}
+                onChange={(e) => setTileSizeMm(inToMm(parseFloat(e.target.value) || 0.01))}
                 className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
               />
             </div>

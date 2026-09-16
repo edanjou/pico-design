@@ -3,12 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
-import { mmToIn } from "@/lib/pdf/units";
+import { formatIn } from "@/lib/pdf/units";
 import { EyeIcon, FilePenIcon, TrashIcon } from "@/components/icons";
-
-function formatIn(mm: number): string {
-  return `${Math.round(mmToIn(mm) * 100) / 100}"`;
-}
 
 export default function TemplateRow({
   template,

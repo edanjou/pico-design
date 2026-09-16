@@ -10,7 +10,7 @@ import type { VisualWithUrl } from "@/components/VisualsGrid";
 
 export type ProductWithTemplate = Product & {
   imageUrl: string | null;
-  template: { name: string; category_id: string } | null;
+  template: { name: string; category_id: string; width_mm: number; height_mm: number } | null;
 };
 
 function SortIcon() {
@@ -136,6 +136,7 @@ export default function ProductsTable({
                   </button>
                 </th>
                 <th className="p-4">Modèle</th>
+                <th className="p-4">Dimensions</th>
                 <th className="p-4">Catégorie</th>
                 <th className="p-4"></th>
               </tr>
@@ -146,6 +147,7 @@ export default function ProductsTable({
                   key={p.id}
                   product={p}
                   templateName={p.template?.name ?? "Modèle supprimé"}
+                  dimensions={p.template}
                   categoryLabel={categoryName(p.template?.category_id)}
                   imageUrl={p.imageUrl}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}

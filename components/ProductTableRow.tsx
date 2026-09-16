@@ -3,18 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
+import { formatIn } from "@/lib/pdf/units";
 import { FilePenIcon, TrashIcon } from "@/components/icons";
 
 export default function ProductTableRow({
   product,
   templateName,
   categoryLabel,
+  dimensions,
   imageUrl,
   onEdit,
 }: {
   product: Product;
   templateName: string;
   categoryLabel: string;
+  dimensions: { width_mm: number; height_mm: number } | null;
   imageUrl: string | null;
   onEdit: (product: Product) => void;
 }) {
@@ -46,6 +49,9 @@ export default function ProductTableRow({
       </td>
       <td className="p-4 font-semibold text-pico-black">{product.name}</td>
       <td className="p-4 text-neutral-700">{templateName}</td>
+      <td className="p-4 text-neutral-700">
+        {dimensions ? `${formatIn(dimensions.width_mm)}×${formatIn(dimensions.height_mm)}` : "—"}
+      </td>
       <td className="p-4 text-neutral-500">{categoryLabel}</td>
       <td className="p-4 text-right">
         <div className="flex justify-end gap-1">

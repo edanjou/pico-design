@@ -18,3 +18,8 @@ export function mmToIn(mm: number): number {
 export function inToMm(inches: number): number {
   return inches * 25.4;
 }
+
+// Formatte une dimension en mm vers un affichage en pouces (ex. "3.54"").
+export function formatIn(mm: number): string {
+  return `${Math.round(mmToIn(mm) * 100) / 100}"`;
+}

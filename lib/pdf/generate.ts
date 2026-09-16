@@ -31,6 +31,7 @@ export async function generatePrintReadyPdf({
   //    page (fond perdu compris) à la résolution d'impression.
   const fittedImage = await sharp(sourceImage)
     .resize(targetPxWidth, targetPxHeight, { fit: "cover", position: "attention" })
+    .flatten({ background: "#ffffff" })
     .jpeg({ quality: 92 })
     .toBuffer();
 

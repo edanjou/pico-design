@@ -67,6 +67,7 @@ export async function generateTemplatePreviewPng(
   const base = sourceImage
     ? await sharp(sourceImage)
         .resize(pageWidthPx, pageHeightPx, { fit: "cover" })
+        .flatten({ background: "#ffffff" })
         .png()
         .toBuffer()
     : await sharp(Buffer.from(linesSvg)).png().toBuffer();

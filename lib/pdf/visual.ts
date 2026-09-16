@@ -25,6 +25,7 @@ export async function composeFullCoverImage(
   const png = await toPngBuffer(visual, targetWidthPx);
   return sharp(png)
     .resize(targetWidthPx, targetHeightPx, { fit: "cover" })
+    .flatten({ background: "#ffffff" })
     .jpeg({ quality: 92 })
     .toBuffer();
 }
@@ -60,5 +61,8 @@ export async function composeTiledImage(
     </svg>
   `;
 
-  return sharp(Buffer.from(patternSvg)).jpeg({ quality: 92 }).toBuffer();
+  return sharp(Buffer.from(patternSvg))
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 92 })
+    .toBuffer();
 }

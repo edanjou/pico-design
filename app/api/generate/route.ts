@@ -6,7 +6,7 @@ import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
 
-const LOGO_STORAGE_PATH = "assets/pico-logo.png"; // dans le bucket "assets"
+const LOGO_STORAGE_PATH = "assets/pico-noir.svg"; // dans le bucket "assets"
 
 export async function POST(request: Request) {
   const supabase = createServerSupabaseClient();

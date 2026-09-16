@@ -44,11 +44,11 @@ coller le contenu de `supabase/migrations/0001_init.sql` → **Run**.
 
 ### 3. Ajouter le logo Pico
 
-Dans Supabase → **Storage** → bucket `assets` → uploader le logo (PNG avec
-fond transparent de préférence) sous le chemin exact :
+Dans Supabase → **Storage** → bucket `assets` → uploader le logo (SVG ou PNG
+avec fond transparent de préférence) sous le chemin exact :
 
 ```
-assets/pico-logo.png
+assets/pico-noir.svg
 ```
 
 (Si ce fichier est absent, les PDF sont générés sans logo — pas d'erreur.)

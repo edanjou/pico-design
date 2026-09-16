@@ -30,5 +30,5 @@
 ## Repo-specific notes
 - Authenticated users are redirected to `/login` unless already signed in.
 - The PDF generator expects a valid template from `templates` and an uploaded image in the `uploads` bucket.
-- If the `assets/pico-logo.png` object is missing in Supabase storage, generation should still proceed without the logo rather than failing.
+- If the `assets/pico-noir.svg` object is missing in Supabase storage, generation should still proceed without the logo rather than failing.
 - The project uses French user-facing copy in several places; keep language consistent with the existing app tone when editing UI text.

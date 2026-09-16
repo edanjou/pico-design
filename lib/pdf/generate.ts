@@ -49,7 +49,8 @@ export async function generatePrintReadyPdf({
   // 2. Superposer le logo Pico, si fourni.
   if (logoImage) {
     const logoWidthPt = mmToPt(template.logo_width_mm);
-    const embeddedLogo = await embedRasterImage(pdfDoc, logoImage);
+    const logoTargetPx = mmToPx(template.logo_width_mm, template.dpi);
+    const embeddedLogo = await embedRasterImage(pdfDoc, logoImage, logoTargetPx);
     const logoAspect = embeddedLogo.height / embeddedLogo.width;
     const logoHeightPt = logoWidthPt * logoAspect;
     const marginPt = mmToPt(template.logo_margin_mm + template.bleed_mm);
@@ -75,11 +76,24 @@ export async function generatePrintReadyPdf({
   return Buffer.from(bytes);
 }
 
-async function embedRasterImage(pdfDoc: PDFDocument, image: Buffer) {
+async function embedRasterImage(pdfDoc: PDFDocument, image: Buffer, targetWidthPx: number) {
   // Normalise en PNG (avec transparence préservée) avant d'intégrer, pour
-  // accepter n'importe quel format de logo en entrée (svg exclu).
+  // accepter n'importe quel format de logo en entrée (raster ou SVG).
+  if (isSvg(image)) {
+    // Le SVG est vectoriel : on le rastérise à la densité qui donne la
+    // largeur cible en pixels, pour un rendu net à la résolution d'impression.
+    const nativeWidthPx = (await sharp(image).metadata()).width ?? targetWidthPx;
+    const density = 72 * (targetWidthPx / nativeWidthPx);
+    const png = await sharp(image, { density }).png().toBuffer();
+    return pdfDoc.embedPng(png);
+  }
+
   const png = await sharp(image).png().toBuffer();
   return pdfDoc.embedPng(png);
+}
+
+function isSvg(buffer: Buffer): boolean {
+  return buffer.subarray(0, 512).toString("utf8").includes("<svg");
 }
 
 function logoPosition(

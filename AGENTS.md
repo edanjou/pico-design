@@ -30,7 +30,7 @@ Build and maintain a Next.js 14 application that allows employees to:
 - The `generate` API is the core workflow: validate template + file input, upload the source image, generate the PDF, and save output to Supabase storage.
 - Product templates are stored in the `templates` table and contain print metadata (dimensions, bleed, DPI, and logo placement).
 - `lib/pdf/generate.ts` is the critical business logic file; changes here should preserve output dimensions and print quality.
-- The `assets/pico-logo.png` file can be absent without breaking generation.
+- The `assets/pico-noir.svg` file can be absent without breaking generation.
 
 ## Verification
 Before claiming completion, run the smallest relevant tool for the task:

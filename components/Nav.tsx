@@ -18,7 +18,9 @@ export default function Nav() {
     <header className="border-b border-neutral-200 bg-pico-cream">
       <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-6">
-          <img src="/pico-noir.svg" alt="Pico Design" className="h-6 w-auto" />
+          <Link href="/">
+            <img src="/pico-noir.svg" alt="Pico Design" className="h-6 w-auto" />
+          </Link>
           <nav className="flex gap-4 text-sm text-neutral-600">
             <Link href="/generate" className="hover:text-pico-accent">
               Générer un PDF

@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
 import Modal from "@/components/Modal";
-import { TEMPLATE_CATEGORY_LABELS, type Product, type Template, type TemplateCategory } from "@/lib/types";
-
-const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
+import type { Category, Product, Template } from "@/lib/types";
 
 export type ProductWithTemplate = Product & {
   imageUrl: string | null;
-  template: { name: string; category: TemplateCategory } | null;
+  template: { name: string; category_id: string } | null;
 };
 
 function SortIcon() {
@@ -27,22 +25,29 @@ type ModalState = { mode: "create" } | { mode: "edit"; product: ProductWithTempl
 export default function ProductsTable({
   products,
   templates,
+  categories,
 }: {
   products: ProductWithTemplate[];
   templates: Template[];
+  categories: Category[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<TemplateCategory | "">("");
+  const [categoryId, setCategoryId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
 
+  const categoryName = useMemo(() => {
+    const map = new Map(categories.map((c) => [c.id, c.name]));
+    return (id: string | undefined) => (id ? map.get(id) ?? "—" : "—");
+  }, [categories]);
+
   const filtered = useMemo(() => {
     return products
-      .filter((p) => (category ? p.template?.category === category : true))
+      .filter((p) => (categoryId ? p.template?.category_id === categoryId : true))
       .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
       .sort((a, b) => (sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
-  }, [products, search, category, sortDir]);
+  }, [products, search, categoryId, sortDir]);
 
   function handleSuccess() {
     setModal(null);
@@ -94,14 +99,14 @@ export default function ProductsTable({
         <div>
           <label className="block text-xs font-medium text-neutral-500">Catégorie</label>
           <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value as TemplateCategory | "")}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
             className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
           >
             <option value="">— Toutes —</option>
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {TEMPLATE_CATEGORY_LABELS[c]}
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -138,7 +143,7 @@ export default function ProductsTable({
                   key={p.id}
                   product={p}
                   templateName={p.template?.name ?? "Modèle supprimé"}
-                  categoryLabel={p.template ? TEMPLATE_CATEGORY_LABELS[p.template.category] : "—"}
+                  categoryLabel={categoryName(p.template?.category_id)}
                   imageUrl={p.imageUrl}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
                 />
@@ -155,6 +160,7 @@ export default function ProductsTable({
         >
           <ProductForm
             templates={templates}
+            categories={categories}
             product={modal.mode === "edit" ? modal.product : undefined}
             currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
             onSuccess={handleSuccess}

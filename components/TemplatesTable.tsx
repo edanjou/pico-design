@@ -4,10 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
+import CategoriesManager from "@/components/CategoriesManager";
 import Modal from "@/components/Modal";
-import { TEMPLATE_CATEGORY_LABELS, type Template, type TemplateCategory } from "@/lib/types";
-
-const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
+import type { Category, Template } from "@/lib/types";
 
 function SortIcon() {
   return (
@@ -17,21 +16,32 @@ function SortIcon() {
   );
 }
 
-type ModalState = { mode: "create" } | { mode: "edit"; template: Template } | null;
+type ModalState = { mode: "create" } | { mode: "edit"; template: Template } | { mode: "categories" } | null;
 
-export default function TemplatesTable({ templates }: { templates: Template[] }) {
+export default function TemplatesTable({
+  templates,
+  categories,
+}: {
+  templates: Template[];
+  categories: Category[];
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<TemplateCategory | "">("");
+  const [categoryId, setCategoryId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
 
+  const categoryName = useMemo(() => {
+    const map = new Map(categories.map((c) => [c.id, c.name]));
+    return (id: string) => map.get(id) ?? "—";
+  }, [categories]);
+
   const filtered = useMemo(() => {
     return templates
-      .filter((t) => (category ? t.category === category : true))
+      .filter((t) => (categoryId ? t.category_id === categoryId : true))
       .filter((t) => t.name.toLowerCase().includes(search.trim().toLowerCase()))
       .sort((a, b) => (sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
-  }, [templates, search, category, sortDir]);
+  }, [templates, search, categoryId, sortDir]);
 
   function handleSuccess() {
     setModal(null);
@@ -80,20 +90,29 @@ export default function TemplatesTable({ templates }: { templates: Template[] })
             className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500">Catégorie</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value as TemplateCategory | "")}
-            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="block text-xs font-medium text-neutral-500">Catégorie</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— Toutes —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal({ mode: "categories" })}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
           >
-            <option value="">— Toutes —</option>
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {TEMPLATE_CATEGORY_LABELS[c]}
-              </option>
-            ))}
-          </select>
+            Gérer les catégories
+          </button>
         </div>
       </div>
 
@@ -122,20 +141,37 @@ export default function TemplatesTable({ templates }: { templates: Template[] })
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <TemplateRow key={t.id} template={t} onEdit={(tpl) => setModal({ mode: "edit", template: tpl })} />
+                <TemplateRow
+                  key={t.id}
+                  template={t}
+                  categoryName={categoryName(t.category_id)}
+                  onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {modal && (
+      {modal?.mode === "categories" && (
+        <Modal title="Gérer les catégories" onClose={() => setModal(null)}>
+          <CategoriesManager
+            categories={categories}
+            onChanged={() => {
+              router.refresh();
+            }}
+          />
+        </Modal>
+      )}
+
+      {(modal?.mode === "create" || modal?.mode === "edit") && (
         <Modal
           title={modal.mode === "create" ? "Nouveau modèle" : `Modifier « ${modal.template.name} »`}
           onClose={() => setModal(null)}
         >
           <TemplateForm
             template={modal.mode === "edit" ? modal.template : undefined}
+            categories={categories}
             onSuccess={handleSuccess}
           />
         </Modal>

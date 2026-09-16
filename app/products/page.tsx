@@ -1,15 +1,16 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import ProductsTable, { type ProductWithTemplate } from "@/components/ProductsTable";
-import type { Template } from "@/lib/types";
+import type { Category, Template } from "@/lib/types";
 
 export default async function ProductsPage() {
   const supabase = createServerSupabaseClient();
-  const [{ data: products }, { data: templates }] = await Promise.all([
+  const [{ data: products }, { data: templates }, { data: categories }] = await Promise.all([
     supabase
       .from("products")
-      .select("*, template:templates(name, category)")
+      .select("*, template:templates(name, category_id)")
       .order("name", { ascending: true }),
     supabase.from("templates").select("*").order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("name", { ascending: true }),
   ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];
@@ -23,5 +24,11 @@ export default async function ProductsPage() {
     })
   );
 
-  return <ProductsTable products={withUrls} templates={(templates as Template[]) ?? []} />;
+  return (
+    <ProductsTable
+      products={withUrls}
+      templates={(templates as Template[]) ?? []}
+      categories={(categories as Category[]) ?? []}
+    />
+  );
 }

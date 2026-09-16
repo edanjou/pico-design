@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { LogoPosition, Template, TemplateCategory } from "@/lib/types";
-import { TEMPLATE_CATEGORY_LABELS } from "@/lib/types";
+import type { Category, LogoPosition, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 
 type Unit = "mm" | "in";
@@ -15,19 +14,19 @@ const LOGO_POSITIONS: LogoPosition[] = [
   "center",
 ];
 
-const CATEGORIES = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
-
 export default function TemplateForm({
   template,
+  categories,
   onSuccess,
 }: {
   template?: Template;
+  categories: Category[];
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(template);
   const [form, setForm] = useState({
     name: template?.name ?? "",
-    category: template?.category ?? ("autre" as TemplateCategory),
+    category_id: template?.category_id ?? categories[0]?.id ?? "",
     width_mm: template?.width_mm ?? 90,
     height_mm: template?.height_mm ?? 50,
     bleed_mm: template?.bleed_mm ?? 3,
@@ -94,16 +93,21 @@ export default function TemplateForm({
       <div>
         <label className="block text-sm font-medium">Catégorie</label>
         <select
-          value={form.category}
-          onChange={(e) => update("category", e.target.value as TemplateCategory)}
+          value={form.category_id}
+          onChange={(e) => update("category_id", e.target.value)}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {TEMPLATE_CATEGORY_LABELS[c]}
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>
+        {categories.length === 0 && (
+          <p className="mt-1 text-xs text-amber-700">
+            Aucune catégorie disponible — crée-en une d&apos;abord.
+          </p>
+        )}
       </div>
 
       <div>

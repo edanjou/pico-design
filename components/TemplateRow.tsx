@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TEMPLATE_CATEGORY_LABELS, type Template } from "@/lib/types";
+import type { Template } from "@/lib/types";
 import { mmToIn } from "@/lib/pdf/units";
 
 function formatIn(mm: number): string {
@@ -11,9 +11,11 @@ function formatIn(mm: number): string {
 
 export default function TemplateRow({
   template,
+  categoryName,
   onEdit,
 }: {
   template: Template;
+  categoryName: string;
   onEdit: (template: Template) => void;
 }) {
   const router = useRouter();
@@ -35,7 +37,7 @@ export default function TemplateRow({
   return (
     <tr className="border-t border-neutral-100 hover:bg-neutral-50">
       <td className="p-4 font-semibold text-pico-black">{template.name}</td>
-      <td className="p-4 text-neutral-500">{TEMPLATE_CATEGORY_LABELS[template.category]}</td>
+      <td className="p-4 text-neutral-500">{categoryName}</td>
       <td className="p-4 text-neutral-700">
         {formatIn(template.width_mm)}×{formatIn(template.height_mm)}
       </td>

@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { TEMPLATE_CATEGORY_LABELS, type Product, type Template, type TemplateCategory } from "@/lib/types";
-
-const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
+import type { Category, Product, Template } from "@/lib/types";
 
 export default function ProductForm({
   templates,
+  categories,
   product,
   currentImageUrl,
   onSuccess,
 }: {
   templates: Template[];
+  categories: Category[];
   product?: Product;
   currentImageUrl?: string | null;
   onSuccess: () => void;
@@ -90,11 +90,11 @@ export default function ProductForm({
           onChange={(e) => setTemplateId(e.target.value)}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
-          {CATEGORY_ORDER.map((category) => {
-            const items = templates.filter((t) => t.category === category);
+          {categories.map((category) => {
+            const items = templates.filter((t) => t.category_id === category.id);
             if (items.length === 0) return null;
             return (
-              <optgroup key={category} label={TEMPLATE_CATEGORY_LABELS[category]}>
+              <optgroup key={category.id} label={category.name}>
                 {items.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} — {t.width_mm}×{t.height_mm}mm

@@ -1,11 +1,11 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import UploadForm from "@/components/UploadForm";
-import type { Product, TemplateCategory } from "@/lib/types";
+import type { Category, Product } from "@/lib/types";
 
 type ProductWithTemplate = Product & {
   template: {
     name: string;
-    category: TemplateCategory;
+    category_id: string;
     width_mm: number;
     height_mm: number;
     dpi: number;
@@ -14,10 +14,13 @@ type ProductWithTemplate = Product & {
 
 export default async function GeneratePage() {
   const supabase = createServerSupabaseClient();
-  const { data: products } = await supabase
-    .from("products")
-    .select("*, template:templates(name, category, width_mm, height_mm, dpi)")
-    .order("name", { ascending: true });
+  const [{ data: products }, { data: categories }] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*, template:templates(name, category_id, width_mm, height_mm, dpi)")
+      .order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("name", { ascending: true }),
+  ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];
 
@@ -33,7 +36,7 @@ export default async function GeneratePage() {
       <h1 className="mb-6 text-xl font-semibold text-pico-black">
         Générer un PDF prêt pour impression
       </h1>
-      <UploadForm products={withUrls} />
+      <UploadForm products={withUrls} categories={(categories as Category[]) ?? []} />
     </div>
   );
 }

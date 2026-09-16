@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  TEMPLATE_CATEGORY_LABELS,
-  type Product,
-  type TemplateCategory,
-} from "@/lib/types";
-
-const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[];
+import type { Category, Product } from "@/lib/types";
 
 type ProductOption = Product & {
   imageUrl: string | null;
-  template: { name: string; category: TemplateCategory; width_mm: number; height_mm: number; dpi: number } | null;
+  template: { name: string; category_id: string; width_mm: number; height_mm: number; dpi: number } | null;
 };
 
-export default function UploadForm({ products }: { products: ProductOption[] }) {
+export default function UploadForm({
+  products,
+  categories,
+}: {
+  products: ProductOption[];
+  categories: Category[];
+}) {
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,11 +71,11 @@ export default function UploadForm({ products }: { products: ProductOption[] }) 
           }}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
-          {CATEGORY_ORDER.map((category) => {
-            const items = products.filter((p) => p.template?.category === category);
+          {categories.map((category) => {
+            const items = products.filter((p) => p.template?.category_id === category.id);
             if (items.length === 0) return null;
             return (
-              <optgroup key={category} label={TEMPLATE_CATEGORY_LABELS[category]}>
+              <optgroup key={category.id} label={category.name}>
                 {items.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} — {p.template?.name}

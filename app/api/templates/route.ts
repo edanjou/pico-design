@@ -1,5 +1,18 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
+const NUMERIC_FIELDS = [
+  "width_mm",
+  "height_mm",
+  "bleed_mm",
+  "safety_margin_mm",
+  "dpi",
+  "logo_width_mm",
+  "logo_margin_x_mm",
+  "logo_margin_y_mm",
+] as const;
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
@@ -19,10 +32,35 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  const body = await request.json();
+  const formData = await request.formData();
+  const body: Record<string, unknown> = {};
+  for (const field of STRING_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") body[field] = v;
+  }
+  for (const field of NUMERIC_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") body[field] = parseFloat(v);
+  }
+
+  const templateId = randomUUID();
+  const overlayFile = formData.get("overlay");
+  let overlayPath: string | null = null;
+
+  if (overlayFile instanceof File && overlayFile.size > 0) {
+    overlayPath = `${templateId}/${overlayFile.name}`;
+    const buffer = Buffer.from(await overlayFile.arrayBuffer());
+    const { error: uploadError } = await supabase.storage
+      .from("overlays")
+      .upload(overlayPath, buffer, { contentType: overlayFile.type || "image/png", upsert: true });
+    if (uploadError) {
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
+  }
+
   const { data, error } = await supabase
     .from("templates")
-    .insert({ ...body, created_by: user.id })
+    .insert({ id: templateId, ...body, overlay_path: overlayPath, created_by: user.id })
     .select()
     .single();
 

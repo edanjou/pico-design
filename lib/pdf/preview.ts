@@ -11,11 +11,15 @@ const PREVIEW_MAX_DIM_PX = 900;
  * Si `sourceImage` est fourni (aperçu d'un produit avant enregistrement),
  * il est recadré en "cover" pour remplir la page, comme le fera la
  * génération de PDF réelle ; sinon un fond neutre "Exemple" est utilisé.
+ * `overlayImage`, si fourni, est un gabarit de guidage (ex. position des
+ * caméras) plaqué sur la zone de coupe finie — uniquement pour l'aperçu,
+ * jamais inclus dans le PDF imprimé (voir lib/pdf/generate.ts).
  */
 export async function generateTemplatePreviewPng(
   template: Template,
   logoImage: Buffer | null,
-  sourceImage?: Buffer | null
+  sourceImage?: Buffer | null,
+  overlayImage?: Buffer | null
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -75,6 +79,14 @@ export async function generateTemplatePreviewPng(
   const composites: sharp.OverlayOptions[] = sourceImage
     ? [{ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 }]
     : [];
+
+  if (overlayImage && trimW > 0 && trimH > 0) {
+    const overlayPng = await sharp(overlayImage)
+      .resize(trimW, trimH, { fit: "cover" })
+      .png()
+      .toBuffer();
+    composites.push({ input: overlayPng, left: Math.round(trimX), top: Math.round(trimY) });
+  }
 
   if (logoImage && template.logo_width_mm > 0) {
     const logoWidthPx = Math.max(1, Math.round(mmToPx(template.logo_width_mm, previewDpi)));

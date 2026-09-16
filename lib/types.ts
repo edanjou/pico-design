@@ -24,6 +24,7 @@ export interface Template {
   logo_width_mm: number;
   logo_margin_x_mm: number;
   logo_margin_y_mm: number;
+  overlay_path: string | null;
   created_at: string;
   created_by: string | null;
 }

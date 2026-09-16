@@ -57,7 +57,13 @@ export async function POST(request: Request) {
   const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
   const logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
 
-  const png = await generateTemplatePreviewPng(template, logoBuffer, resolved.buffer);
+  let overlayBuffer: Buffer | null = null;
+  if (template.overlay_path) {
+    const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
+    overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
+  }
+
+  const png = await generateTemplatePreviewPng(template, logoBuffer, resolved.buffer, overlayBuffer);
 
   return new NextResponse(new Uint8Array(png), {
     headers: {

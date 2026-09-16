@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import TemplatesTable from "@/components/TemplatesTable";
+import TemplatesTable, { type TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import type { Category, Template } from "@/lib/types";
 
 export default async function TemplatesPage() {
@@ -9,9 +9,19 @@ export default async function TemplatesPage() {
     supabase.from("categories").select("*").order("name", { ascending: true }),
   ]);
 
+  const rows = (templates as Template[]) ?? [];
+
+  const withOverlayUrls: TemplateWithOverlayUrl[] = await Promise.all(
+    rows.map(async (t) => {
+      if (!t.overlay_path) return { ...t, overlayUrl: null };
+      const { data } = await supabase.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30);
+      return { ...t, overlayUrl: data?.signedUrl ?? null };
+    })
+  );
+
   return (
     <TemplatesTable
-      templates={(templates as Template[]) ?? []}
+      templates={withOverlayUrls}
       categories={(categories as Category[]) ?? []}
     />
   );

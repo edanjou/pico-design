@@ -8,6 +8,8 @@ import CategoriesManager from "@/components/CategoriesManager";
 import Modal from "@/components/Modal";
 import type { Category, Template } from "@/lib/types";
 
+export type TemplateWithOverlayUrl = Template & { overlayUrl: string | null };
+
 function SortIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-3.5 w-3.5">
@@ -18,7 +20,7 @@ function SortIcon() {
 
 type ModalState =
   | { mode: "create" }
-  | { mode: "edit"; template: Template }
+  | { mode: "edit"; template: TemplateWithOverlayUrl }
   | { mode: "preview"; template: Template; nonce: number }
   | { mode: "categories" }
   | null;
@@ -27,7 +29,7 @@ export default function TemplatesTable({
   templates,
   categories,
 }: {
-  templates: Template[];
+  templates: TemplateWithOverlayUrl[];
   categories: Category[];
 }) {
   const router = useRouter();
@@ -193,6 +195,7 @@ export default function TemplatesTable({
           <TemplateForm
             template={modal.mode === "edit" ? modal.template : undefined}
             categories={categories}
+            currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
             onSuccess={handleSuccess}
           />
         </Modal>

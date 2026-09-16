@@ -26,7 +26,13 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const admin = createAdminSupabaseClient();
   const logoBuffer = await loadLogoImage(admin, "logo", "#000000");
 
-  const png = await generateTemplatePreviewPng(template, logoBuffer);
+  let overlayBuffer: Buffer | null = null;
+  if (template.overlay_path) {
+    const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
+    overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
+  }
+
+  const png = await generateTemplatePreviewPng(template, logoBuffer, null, overlayBuffer);
 
   return new NextResponse(new Uint8Array(png), {
     headers: {

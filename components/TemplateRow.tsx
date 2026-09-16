@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
+import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
 import { EyeIcon, FilePenIcon, TrashIcon } from "@/components/icons";
 
@@ -12,10 +13,10 @@ export default function TemplateRow({
   onPreview,
   onEdit,
 }: {
-  template: Template;
+  template: TemplateWithOverlayUrl;
   categoryName: string;
   onPreview: (template: Template) => void;
-  onEdit: (template: Template) => void;
+  onEdit: (template: TemplateWithOverlayUrl) => void;
 }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);

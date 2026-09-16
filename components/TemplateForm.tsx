@@ -20,10 +20,12 @@ const V_ALIGNS: { value: LogoVAlign; label: string }[] = [
 export default function TemplateForm({
   template,
   categories,
+  currentOverlayUrl,
   onSuccess,
 }: {
   template?: Template;
   categories: Category[];
+  currentOverlayUrl?: string | null;
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(template);
@@ -44,6 +46,16 @@ export default function TemplateForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<Unit>("in");
+  const [overlayFile, setOverlayFile] = useState<File | null>(null);
+  const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
+  const [removeOverlay, setRemoveOverlay] = useState(false);
+
+  function handleOverlayChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setOverlayFile(f);
+    setOverlayPreview(f ? URL.createObjectURL(f) : null);
+    if (f) setRemoveOverlay(false);
+  }
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -75,14 +87,17 @@ export default function TemplateForm({
     setLoading(true);
     setError(null);
 
-    const res = await fetch(
-      isEditing ? `/api/templates/${template!.id}` : "/api/templates",
-      {
-        method: isEditing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      }
-    );
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(form)) {
+      formData.append(key, String(value));
+    }
+    if (overlayFile) formData.append("overlay", overlayFile);
+    if (removeOverlay) formData.append("removeOverlay", "true");
+
+    const res = await fetch(isEditing ? `/api/templates/${template!.id}` : "/api/templates", {
+      method: isEditing ? "PATCH" : "POST",
+      body: formData,
+    });
     const data = await res.json();
 
     setLoading(false);
@@ -277,6 +292,36 @@ export default function TemplateForm({
             />
           </div>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">
+          Gabarit de guidage (ex. position des caméras) — optionnel
+        </label>
+        <p className="mt-1 text-xs text-neutral-500">
+          Affiché uniquement dans les aperçus, jamais inclus dans le PDF imprimé.
+        </p>
+        <input
+          type="file"
+          accept="image/svg+xml,image/png,image/jpeg"
+          onChange={handleOverlayChange}
+          className="mt-2 w-full text-sm"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {overlayPreview ? (
+          <img src={overlayPreview} alt="Aperçu du gabarit" className="mt-3 max-h-48 rounded border" />
+        ) : !removeOverlay && currentOverlayUrl ? (
+          <div className="mt-3">
+            <img src={currentOverlayUrl} alt="Gabarit actuel" className="max-h-48 rounded border" />
+            <button
+              type="button"
+              onClick={() => setRemoveOverlay(true)}
+              className="mt-2 text-sm text-red-600 hover:underline"
+            >
+              Retirer le gabarit
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

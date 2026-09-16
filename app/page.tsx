@@ -44,34 +44,6 @@ const links = [
       />
     ),
   },
-  {
-    href: "/generate",
-    title: "Générer un PDF",
-    description: "Choisir un produit et obtenir un PDF prêt pour impression.",
-    gradient: "from-orange-400 to-red-500",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M12 4.5v11m0 0 4-4m-4 4-4-4M5 16.5v1.75A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25V16.5"
-      />
-    ),
-  },
-  {
-    href: "/history",
-    title: "Historique",
-    description: "Revoir les générations passées (succès et erreurs).",
-    gradient: "from-purple-400 to-indigo-500",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M12 8v4l2.5 2.5M20 12a8 8 0 1 1-8-8 8 8 0 0 1 8 8Z"
-      />
-    ),
-  },
 ];
 
 export default async function DashboardPage() {

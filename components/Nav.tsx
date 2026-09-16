@@ -31,12 +31,6 @@ export default function Nav() {
             <Link href="/products" className="hover:text-pico-accent">
               Produits
             </Link>
-            <Link href="/generate" className="hover:text-pico-accent">
-              Générer un PDF
-            </Link>
-            <Link href="/history" className="hover:text-pico-accent">
-              Historique
-            </Link>
           </nav>
         </div>
         <button onClick={handleLogout} className="text-sm text-neutral-500 hover:text-neutral-800">

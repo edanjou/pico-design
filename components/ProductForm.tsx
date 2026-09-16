@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Category, Product, Template, VisualMode } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
@@ -42,6 +42,56 @@ export default function ProductForm({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewTokenRef = useRef(0);
+
+  // Régénère automatiquement l'aperçu (visuel + logo, exactement comme sur
+  // le PDF final) dès que le modèle, le visuel, le mode ou la taille de
+  // répétition changent — pas besoin de cliquer sur un bouton séparé.
+  useEffect(() => {
+    const ready = Boolean(templateId) && (sourceMode === "upload" ? Boolean(file) : Boolean(visualId));
+    if (!ready) {
+      setPreviewImageUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return null;
+      });
+      setPreviewError(null);
+      return;
+    }
+
+    const token = ++previewTokenRef.current;
+    const timeout = setTimeout(async () => {
+      setPreviewLoading(true);
+      setPreviewError(null);
+
+      const formData = new FormData();
+      formData.append("templateId", templateId);
+      if (sourceMode === "upload") {
+        if (file) formData.append("image", file);
+      } else {
+        formData.append("visualId", visualId);
+        formData.append("visualMode", sourceMode);
+        if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
+      }
+
+      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
+      if (token !== previewTokenRef.current) return; // une saisie plus récente a pris le relais
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPreviewError(data.error ?? "Erreur lors de la génération de l'aperçu.");
+        setPreviewLoading(false);
+        return;
+      }
+      const blob = await res.blob();
+      setPreviewImageUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return URL.createObjectURL(blob);
+      });
+      setPreviewLoading(false);
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [templateId, sourceMode, visualId, tileSizeMm, file]);
 
   useEffect(() => {
     return () => {
@@ -64,42 +114,6 @@ export default function ProductForm({
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     setPreview(f ? URL.createObjectURL(f) : null);
-  }
-
-  async function handlePreview() {
-    setPreviewError(null);
-    if (sourceMode === "upload" && !file) {
-      setPreviewError("Choisis d'abord une image à uploader.");
-      return;
-    }
-    if (sourceMode !== "upload" && !visualId) {
-      setPreviewError("Choisis un visuel dans la banque.");
-      return;
-    }
-    setPreviewLoading(true);
-
-    const formData = new FormData();
-    formData.append("templateId", templateId);
-    if (sourceMode === "upload") {
-      if (file) formData.append("image", file);
-    } else {
-      formData.append("visualId", visualId);
-      formData.append("visualMode", sourceMode);
-      if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
-    }
-
-    const res = await fetch("/api/products/preview", { method: "POST", body: formData });
-    setPreviewLoading(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setPreviewError(data.error ?? "Erreur lors de la génération de l'aperçu.");
-      return;
-    }
-    const blob = await res.blob();
-    setPreviewImageUrl((old) => {
-      if (old) URL.revokeObjectURL(old);
-      return URL.createObjectURL(blob);
-    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -275,35 +289,30 @@ export default function ProductForm({
             </div>
           )}
 
-          {selectedVisual?.fileUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={selectedVisual.fileUrl}
-              alt={selectedVisual.name}
-              className="max-h-48 rounded border bg-neutral-50 object-contain p-2"
-            />
-          )}
         </div>
       )}
 
       <div>
-        <button
-          type="button"
-          onClick={handlePreview}
-          disabled={previewLoading}
-          className="rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
-        >
-          {previewLoading ? "Génération de l'aperçu..." : "Aperçu"}
-        </button>
-        {previewError && <p className="mt-2 text-sm text-red-600">{previewError}</p>}
-        {previewImageUrl && (
-          <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+        <label className="block text-sm font-medium">
+          Aperçu {previewLoading && <span className="text-neutral-400">(génération...)</span>}
+        </label>
+        {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
+        {previewImageUrl ? (
+          <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={previewImageUrl} alt="Aperçu du produit" className="mx-auto max-h-72 w-auto" />
             <p className="mt-2 text-center text-xs text-neutral-500">
               Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection.
             </p>
           </div>
+        ) : (
+          !previewError && (
+            <p className="mt-1 text-xs text-neutral-500">
+              {sourceMode === "upload"
+                ? "Choisis une image pour voir l'aperçu."
+                : "Choisis un visuel pour voir l'aperçu."}
+            </p>
+          )
         )}
       </div>
 

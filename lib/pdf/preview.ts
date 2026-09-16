@@ -42,17 +42,7 @@ export async function generateTemplatePreviewPng(
 
   const linesSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
-      ${
-        !sourceImage
-          ? `<defs>
-               <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-                 <stop offset="0" stop-color="#f3f4f6"/>
-                 <stop offset="1" stop-color="#e2e4e8"/>
-               </linearGradient>
-             </defs>
-             <rect width="100%" height="100%" fill="url(#bg)"/>`
-          : ""
-      }
+      ${!sourceImage ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ""}
       ${
         template.bleed_mm > 0
           ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ef4444" stroke-width="1.5"/>`

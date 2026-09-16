@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Visual } from "@/lib/types";
+
+function stripExtension(filename: string): string {
+  const idx = filename.lastIndexOf(".");
+  return idx > 0 ? filename.slice(0, idx) : filename;
+}
 
 export default function VisualForm({
   visual,
@@ -14,74 +19,123 @@ export default function VisualForm({
 }) {
   const isEditing = Boolean(visual);
   const [name, setName] = useState(visual?.name ?? "");
-  const [file, setFile] = useState<File | null>(null);
+  const [nameTouched, setNameTouched] = useState(isEditing);
+  const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Nom pré-rempli à partir du nom du fichier (sans l'extension) quand un
+  // seul fichier est sélectionné, tant qu'il n'a pas été modifié à la main.
+  useEffect(() => {
+    if (nameTouched || files.length !== 1) return;
+    setName(stripExtension(files[0].name));
+  }, [files, nameTouched]);
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setPreview(f ? URL.createObjectURL(f) : null);
+    const list = Array.from(e.target.files ?? []);
+    setFiles(list);
+    setPreview(list.length === 1 ? URL.createObjectURL(list[0]) : null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isEditing && !file) {
-      setError("Un fichier est requis.");
+    if (!isEditing && files.length === 0) {
+      setError("Au moins un fichier est requis.");
       return;
     }
     setLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("name", name);
-    if (file) formData.append("file", file);
+    if (isEditing || files.length <= 1) {
+      const formData = new FormData();
+      formData.append("name", name);
+      if (files[0]) formData.append("file", files[0]);
 
-    const res = await fetch(isEditing ? `/api/visuals/${visual!.id}` : "/api/visuals", {
-      method: isEditing ? "PATCH" : "POST",
-      body: formData,
-    });
-    const data = await res.json();
+      const res = await fetch(isEditing ? `/api/visuals/${visual!.id}` : "/api/visuals", {
+        method: isEditing ? "PATCH" : "POST",
+        body: formData,
+      });
+      const data = await res.json();
 
-    setLoading(false);
-    if (!res.ok) {
-      setError(data.error ?? "Erreur lors de l'enregistrement.");
+      setLoading(false);
+      if (!res.ok) {
+        setError(data.error ?? "Erreur lors de l'enregistrement.");
+        return;
+      }
+      onSuccess();
       return;
+    }
+
+    // Plusieurs fichiers : un visuel par fichier, nommé d'après son nom.
+    const failed: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      setProgress({ done: i, total: files.length });
+      const f = files[i];
+      const formData = new FormData();
+      formData.append("name", stripExtension(f.name));
+      formData.append("file", f);
+      const res = await fetch("/api/visuals", { method: "POST", body: formData });
+      if (!res.ok) failed.push(f.name);
+    }
+    setProgress(null);
+    setLoading(false);
+
+    if (failed.length > 0) {
+      setError(`Échec pour : ${failed.join(", ")}`);
     }
     onSuccess();
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium">Nom du visuel</label>
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ex. Motif pois orange"
-          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-        />
-      </div>
+      {files.length <= 1 && (
+        <div>
+          <label className="block text-sm font-medium">Nom du visuel</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameTouched(true);
+            }}
+            placeholder="Ex. Motif pois orange"
+            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+          />
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium">
-          Fichier (SVG, PNG, JPG) {isEditing ? "(laisser vide pour garder l'actuel)" : ""}
+          Fichier{!isEditing ? "s" : ""} (SVG, PNG, JPG){" "}
+          {isEditing ? "(laisser vide pour garder l'actuel)" : ""}
         </label>
         <input
           type="file"
           accept="image/svg+xml,image/png,image/jpeg"
+          multiple={!isEditing}
           onChange={handleFileChange}
           className="mt-1 w-full text-sm"
         />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {preview ? (
+        {files.length > 1 ? (
+          <p className="mt-2 text-sm text-neutral-600">
+            {files.length} fichiers sélectionnés — chacun sera ajouté comme un visuel séparé,
+            nommé d&apos;après son nom de fichier.
+          </p>
+        ) : /* eslint-disable-next-line @next/next/no-img-element */
+        preview ? (
           <img src={preview} alt="Aperçu" className="mt-3 max-h-48 rounded border" />
         ) : currentFileUrl ? (
           <img src={currentFileUrl} alt="Fichier actuel" className="mt-3 max-h-48 rounded border" />
         ) : null}
       </div>
+
+      {progress && (
+        <p className="text-sm text-neutral-600">
+          Envoi {progress.done + 1}/{progress.total}...
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -90,7 +144,13 @@ export default function VisualForm({
         disabled={loading}
         className="rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
-        {loading ? "Enregistrement..." : isEditing ? "Enregistrer" : "Ajouter le visuel"}
+        {loading
+          ? "Enregistrement..."
+          : isEditing
+          ? "Enregistrer"
+          : files.length > 1
+          ? `Ajouter ${files.length} visuels`
+          : "Ajouter le visuel"}
       </button>
     </form>
   );

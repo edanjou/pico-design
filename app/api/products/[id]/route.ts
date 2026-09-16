@@ -20,6 +20,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const tileSizeMm = formData.get("tileSizeMm");
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
+  const logoSecondaryColor = formData.get("logoSecondaryColor");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -34,6 +35,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     logo_shape: (logoShape === "pastille" ? "pastille" : "logo") satisfies LogoShape,
     logo_color:
       typeof logoColor === "string" && isValidLogoColor(logoColor) ? logoColor : "#000000",
+    logo_secondary_color:
+      typeof logoSecondaryColor === "string" && isValidLogoColor(logoSecondaryColor)
+        ? logoSecondaryColor
+        : "#FFFFFF",
   };
   const hasNewSource = file instanceof File && file.size > 0
     ? true

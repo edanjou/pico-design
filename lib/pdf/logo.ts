@@ -18,31 +18,39 @@ export function isSvg(buffer: Buffer): boolean {
 }
 
 // Applique une couleur de remplissage au SVG (sur l'élément racine, hérité
-// par tous les tracés qui n'ont pas leur propre fill — c'est le cas des
-// fichiers logo/pastille utilisés ici).
-export function recolorSvg(svg: Buffer, hexColor: string): Buffer {
+// par tous les tracés qui n'ont pas leur propre fill — c'est le cas du
+// mot-symbole et du cercle de la pastille). Pour la pastille, la lettre à
+// l'intérieur a sa propre couleur verrouillée en CSS (classe .cls-1) :
+// `secondaryColor`, si fourni, la remplace aussi.
+export function recolorSvg(svg: Buffer, hexColor: string, secondaryHexColor?: string): Buffer {
   const color = isValidLogoColor(hexColor) ? hexColor : DEFAULT_LOGO_COLOR;
-  const text = svg.toString("utf8");
-  const recolored = text.replace(/<svg([^>]*)>/, (_match, attrs: string) => {
+  let text = svg.toString("utf8");
+  text = text.replace(/<svg([^>]*)>/, (_match, attrs: string) => {
     const withoutFill = attrs.replace(/\sfill="[^"]*"/g, "");
     return `<svg${withoutFill} fill="${color}">`;
   });
-  return Buffer.from(recolored, "utf8");
+  if (secondaryHexColor) {
+    const inner = isValidLogoColor(secondaryHexColor) ? secondaryHexColor : "#FFFFFF";
+    text = text.replace(/\.cls-1\s*\{[^}]*\}/, `.cls-1 { fill: ${inner}; }`);
+  }
+  return Buffer.from(text, "utf8");
 }
 
 // Télécharge la forme de logo choisie (bucket "assets") et lui applique la
-// couleur choisie. Retourne null si le fichier n'existe pas dans le bucket.
+// ou les couleurs choisies. Retourne null si le fichier n'existe pas dans
+// le bucket.
 export async function loadLogoImage(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any>,
   shape: LogoShape,
-  hexColor: string
+  hexColor: string,
+  secondaryHexColor?: string
 ): Promise<Buffer | null> {
   const path = LOGO_SHAPE_FILES[shape] ?? LOGO_SHAPE_FILES.logo;
   const { data } = await admin.storage.from("assets").download(path);
   if (!data) return null;
   const buffer = Buffer.from(await data.arrayBuffer());
-  return recolorSvg(buffer, hexColor);
+  return recolorSvg(buffer, hexColor, secondaryHexColor);
 }
 
 // Rastérise un logo (SVG ou raster) en PNG à la largeur cible en pixels.

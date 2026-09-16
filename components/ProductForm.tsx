@@ -45,6 +45,9 @@ export default function ProductForm({
   const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? inToMm(1));
   const [logoShape, setLogoShape] = useState<LogoShape>(product?.logo_shape ?? "logo");
   const [logoColor, setLogoColor] = useState(product?.logo_color ?? "#000000");
+  const [logoSecondaryColor, setLogoSecondaryColor] = useState(
+    product?.logo_secondary_color ?? "#FFFFFF"
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export default function ProductForm({
       formData.append("templateId", templateId);
       formData.append("logoShape", logoShape);
       formData.append("logoColor", logoColor);
+      formData.append("logoSecondaryColor", logoSecondaryColor);
       if (sourceMode === "upload") {
         if (file) formData.append("image", file);
       } else {
@@ -101,7 +105,7 @@ export default function ProductForm({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [templateId, sourceMode, visualId, tileSizeMm, file, logoShape, logoColor]);
+  }, [templateId, sourceMode, visualId, tileSizeMm, file, logoShape, logoColor, logoSecondaryColor]);
 
   useEffect(() => {
     return () => {
@@ -144,6 +148,7 @@ export default function ProductForm({
     formData.append("templateId", templateId);
     formData.append("logoShape", logoShape);
     formData.append("logoColor", logoColor);
+    formData.append("logoSecondaryColor", logoSecondaryColor);
     if (sourceMode === "upload") {
       if (file) formData.append("image", file);
     } else {
@@ -323,7 +328,10 @@ export default function ProductForm({
           ))}
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-2">
+        <p className="mb-1 mt-3 text-xs text-neutral-500">
+          {logoShape === "pastille" ? "Couleur de la pastille" : "Couleur du logo"}
+        </p>
+        <div className="flex flex-wrap gap-2">
           {LOGO_COLOR_PALETTE.map((c) => (
             <button
               key={c.hex}
@@ -340,6 +348,29 @@ export default function ProductForm({
             />
           ))}
         </div>
+
+        {logoShape === "pastille" && (
+          <>
+            <p className="mb-1 mt-3 text-xs text-neutral-500">Couleur du logo à l&apos;intérieur</p>
+            <div className="flex flex-wrap gap-2">
+              {LOGO_COLOR_PALETTE.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={() => setLogoSecondaryColor(c.hex)}
+                  title={c.name}
+                  aria-label={c.name}
+                  className={`h-7 w-7 rounded-full border ${
+                    logoSecondaryColor === c.hex
+                      ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
+                      : "border-neutral-300"
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div>

@@ -50,6 +50,7 @@ export interface Product {
   tile_size_mm: number | null;
   logo_shape: LogoShape;
   logo_color: string;
+  logo_secondary_color: string;
   created_at: string;
   created_by: string | null;
 }

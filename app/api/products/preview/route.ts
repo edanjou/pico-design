@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   const tileSizeMm = formData.get("tileSizeMm");
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
+  const logoSecondaryColor = formData.get("logoSecondaryColor");
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -53,7 +54,8 @@ export async function POST(request: Request) {
   const admin = createAdminSupabaseClient();
   const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
   const color = typeof logoColor === "string" ? logoColor : "#000000";
-  const logoBuffer = await loadLogoImage(admin, shape, color);
+  const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
+  const logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
 
   const png = await generateTemplatePreviewPng(template, logoBuffer, resolved.buffer);
 

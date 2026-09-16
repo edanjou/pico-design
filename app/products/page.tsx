@@ -1,20 +1,26 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import ProductsTable, { type ProductWithTemplate } from "@/components/ProductsTable";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
-import type { Category, Template, Visual } from "@/lib/types";
+import type { Category, ProductCollection, Template, Visual } from "@/lib/types";
 
 export default async function ProductsPage() {
   const supabase = createServerSupabaseClient();
-  const [{ data: products }, { data: templates }, { data: categories }, { data: visuals }] =
-    await Promise.all([
-      supabase
-        .from("products")
-        .select("*, template:templates(name, category_id, width_mm, height_mm)")
-        .order("name", { ascending: true }),
-      supabase.from("templates").select("*").order("name", { ascending: true }),
-      supabase.from("categories").select("*").order("name", { ascending: true }),
-      supabase.from("visuals").select("*").order("name", { ascending: true }),
-    ]);
+  const [
+    { data: products },
+    { data: templates },
+    { data: categories },
+    { data: visuals },
+    { data: productCollections },
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*, template:templates(name, category_id, width_mm, height_mm)")
+      .order("name", { ascending: true }),
+    supabase.from("templates").select("*").order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("name", { ascending: true }),
+    supabase.from("visuals").select("*").order("name", { ascending: true }),
+    supabase.from("product_collections").select("*").order("name", { ascending: true }),
+  ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];
 
@@ -41,6 +47,7 @@ export default async function ProductsPage() {
       templates={(templates as Template[]) ?? []}
       categories={(categories as Category[]) ?? []}
       visuals={visualsWithUrls}
+      collections={(productCollections as ProductCollection[]) ?? []}
     />
   );
 }

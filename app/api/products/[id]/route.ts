@@ -21,6 +21,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
   const logoSecondaryColor = formData.get("logoSecondaryColor");
+  const collectionId = formData.get("collectionId");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -39,6 +40,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       typeof logoSecondaryColor === "string" && isValidLogoColor(logoSecondaryColor)
         ? logoSecondaryColor
         : "#FFFFFF",
+    collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
   };
   const hasNewSource = file instanceof File && file.size > 0
     ? true

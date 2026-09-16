@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
+import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
-import type { Category, Product, Template } from "@/lib/types";
+import type { Category, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 
 export type ProductWithTemplate = Product & {
@@ -21,22 +22,29 @@ function SortIcon() {
   );
 }
 
-type ModalState = { mode: "create" } | { mode: "edit"; product: ProductWithTemplate } | null;
+type ModalState =
+  | { mode: "create" }
+  | { mode: "edit"; product: ProductWithTemplate }
+  | { mode: "collections" }
+  | null;
 
 export default function ProductsTable({
   products,
   templates,
   categories,
   visuals,
+  collections,
 }: {
   products: ProductWithTemplate[];
   templates: Template[];
   categories: Category[];
   visuals: VisualWithUrl[];
+  collections: ProductCollection[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [collectionId, setCollectionId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -45,12 +53,18 @@ export default function ProductsTable({
     return (id: string | undefined) => (id ? map.get(id) ?? "—" : "—");
   }, [categories]);
 
+  const collectionName = useMemo(() => {
+    const map = new Map(collections.map((c) => [c.id, c.name]));
+    return (id: string | null) => (id ? map.get(id) ?? null : null);
+  }, [collections]);
+
   const filtered = useMemo(() => {
     return products
       .filter((p) => (categoryId ? p.template?.category_id === categoryId : true))
+      .filter((p) => (collectionId ? p.collection_id === collectionId : true))
       .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
       .sort((a, b) => (sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
-  }, [products, search, categoryId, sortDir]);
+  }, [products, search, categoryId, collectionId, sortDir]);
 
   function handleSuccess() {
     setModal(null);
@@ -99,20 +113,44 @@ export default function ProductsTable({
             className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500">Catégorie</label>
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="block text-xs font-medium text-neutral-500">Catégorie</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— Toutes —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-neutral-500">Collection</label>
+            <select
+              value={collectionId}
+              onChange={(e) => setCollectionId(e.target.value)}
+              className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— Toutes —</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal({ mode: "collections" })}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
           >
-            <option value="">— Toutes —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            Gérer les collections
+          </button>
         </div>
       </div>
 
@@ -138,6 +176,7 @@ export default function ProductsTable({
                 <th className="p-4">Modèle</th>
                 <th className="p-4">Dimensions</th>
                 <th className="p-4">Catégorie</th>
+                <th className="p-4">Collection</th>
                 <th className="p-4"></th>
               </tr>
             </thead>
@@ -149,6 +188,7 @@ export default function ProductsTable({
                   templateName={p.template?.name ?? "Modèle supprimé"}
                   dimensions={p.template}
                   categoryLabel={categoryName(p.template?.category_id)}
+                  collectionLabel={collectionName(p.collection_id)}
                   imageUrl={p.imageUrl}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
                 />
@@ -158,7 +198,17 @@ export default function ProductsTable({
         </div>
       )}
 
-      {modal && (
+      {modal?.mode === "collections" && (
+        <Modal title="Gérer les collections" onClose={() => setModal(null)}>
+          <CollectionsManager
+            collections={collections}
+            apiBasePath="/api/product-collections"
+            onChanged={() => router.refresh()}
+          />
+        </Modal>
+      )}
+
+      {(modal?.mode === "create" || modal?.mode === "edit") && (
         <Modal
           title={modal.mode === "create" ? "Nouveau produit" : `Modifier « ${modal.product.name} »`}
           onClose={() => setModal(null)}
@@ -167,6 +217,7 @@ export default function ProductsTable({
             templates={templates}
             categories={categories}
             visuals={visuals}
+            collections={collections}
             product={modal.mode === "edit" ? modal.product : undefined}
             currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
             onSuccess={handleSuccess}

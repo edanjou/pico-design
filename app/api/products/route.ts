@@ -33,6 +33,7 @@ export async function POST(request: Request) {
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
   const logoSecondaryColor = formData.get("logoSecondaryColor");
+  const collectionId = formData.get("collectionId");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
         typeof logoSecondaryColor === "string" && isValidLogoColor(logoSecondaryColor)
           ? logoSecondaryColor
           : "#FFFFFF",
+      collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
       created_by: user.id,
     })
     .select()

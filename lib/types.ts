@@ -49,6 +49,13 @@ export interface Visual {
   created_by: string | null;
 }
 
+export interface ProductCollection {
+  id: string;
+  name: string;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -60,6 +67,7 @@ export interface Product {
   logo_shape: LogoShape;
   logo_color: string;
   logo_secondary_color: string;
+  collection_id: string | null;
   created_at: string;
   created_by: string | null;
 }

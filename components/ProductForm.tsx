@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Category, LogoShape, Product, Template, VisualMode } from "@/lib/types";
+import type {
+  Category,
+  LogoShape,
+  Product,
+  ProductCollection,
+  Template,
+  VisualMode,
+} from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
@@ -23,6 +30,7 @@ export default function ProductForm({
   templates,
   categories,
   visuals,
+  collections,
   product,
   currentImageUrl,
   onSuccess,
@@ -30,6 +38,7 @@ export default function ProductForm({
   templates: Template[];
   categories: Category[];
   visuals: VisualWithUrl[];
+  collections: ProductCollection[];
   product?: Product;
   currentImageUrl?: string | null;
   onSuccess: () => void;
@@ -38,6 +47,10 @@ export default function ProductForm({
   const [name, setName] = useState(product?.name ?? "");
   const [nameTouched, setNameTouched] = useState(isEditing);
   const [templateId, setTemplateId] = useState(product?.template_id ?? templates[0]?.id ?? "");
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(
+    !isEditing && templates[0] ? [templates[0].id] : []
+  );
+  const [collectionId, setCollectionId] = useState(product?.collection_id ?? "");
   const [sourceMode, setSourceMode] = useState<SourceMode>(product?.visual_mode ?? "upload");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -50,16 +63,29 @@ export default function ProductForm({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewTokenRef = useRef(0);
 
+  // En édition, il n'y a toujours qu'un seul modèle. En création, l'aperçu
+  // n'est possible que si un seul modèle est coché parmi la sélection.
+  const previewTemplateId = isEditing
+    ? templateId
+    : selectedTemplateIds.length === 1
+    ? selectedTemplateIds[0]
+    : "";
+  const isMultiTemplate = !isEditing && selectedTemplateIds.length > 1;
+
   // Régénère automatiquement l'aperçu (visuel + logo, exactement comme sur
   // le PDF final) dès que le modèle, le visuel, le mode ou la taille de
   // répétition changent — pas besoin de cliquer sur un bouton séparé.
   useEffect(() => {
-    const ready = Boolean(templateId) && (sourceMode === "upload" ? Boolean(file) : Boolean(visualId));
+    const ready =
+      Boolean(previewTemplateId) && (sourceMode === "upload" ? Boolean(file) : Boolean(visualId));
     if (!ready) {
       setPreviewImageUrl((old) => {
         if (old) URL.revokeObjectURL(old);
@@ -75,7 +101,7 @@ export default function ProductForm({
       setPreviewError(null);
 
       const formData = new FormData();
-      formData.append("templateId", templateId);
+      formData.append("templateId", previewTemplateId);
       formData.append("logoShape", logoShape);
       formData.append("logoColor", logoColor);
       formData.append("logoSecondaryColor", logoSecondaryColor);
@@ -105,7 +131,7 @@ export default function ProductForm({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [templateId, sourceMode, visualId, tileSizeMm, file, logoShape, logoColor, logoSecondaryColor]);
+  }, [previewTemplateId, sourceMode, visualId, tileSizeMm, file, logoShape, logoColor, logoSecondaryColor]);
 
   useEffect(() => {
     return () => {
@@ -114,15 +140,21 @@ export default function ProductForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Construit le nom automatiquement (Modèle — Visuel) tant que
-  // l'utilisateur n'a pas modifié le champ à la main.
+  // Construit le nom automatiquement tant que l'utilisateur n'a pas modifié
+  // le champ à la main. Avec un seul modèle : Modèle — Visuel. Avec
+  // plusieurs modèles sélectionnés, le nom saisi sert de base commune et le
+  // nom du modèle est ajouté à chaque produit créé (voir handleSubmit).
   useEffect(() => {
     if (nameTouched) return;
-    const templateName = templates.find((t) => t.id === templateId)?.name ?? "";
     const visualName =
       sourceMode !== "upload" ? visuals.find((v) => v.id === visualId)?.name ?? "" : "";
+    if (isMultiTemplate) {
+      setName(visualName);
+      return;
+    }
+    const templateName = templates.find((t) => t.id === previewTemplateId)?.name ?? "";
     setName(visualName ? `${templateName} — ${visualName}` : templateName);
-  }, [templateId, sourceMode, visualId, templates, visuals, nameTouched]);
+  }, [previewTemplateId, isMultiTemplate, sourceMode, visualId, templates, visuals, nameTouched]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -130,8 +162,36 @@ export default function ProductForm({
     setPreview(f ? URL.createObjectURL(f) : null);
   }
 
+  function toggleTemplate(id: string, checked: boolean) {
+    setSelectedTemplateIds((prev) =>
+      checked ? [...prev, id] : prev.filter((existing) => existing !== id)
+    );
+  }
+
+  function buildFormData(productName: string, tId: string, cId: string) {
+    const formData = new FormData();
+    formData.append("name", productName);
+    formData.append("templateId", tId);
+    formData.append("logoShape", logoShape);
+    formData.append("logoColor", logoColor);
+    formData.append("logoSecondaryColor", logoSecondaryColor);
+    if (cId) formData.append("collectionId", cId);
+    if (sourceMode === "upload") {
+      if (file) formData.append("image", file);
+    } else {
+      formData.append("visualId", visualId);
+      formData.append("visualMode", sourceMode);
+      if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
+    }
+    return formData;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isEditing && selectedTemplateIds.length === 0) {
+      setError("Choisis au moins un modèle.");
+      return;
+    }
     if (!isEditing && sourceMode === "upload" && !file) {
       setError("Une image est requise.");
       return;
@@ -140,32 +200,66 @@ export default function ProductForm({
       setError("Choisis un visuel dans la banque.");
       return;
     }
+
     setLoading(true);
     setError(null);
+    setCreateProgress(null);
 
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("templateId", templateId);
-    formData.append("logoShape", logoShape);
-    formData.append("logoColor", logoColor);
-    formData.append("logoSecondaryColor", logoSecondaryColor);
-    if (sourceMode === "upload") {
-      if (file) formData.append("image", file);
-    } else {
-      formData.append("visualId", visualId);
-      formData.append("visualMode", sourceMode);
-      if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
+    if (isEditing || !isMultiTemplate) {
+      const tId = isEditing ? templateId : selectedTemplateIds[0];
+      const formData = buildFormData(name, tId, collectionId);
+      const res = await fetch(isEditing ? `/api/products/${product!.id}` : "/api/products", {
+        method: isEditing ? "PATCH" : "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      setLoading(false);
+      if (!res.ok) {
+        setError(data.error ?? "Erreur lors de l'enregistrement.");
+        return;
+      }
+      onSuccess();
+      return;
     }
 
-    const res = await fetch(isEditing ? `/api/products/${product!.id}` : "/api/products", {
-      method: isEditing ? "PATCH" : "POST",
-      body: formData,
-    });
-    const data = await res.json();
+    // Création multiple : un produit par modèle sélectionné, regroupés
+    // automatiquement dans une collection si aucune n'a été choisie.
+    let targetCollectionId = collectionId;
+    if (!targetCollectionId) {
+      const collectionName =
+        name.trim() || `Collection du ${new Date().toLocaleDateString("fr-CA")}`;
+      const res = await fetch("/api/product-collections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: collectionName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoading(false);
+        setError(data.error ?? "Erreur lors de la création de la collection.");
+        return;
+      }
+      targetCollectionId = data.collection.id;
+    }
+
+    const total = selectedTemplateIds.length;
+    setCreateProgress({ done: 0, total });
+    const failures: string[] = [];
+    for (const tId of selectedTemplateIds) {
+      const templateName = templates.find((t) => t.id === tId)?.name ?? "";
+      const productName = name.trim() ? `${name.trim()} — ${templateName}` : templateName;
+      const formData = buildFormData(productName, tId, targetCollectionId);
+      const res = await fetch("/api/products", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        failures.push(`${templateName} : ${data.error ?? "erreur inconnue"}`);
+      }
+      setCreateProgress((p) => (p ? { done: p.done + 1, total: p.total } : { done: 1, total }));
+    }
 
     setLoading(false);
-    if (!res.ok) {
-      setError(data.error ?? "Erreur lors de l'enregistrement.");
+    if (failures.length > 0) {
+      setError(`Certains produits n'ont pas pu être créés — ${failures.join(" · ")}`);
       return;
     }
     onSuccess();
@@ -183,20 +277,18 @@ export default function ProductForm({
     );
   }
 
-  const selectedVisual = visuals.find((v) => v.id === visualId) ?? null;
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium">Nom du produit</label>
         <input
-          required
+          required={!isMultiTemplate}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
             setNameTouched(true);
           }}
-          placeholder="Ex. Étui iPhone 15 — motif floral"
+          placeholder={isMultiTemplate ? "Ex. Collection floral (optionnel)" : "Ex. Étui iPhone 15 — motif floral"}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         />
         {!nameTouched && (
@@ -204,29 +296,93 @@ export default function ProductForm({
             Généré automatiquement à partir du modèle et du visuel — modifiable.
           </p>
         )}
+        {isMultiTemplate && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Ce nom sert de base commune — le nom du modèle sera ajouté à chaque produit créé.
+          </p>
+        )}
       </div>
 
+      {isEditing ? (
+        <div>
+          <label className="block text-sm font-medium">Modèle</label>
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+          >
+            {categories.map((category) => {
+              const items = templates.filter((t) => t.category_id === category.id);
+              if (items.length === 0) return null;
+              return (
+                <optgroup key={category.id} label={category.name}>
+                  {items.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </select>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium">
+            Modèles{" "}
+            {selectedTemplateIds.length > 1 && (
+              <span className="font-normal text-neutral-400">
+                ({selectedTemplateIds.length} sélectionnés — un produit sera créé par modèle)
+              </span>
+            )}
+          </label>
+          <div className="mt-1 max-h-64 space-y-3 overflow-y-auto rounded border border-neutral-300 p-3">
+            {categories.map((category) => {
+              const items = templates.filter((t) => t.category_id === category.id);
+              if (items.length === 0) return null;
+              return (
+                <div key={category.id}>
+                  <p className="mb-1 text-xs font-semibold uppercase text-neutral-400">
+                    {category.name}
+                  </p>
+                  <div className="space-y-1">
+                    {items.map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 text-sm text-pico-black">
+                        <input
+                          type="checkbox"
+                          checked={selectedTemplateIds.includes(t.id)}
+                          onChange={(e) => toggleTemplate(t.id, e.target.checked)}
+                        />
+                        {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm font-medium">Modèle</label>
+        <label className="block text-sm font-medium">Collection (optionnel)</label>
         <select
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value)}
+          value={collectionId}
+          onChange={(e) => setCollectionId(e.target.value)}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
         >
-          {categories.map((category) => {
-            const items = templates.filter((t) => t.category_id === category.id);
-            if (items.length === 0) return null;
-            return (
-              <optgroup key={category.id} label={category.name}>
-                {items.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
-                  </option>
-                ))}
-              </optgroup>
-            );
-          })}
+          <option value="">— Aucune —</option>
+          {collections.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
         </select>
+        {isMultiTemplate && !collectionId && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Une collection sera créée automatiquement pour regrouper ces produits.
+          </p>
+        )}
       </div>
 
       <div>
@@ -377,34 +533,54 @@ export default function ProductForm({
         <label className="block text-sm font-medium">
           Aperçu {previewLoading && <span className="text-neutral-400">(génération...)</span>}
         </label>
-        {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
-        {previewImageUrl ? (
-          <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewImageUrl} alt="Aperçu du produit" className="mx-auto max-h-72 w-auto" />
-            <p className="mt-2 text-center text-xs text-neutral-500">
-              Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection.
-            </p>
-          </div>
+        {isMultiTemplate ? (
+          <p className="mt-1 text-xs text-neutral-500">
+            Aperçu disponible pour un seul modèle à la fois — décoche pour n&apos;en garder qu&apos;un
+            si tu veux vérifier le rendu avant de créer la collection.
+          </p>
         ) : (
-          !previewError && (
-            <p className="mt-1 text-xs text-neutral-500">
-              {sourceMode === "upload"
-                ? "Choisis une image pour voir l'aperçu."
-                : "Choisis un visuel pour voir l'aperçu."}
-            </p>
-          )
+          <>
+            {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
+            {previewImageUrl ? (
+              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={previewImageUrl} alt="Aperçu du produit" className="mx-auto max-h-72 w-auto" />
+                <p className="mt-2 text-center text-xs text-neutral-500">
+                  Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection.
+                </p>
+              </div>
+            ) : (
+              !previewError && (
+                <p className="mt-1 text-xs text-neutral-500">
+                  {sourceMode === "upload"
+                    ? "Choisis une image pour voir l'aperçu."
+                    : "Choisis un visuel pour voir l'aperçu."}
+                </p>
+              )
+            )}
+          </>
         )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {createProgress && (
+        <p className="text-sm text-neutral-500">
+          Création des produits... ({createProgress.done}/{createProgress.total})
+        </p>
+      )}
 
       <button
         type="submit"
         disabled={loading}
         className="rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
-        {loading ? "Enregistrement..." : isEditing ? "Enregistrer" : "Créer le produit"}
+        {loading
+          ? "Enregistrement..."
+          : isEditing
+          ? "Enregistrer"
+          : isMultiTemplate
+          ? `Créer ${selectedTemplateIds.length} produits`
+          : "Créer le produit"}
       </button>
     </form>
   );

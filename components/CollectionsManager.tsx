@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import type { VisualCollection } from "@/lib/types";
 import { FilePenIcon, TrashIcon } from "@/components/icons";
+
+interface SimpleCollection {
+  id: string;
+  name: string;
+}
 
 export default function CollectionsManager({
   collections,
+  apiBasePath,
   onChanged,
 }: {
-  collections: VisualCollection[];
+  collections: SimpleCollection[];
+  apiBasePath: string;
   onChanged: () => void;
 }) {
   const [newName, setNewName] = useState("");
@@ -23,7 +29,7 @@ export default function CollectionsManager({
     if (!newName.trim()) return;
     setCreating(true);
     setError(null);
-    const res = await fetch("/api/visual-collections", {
+    const res = await fetch(`${apiBasePath}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName.trim() }),
@@ -38,7 +44,7 @@ export default function CollectionsManager({
     onChanged();
   }
 
-  function startEdit(collection: VisualCollection) {
+  function startEdit(collection: SimpleCollection) {
     setEditingId(collection.id);
     setEditingName(collection.name);
     setError(null);
@@ -48,7 +54,7 @@ export default function CollectionsManager({
     if (!editingName.trim()) return;
     setBusyId(id);
     setError(null);
-    const res = await fetch(`/api/visual-collections/${id}`, {
+    const res = await fetch(`${apiBasePath}/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: editingName.trim() }),
@@ -63,12 +69,16 @@ export default function CollectionsManager({
     onChanged();
   }
 
-  async function handleDelete(collection: VisualCollection) {
-    if (!confirm(`Supprimer la collection « ${collection.name} » ? Les visuels qu'elle contient ne seront pas supprimés.`))
+  async function handleDelete(collection: SimpleCollection) {
+    if (
+      !confirm(
+        `Supprimer la collection « ${collection.name} » ? Son contenu ne sera pas supprimé.`
+      )
+    )
       return;
     setBusyId(collection.id);
     setError(null);
-    const res = await fetch(`/api/visual-collections/${collection.id}`, { method: "DELETE" });
+    const res = await fetch(`${apiBasePath}/${collection.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     setBusyId(null);
     if (!res.ok) {

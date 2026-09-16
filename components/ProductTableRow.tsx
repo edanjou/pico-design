@@ -10,6 +10,7 @@ export default function ProductTableRow({
   product,
   templateName,
   categoryLabel,
+  collectionLabel,
   dimensions,
   imageUrl,
   onEdit,
@@ -17,6 +18,7 @@ export default function ProductTableRow({
   product: Product;
   templateName: string;
   categoryLabel: string;
+  collectionLabel: string | null;
   dimensions: { width_mm: number; height_mm: number } | null;
   imageUrl: string | null;
   onEdit: (product: Product) => void;
@@ -53,6 +55,7 @@ export default function ProductTableRow({
         {dimensions ? `${formatIn(dimensions.width_mm)}×${formatIn(dimensions.height_mm)}` : "—"}
       </td>
       <td className="p-4 text-neutral-500">{categoryLabel}</td>
+      <td className="p-4 text-neutral-500">{collectionLabel ?? "—"}</td>
       <td className="p-4 text-right">
         <div className="flex justify-end gap-1">
           <button

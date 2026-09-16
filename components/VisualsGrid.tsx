@@ -184,7 +184,11 @@ export default function VisualsGrid({
 
       {modal?.mode === "collections" && (
         <Modal title="Gérer les collections" onClose={() => setModal(null)}>
-          <CollectionsManager collections={collections} onChanged={() => router.refresh()} />
+          <CollectionsManager
+            collections={collections}
+            apiBasePath="/api/visual-collections"
+            onChanged={() => router.refresh()}
+          />
         </Modal>
       )}
 

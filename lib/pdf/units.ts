@@ -9,3 +9,12 @@ export function mmToPt(mm: number): number {
 export function mmToPx(mm: number, dpi: number): number {
   return Math.round((mm / 25.4) * dpi);
 }
+
+// Conversion mm <-> pouces, pour les champs de dimensions (stockées en mm).
+export function mmToIn(mm: number): number {
+  return mm / 25.4;
+}
+
+export function inToMm(inches: number): number {
+  return inches * 25.4;
+}

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { LogoPosition, Template, TemplateCategory } from "@/lib/types";
 import { TEMPLATE_CATEGORY_LABELS } from "@/lib/types";
+import { inToMm, mmToIn } from "@/lib/pdf/units";
+
+type Unit = "mm" | "in";
 
 const LOGO_POSITIONS: LogoPosition[] = [
   "top-left",
@@ -35,9 +38,21 @@ export default function TemplateForm({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unit, setUnit] = useState<Unit>("mm");
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Les dimensions sont toujours stockées en mm ; ces helpers ne font que
+  // convertir l'affichage/la saisie selon l'unité choisie.
+  function toDisplay(mm: number): number {
+    if (unit === "mm") return mm;
+    return Math.round(mmToIn(mm) * 1000) / 1000;
+  }
+
+  function updateFromDisplay(key: "width_mm" | "height_mm" | "bleed_mm" | "logo_width_mm" | "logo_margin_mm", value: number) {
+    update(key, unit === "mm" ? value : inToMm(value));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -91,45 +106,66 @@ export default function TemplateForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium">Largeur (mm)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={form.width_mm}
-            onChange={(e) => update("width_mm", parseFloat(e.target.value))}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <label className="block text-sm font-medium">Dimensions</label>
+          <div className="flex rounded-lg border border-neutral-300 p-0.5 text-xs">
+            {(["mm", "in"] as Unit[]).map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setUnit(u)}
+                className={`rounded-md px-2 py-1 ${
+                  unit === u ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                {u === "mm" ? "mm" : "po"}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium">Hauteur (mm)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={form.height_mm}
-            onChange={(e) => update("height_mm", parseFloat(e.target.value))}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Fond perdu / bleed (mm)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={form.bleed_mm}
-            onChange={(e) => update("bleed_mm", parseFloat(e.target.value))}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Résolution (dpi)</label>
-          <input
-            type="number"
-            value={form.dpi}
-            onChange={(e) => update("dpi", parseInt(e.target.value, 10))}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Largeur ({unit === "mm" ? "mm" : "po"})</label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.width_mm)}
+              onChange={(e) => updateFromDisplay("width_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Hauteur ({unit === "mm" ? "mm" : "po"})</label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.height_mm)}
+              onChange={(e) => updateFromDisplay("height_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">
+              Fond perdu / bleed ({unit === "mm" ? "mm" : "po"})
+            </label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.bleed_mm)}
+              onChange={(e) => updateFromDisplay("bleed_mm", parseFloat(e.target.value) || 0)}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Résolution (dpi)</label>
+            <input
+              type="number"
+              value={form.dpi}
+              onChange={(e) => update("dpi", parseInt(e.target.value, 10))}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
         </div>
       </div>
 
@@ -149,22 +185,22 @@ export default function TemplateForm({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium">Largeur logo (mm)</label>
+          <label className="block text-sm font-medium">Largeur logo ({unit === "mm" ? "mm" : "po"})</label>
           <input
             type="number"
-            step="0.1"
-            value={form.logo_width_mm}
-            onChange={(e) => update("logo_width_mm", parseFloat(e.target.value))}
+            step={unit === "mm" ? "0.1" : "0.01"}
+            value={toDisplay(form.logo_width_mm)}
+            onChange={(e) => updateFromDisplay("logo_width_mm", parseFloat(e.target.value) || 0)}
             className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium">Marge logo (mm)</label>
+          <label className="block text-sm font-medium">Marge logo ({unit === "mm" ? "mm" : "po"})</label>
           <input
             type="number"
-            step="0.1"
-            value={form.logo_margin_mm}
-            onChange={(e) => update("logo_margin_mm", parseFloat(e.target.value))}
+            step={unit === "mm" ? "0.1" : "0.01"}
+            value={toDisplay(form.logo_margin_mm)}
+            onChange={(e) => updateFromDisplay("logo_margin_mm", parseFloat(e.target.value) || 0)}
             className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
           />
         </div>

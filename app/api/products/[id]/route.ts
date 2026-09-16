@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
-import type { VisualMode } from "@/lib/types";
+import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
+import type { LogoVariant, VisualMode } from "@/lib/types";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -17,6 +18,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
+  const logoVariant = formData.get("logoVariant");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -25,7 +27,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     );
   }
 
-  const update: Record<string, unknown> = { name, template_id: templateId };
+  const update: Record<string, unknown> = {
+    name,
+    template_id: templateId,
+    logo_variant:
+      typeof logoVariant === "string" && logoVariant in LOGO_VARIANT_FILES
+        ? (logoVariant as LogoVariant)
+        : "noir",
+  };
   const hasNewSource = file instanceof File && file.size > 0
     ? true
     : typeof visualId === "string" && typeof visualMode === "string";

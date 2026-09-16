@@ -29,6 +29,7 @@ export interface Template {
 }
 
 export type VisualMode = "full" | "tile";
+export type LogoVariant = "noir" | "blanc" | "icon_cercle";
 
 export interface Visual {
   id: string;
@@ -47,6 +48,7 @@ export interface Product {
   visual_id: string | null;
   visual_mode: VisualMode | null;
   tile_size_mm: number | null;
+  logo_variant: LogoVariant;
   created_at: string;
   created_by: string | null;
 }

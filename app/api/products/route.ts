@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
-import type { VisualMode } from "@/lib/types";
+import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
+import type { LogoVariant, VisualMode } from "@/lib/types";
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
+  const logoVariant = formData.get("logoVariant");
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -71,6 +73,10 @@ export async function POST(request: Request) {
       visual_id: typeof visualId === "string" ? visualId : null,
       visual_mode: typeof visualMode === "string" ? visualMode : null,
       tile_size_mm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
+      logo_variant:
+        typeof logoVariant === "string" && logoVariant in LOGO_VARIANT_FILES
+          ? (logoVariant as LogoVariant)
+          : "noir",
       created_by: user.id,
     })
     .select()

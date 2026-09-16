@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Category, Product, Template, VisualMode } from "@/lib/types";
+import type { Category, LogoVariant, Product, Template, VisualMode } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
 
@@ -11,6 +11,12 @@ const SOURCE_MODES: { value: SourceMode; label: string }[] = [
   { value: "upload", label: "Uploader une image" },
   { value: "full", label: "Visuel — plein format" },
   { value: "tile", label: "Visuel — mosaïque" },
+];
+
+const LOGO_VARIANTS: { value: LogoVariant; label: string }[] = [
+  { value: "noir", label: "Noir" },
+  { value: "blanc", label: "Blanc" },
+  { value: "icon_cercle", label: "Icône cercle" },
 ];
 
 export default function ProductForm({
@@ -37,6 +43,7 @@ export default function ProductForm({
   const [preview, setPreview] = useState<string | null>(null);
   const [visualId, setVisualId] = useState(product?.visual_id ?? visuals[0]?.id ?? "");
   const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? inToMm(1));
+  const [logoVariant, setLogoVariant] = useState<LogoVariant>(product?.logo_variant ?? "noir");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -65,6 +72,7 @@ export default function ProductForm({
 
       const formData = new FormData();
       formData.append("templateId", templateId);
+      formData.append("logoVariant", logoVariant);
       if (sourceMode === "upload") {
         if (file) formData.append("image", file);
       } else {
@@ -91,7 +99,7 @@ export default function ProductForm({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [templateId, sourceMode, visualId, tileSizeMm, file]);
+  }, [templateId, sourceMode, visualId, tileSizeMm, file, logoVariant]);
 
   useEffect(() => {
     return () => {
@@ -132,6 +140,7 @@ export default function ProductForm({
     const formData = new FormData();
     formData.append("name", name);
     formData.append("templateId", templateId);
+    formData.append("logoVariant", logoVariant);
     if (sourceMode === "upload") {
       if (file) formData.append("image", file);
     } else {
@@ -291,6 +300,26 @@ export default function ProductForm({
 
         </div>
       )}
+
+      <div>
+        <label className="mb-1 block text-sm font-medium">Logo</label>
+        <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+          {LOGO_VARIANTS.map((l) => (
+            <button
+              key={l.value}
+              type="button"
+              onClick={() => setLogoVariant(l.value)}
+              className={`flex-1 rounded-md px-2 py-1.5 ${
+                logoVariant === l.value
+                  ? "bg-pico-black text-white"
+                  : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="block text-sm font-medium">

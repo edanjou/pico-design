@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
-import type { Template, VisualMode } from "@/lib/types";
+import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
+import type { LogoVariant, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
-
-const LOGO_STORAGE_PATH = "pico-noir.svg"; // dans le bucket "assets"
 
 export async function POST(request: Request) {
   const supabase = createServerSupabaseClient();
@@ -21,6 +20,7 @@ export async function POST(request: Request) {
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
+  const logoVariant = formData.get("logoVariant");
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -50,7 +50,13 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminSupabaseClient();
-  const { data: logoData } = await admin.storage.from("assets").download(LOGO_STORAGE_PATH);
+  const variant: LogoVariant =
+    typeof logoVariant === "string" && logoVariant in LOGO_VARIANT_FILES
+      ? (logoVariant as LogoVariant)
+      : "noir";
+  const { data: logoData } = await admin.storage
+    .from("assets")
+    .download(LOGO_VARIANT_FILES[variant]);
   const logoBuffer = logoData ? Buffer.from(await logoData.arrayBuffer()) : null;
 
   const png = await generateTemplatePreviewPng(template, logoBuffer, resolved.buffer);

@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
+import { LOGO_VARIANT_FILES } from "@/lib/pdf/logo";
 import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
-
-const LOGO_STORAGE_PATH = "pico-noir.svg"; // dans le bucket "assets"
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -25,7 +24,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   }
 
   const admin = createAdminSupabaseClient();
-  const { data: logoData } = await admin.storage.from("assets").download(LOGO_STORAGE_PATH);
+  const { data: logoData } = await admin.storage
+    .from("assets")
+    .download(LOGO_VARIANT_FILES.noir);
   const logoBuffer = logoData ? Buffer.from(await logoData.arrayBuffer()) : null;
 
   const png = await generateTemplatePreviewPng(template, logoBuffer);

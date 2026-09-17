@@ -9,6 +9,22 @@ import { SpinnerIcon } from "@/components/icons";
 
 export type SourceMode = "upload" | VisualMode;
 
+// Curseur "zoom" pour la taille de répétition (mosaïque) : échelle
+// logarithmique pour que glisser le curseur produise un effet de zoom
+// régulier, plutôt qu'un pas linéaire peu utilisable sur une aussi grande
+// plage (0,1 à 24 po).
+const TILE_ZOOM_MIN_IN = 0.1;
+const TILE_ZOOM_MAX_IN = 24;
+
+function tileSizeInToZoom(sizeIn: number): number {
+  const clamped = Math.min(TILE_ZOOM_MAX_IN, Math.max(TILE_ZOOM_MIN_IN, sizeIn));
+  return (Math.log(clamped / TILE_ZOOM_MIN_IN) / Math.log(TILE_ZOOM_MAX_IN / TILE_ZOOM_MIN_IN)) * 100;
+}
+
+function zoomToTileSizeIn(zoom: number): number {
+  return TILE_ZOOM_MIN_IN * Math.pow(TILE_ZOOM_MAX_IN / TILE_ZOOM_MIN_IN, zoom / 100);
+}
+
 export const SOURCE_MODES: { value: SourceMode; label: string }[] = [
   { value: "upload", label: "Uploader une image" },
   { value: "full", label: "Visuel — plein format" },
@@ -310,14 +326,34 @@ export default function ImageSourcePicker({
           {sourceMode === "tile" && (
             <div>
               <label className="block text-sm font-medium">Taille de répétition (po)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={Math.round(mmToIn(tileSizeMm) * 100) / 100}
-                onChange={(e) => onChange({ tileSizeMm: inToMm(parseFloat(e.target.value) || 0.01) })}
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-              />
+              <div className="mt-1 flex items-center gap-3">
+                <span className="text-xs text-neutral-400" aria-hidden="true">
+                  −
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={tileSizeInToZoom(mmToIn(tileSizeMm))}
+                  onChange={(e) =>
+                    onChange({ tileSizeMm: inToMm(zoomToTileSizeIn(parseFloat(e.target.value))) })
+                  }
+                  className="flex-1"
+                  aria-label="Zoom sur le motif (taille de répétition)"
+                />
+                <span className="text-sm text-neutral-400" aria-hidden="true">
+                  +
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={Math.round(mmToIn(tileSizeMm) * 100) / 100}
+                  onChange={(e) => onChange({ tileSizeMm: inToMm(parseFloat(e.target.value) || 0.01) })}
+                  className="w-20 shrink-0 rounded border border-neutral-300 px-2 py-1 text-sm"
+                />
+              </div>
             </div>
           )}
         </div>

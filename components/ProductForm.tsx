@@ -55,6 +55,7 @@ export default function ProductForm({
     positionX: product?.back_image_position_x ?? 0.5,
     positionY: product?.back_image_position_y ?? 0.5,
   });
+  const [sameAsFront, setSameAsFront] = useState(false);
   const [rotated, setRotated] = useState(product?.rotated ?? false);
   const [logoShape, setLogoShape] = useState<LogoShape>(product?.logo_shape ?? "logo");
   const [logoColor, setLogoColor] = useState(product?.logo_color ?? "#000000");
@@ -118,6 +119,13 @@ export default function ProductForm({
   function updateBack(patch: Partial<ImageSourceValue>) {
     setBack((b) => ({ ...b, ...patch }));
   }
+
+  // Verso identique au recto : le verso suit le recto tant que la case est
+  // cochée, plutôt que d'être copié une seule fois (donc toujours à jour si
+  // le recto est ajusté ensuite).
+  useEffect(() => {
+    if (sameAsFront) setBack(front);
+  }, [sameAsFront, front]);
 
   // Construit le nom automatiquement tant que l'utilisateur n'a pas modifié
   // le champ à la main. Avec un seul modèle : Modèle — Visuel. Avec
@@ -534,19 +542,36 @@ export default function ProductForm({
 
       {showBackSection && (
         <div className="border-t border-neutral-200 pt-4">
-          <p className="mb-1 text-sm font-medium">
-            Verso <span className="font-normal text-neutral-400">(modèle recto-verso)</span>
-          </p>
-          <ImageSourcePicker
-            side="back"
-            template={effectiveTemplate}
-            rotated={rotated}
-            visuals={visuals}
-            value={back}
-            onChange={updateBack}
-            currentImageUrl={currentBackImageUrl}
-            logo={backLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
-          />
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-sm font-medium">
+              Verso <span className="font-normal text-neutral-400">(modèle recto-verso)</span>
+            </p>
+            <label className="flex items-center gap-2 text-sm text-pico-black">
+              <input
+                type="checkbox"
+                checked={sameAsFront}
+                onChange={(e) => setSameAsFront(e.target.checked)}
+              />
+              Même visuel que le recto
+            </label>
+          </div>
+          {sameAsFront ? (
+            <p className="text-xs text-neutral-500">
+              Le verso reprendra automatiquement l&apos;image, le visuel et le positionnement du
+              recto.
+            </p>
+          ) : (
+            <ImageSourcePicker
+              side="back"
+              template={effectiveTemplate}
+              rotated={rotated}
+              visuals={visuals}
+              value={back}
+              onChange={updateBack}
+              currentImageUrl={currentBackImageUrl}
+              logo={backLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
+            />
+          )}
         </div>
       )}
 

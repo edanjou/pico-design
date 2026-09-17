@@ -181,7 +181,7 @@ export default function TemplatesTable({
             className="mx-auto max-h-[70vh] w-auto rounded border border-neutral-200"
           />
           <p className="mt-3 text-center text-xs text-neutral-500">
-            Fond gris = image du produit · ligne rouge = ligne de coupe (fond perdu) · pointillés
+            Fond gris = image du produit · ligne magenta = ligne de coupe (fond perdu) · pointillés
             bleus = marge de protection. Le logo Pico est affiché à sa position réelle.
           </p>
         </Modal>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
 import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
-import { EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import { CopyIcon, EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function TemplateRow({
   template,
@@ -20,6 +20,7 @@ export default function TemplateRow({
 }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   async function handleDelete() {
     if (!confirm(`Supprimer le modèle « ${template.name} » ?`)) return;
@@ -29,6 +30,18 @@ export default function TemplateRow({
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       alert(data.error ?? "Erreur lors de la suppression.");
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    const res = await fetch(`/api/templates/${template.id}/duplicate`, { method: "POST" });
+    setDuplicating(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Erreur lors de la duplication.");
       return;
     }
     router.refresh();
@@ -58,6 +71,15 @@ export default function TemplateRow({
             className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
           >
             <FilePenIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleDuplicate}
+            disabled={duplicating}
+            title="Dupliquer"
+            aria-label="Dupliquer"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black disabled:opacity-50"
+          >
+            {duplicating ? <SpinnerIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
           </button>
           <button
             onClick={handleDelete}

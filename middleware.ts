@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Rafraîchit la session Supabase à chaque requête et protège les pages
 // qui exigent d'être connecté (tout sauf /login et les assets Next.js).
-export async function middleware(request: NextRequest) {
+export default async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(

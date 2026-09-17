@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SkuForm from "@/components/SkuForm";
 import SkuGroupsManager from "@/components/SkuGroupsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
+import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
-import { FilePenIcon, TrashIcon } from "@/components/icons";
+import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import type { Sku, SkuGroup } from "@/lib/types";
 
 type ModalState =
@@ -18,6 +19,7 @@ type ModalState =
 
 export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups: SkuGroup[] }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [groupId, setGroupId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
@@ -25,6 +27,10 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
   const [error, setError] = useState<string | null>(null);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  function refresh() {
+    startTransition(() => router.refresh());
+  }
 
   const groupName = useMemo(() => {
     const map = new Map(skuGroups.map((g) => [g.id, g.name]));
@@ -40,7 +46,7 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
 
   function handleSuccess() {
     setModal(null);
-    router.refresh();
+    refresh();
   }
 
   async function handleDelete(sku: Sku) {
@@ -54,7 +60,7 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
       setError(data.error ?? "Erreur lors de la suppression.");
       return;
     }
-    router.refresh();
+    refresh();
   }
 
   async function handleBulkDelete() {
@@ -66,7 +72,7 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
     const results = await Promise.all(ids.map((id) => fetch(`/api/skus/${id}`, { method: "DELETE" })));
     setBulkDeleting(false);
     selection.clear();
-    router.refresh();
+    refresh();
     const failed = results.filter((r) => !r.ok).length;
     if (failed > 0) setError(`${failed} suppression(s) ont échoué.`);
   }
@@ -75,7 +81,10 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-pico-black">SKU</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
+            SKU
+            <UpdatingBadge show={isPending} />
+          </h1>
           <p className="text-sm text-neutral-500">
             {skus.length} SKU{skus.length > 1 ? "s" : ""} au référentiel.
           </p>
@@ -173,7 +182,12 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
             </thead>
             <tbody>
               {filtered.map((s) => (
-                <tr key={s.id} className="border-t border-neutral-100">
+                <tr
+                  key={s.id}
+                  className={`border-t border-neutral-100 transition-opacity duration-300 ${
+                    busyId === s.id ? "opacity-40" : ""
+                  }`}
+                >
                   <td className="p-4">
                     <input
                       type="checkbox"
@@ -201,7 +215,7 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
                         aria-label="Supprimer"
                         className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                       >
-                        <TrashIcon className="h-4 w-4" />
+                        {busyId === s.id ? <SpinnerIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
                       </button>
                     </div>
                   </td>
@@ -217,7 +231,7 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
           <SkuGroupsManager
             skuGroups={skuGroups}
             onChanged={() => {
-              router.refresh();
+              refresh();
             }}
           />
         </Modal>

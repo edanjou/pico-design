@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
 import CategoriesManager from "@/components/CategoriesManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
+import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import type { Category, Sku, Template } from "@/lib/types";
 
@@ -37,12 +38,17 @@ export default function TemplatesTable({
   skus: Sku[];
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  function refresh() {
+    startTransition(() => router.refresh());
+  }
 
   const skuCode = useMemo(() => {
     const map = new Map(skus.map((s) => [s.id, s.sku]));
@@ -58,7 +64,7 @@ export default function TemplatesTable({
 
   function handleSuccess() {
     setModal(null);
-    router.refresh();
+    refresh();
   }
 
   async function handleBulkDelete() {
@@ -71,7 +77,7 @@ export default function TemplatesTable({
     );
     setBulkDeleting(false);
     selection.clear();
-    router.refresh();
+    refresh();
     const failed = results.filter((r) => !r.ok).length;
     if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
@@ -80,7 +86,10 @@ export default function TemplatesTable({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-pico-black">Modèles</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
+            Modèles
+            <UpdatingBadge show={isPending} />
+          </h1>
           <p className="text-sm text-neutral-500">
             {templates.length} modèle{templates.length > 1 ? "s" : ""} au catalogue.
           </p>
@@ -205,7 +214,7 @@ export default function TemplatesTable({
           <CategoriesManager
             categories={categories}
             onChanged={() => {
-              router.refresh();
+              refresh();
             }}
           />
         </Modal>

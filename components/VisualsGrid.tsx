@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import VisualForm from "@/components/VisualForm";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
+import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import type { Visual, VisualCollection } from "@/lib/types";
@@ -26,12 +27,17 @@ export default function VisualsGrid({
   collections: VisualCollection[];
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [collectionId, setCollectionId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  function refresh() {
+    startTransition(() => router.refresh());
+  }
 
   const collectionName = useMemo(() => {
     const map = new Map(collections.map((c) => [c.id, c.name]));
@@ -48,7 +54,7 @@ export default function VisualsGrid({
 
   function handleSuccess() {
     setModal(null);
-    router.refresh();
+    refresh();
   }
 
   async function handleDelete(visual: VisualWithUrl) {
@@ -61,7 +67,7 @@ export default function VisualsGrid({
       alert(data.error ?? "Erreur lors de la suppression.");
       return;
     }
-    router.refresh();
+    refresh();
   }
 
   async function handleBulkDelete() {
@@ -72,7 +78,7 @@ export default function VisualsGrid({
     const results = await Promise.all(ids.map((id) => fetch(`/api/visuals/${id}`, { method: "DELETE" })));
     setBulkDeleting(false);
     selection.clear();
-    router.refresh();
+    refresh();
     const failed = results.filter((r) => !r.ok).length;
     if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
@@ -81,7 +87,10 @@ export default function VisualsGrid({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-pico-black">Banque de visuels</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
+            Banque de visuels
+            <UpdatingBadge show={isPending} />
+          </h1>
           <p className="text-sm text-neutral-500">
             {visuals.length} visuel{visuals.length > 1 ? "s" : ""} disponible
             {visuals.length > 1 ? "s" : ""}.
@@ -172,9 +181,9 @@ export default function VisualsGrid({
           {filtered.map((v) => (
             <div
               key={v.id}
-              className={`overflow-hidden rounded-xl border bg-white shadow-sm ${
+              className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-opacity duration-300 ${
                 selection.selected.has(v.id) ? "border-pico-maroon" : "border-neutral-200"
-              }`}
+              } ${deletingId === v.id ? "opacity-40" : ""}`}
             >
               <div className="relative flex h-32 items-center justify-center bg-neutral-50 p-3">
                 <input
@@ -233,7 +242,7 @@ export default function VisualsGrid({
           <CollectionsManager
             collections={collections}
             apiBasePath="/api/visual-collections"
-            onChanged={() => router.refresh()}
+            onChanged={() => refresh()}
           />
         </Modal>
       )}

@@ -44,7 +44,11 @@ export default function ProductTableRow({
   }
 
   return (
-    <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+    <tr
+      className={`border-t border-neutral-100 transition-opacity duration-300 hover:bg-neutral-50 ${
+        deleting ? "opacity-40" : ""
+      }`}
+    >
       <td className="p-4">
         <input type="checkbox" checked={selected} onChange={onToggleSelect} />
       </td>

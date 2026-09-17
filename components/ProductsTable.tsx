@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
+import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import type { Category, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
@@ -45,6 +46,7 @@ export default function ProductsTable({
   collections: ProductCollection[];
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [collectionId, setCollectionId] = useState("");
@@ -52,6 +54,10 @@ export default function ProductsTable({
   const [modal, setModal] = useState<ModalState>(null);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  function refresh() {
+    startTransition(() => router.refresh());
+  }
 
   const categoryName = useMemo(() => {
     const map = new Map(categories.map((c) => [c.id, c.name]));
@@ -73,7 +79,7 @@ export default function ProductsTable({
 
   function handleSuccess() {
     setModal(null);
-    router.refresh();
+    refresh();
   }
 
   async function handleBulkDelete() {
@@ -86,7 +92,7 @@ export default function ProductsTable({
     );
     setBulkDeleting(false);
     selection.clear();
-    router.refresh();
+    refresh();
     const failed = results.filter((r) => !r.ok).length;
     if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
@@ -95,7 +101,10 @@ export default function ProductsTable({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-pico-black">Produits</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
+            Produits
+            <UpdatingBadge show={isPending} />
+          </h1>
           <p className="text-sm text-neutral-500">
             {products.length} produit{products.length > 1 ? "s" : ""} au catalogue.
           </p>
@@ -240,7 +249,7 @@ export default function ProductsTable({
           <CollectionsManager
             collections={collections}
             apiBasePath="/api/product-collections"
-            onChanged={() => router.refresh()}
+            onChanged={() => refresh()}
           />
         </Modal>
       )}

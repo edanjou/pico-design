@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon } from "@/components/icons";
+import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon, TagIcon } from "@/components/icons";
 
 export default function Nav() {
   const router = useRouter();
@@ -34,6 +34,10 @@ export default function Nav() {
             <Link href="/products" className="flex items-center gap-1.5 hover:text-pico-accent">
               <RocketIcon className="h-4 w-4" />
               Produits
+            </Link>
+            <Link href="/skus" className="flex items-center gap-1.5 hover:text-pico-accent">
+              <TagIcon className="h-4 w-4" />
+              SKU
             </Link>
           </nav>
         </div>

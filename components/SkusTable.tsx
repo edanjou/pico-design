@@ -1,0 +1,175 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import SkuForm from "@/components/SkuForm";
+import Modal from "@/components/Modal";
+import { FilePenIcon, TrashIcon } from "@/components/icons";
+import type { Sku } from "@/lib/types";
+
+type ModalState = { mode: "create" } | { mode: "edit"; sku: Sku } | null;
+
+export default function SkusTable({ skus }: { skus: Sku[] }) {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [groupLabel, setGroupLabel] = useState("");
+  const [modal, setModal] = useState<ModalState>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const groupLabels = useMemo(
+    () => [...new Set(skus.map((s) => s.group_label))].sort((a, b) => a.localeCompare(b)),
+    [skus]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return skus
+      .filter((s) => (groupLabel ? s.group_label === groupLabel : true))
+      .filter((s) => (q ? s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) : true));
+  }, [skus, search, groupLabel]);
+
+  function handleSuccess() {
+    setModal(null);
+    router.refresh();
+  }
+
+  async function handleDelete(sku: Sku) {
+    if (!confirm(`Supprimer le SKU « ${sku.sku} » ?`)) return;
+    setBusyId(sku.id);
+    setError(null);
+    const res = await fetch(`/api/skus/${sku.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    setBusyId(null);
+    if (!res.ok) {
+      setError(data.error ?? "Erreur lors de la suppression.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-pico-black">SKU</h1>
+          <p className="text-sm text-neutral-500">
+            {skus.length} SKU{skus.length > 1 ? "s" : ""} au référentiel.
+          </p>
+        </div>
+        <button
+          onClick={() => setModal({ mode: "create" })}
+          className="flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
+          </svg>
+          Nouveau SKU
+        </button>
+      </div>
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex-1 sm:max-w-xs">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+            />
+          </svg>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher (SKU ou nom)..."
+            className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-neutral-500">Groupe</label>
+          <select
+            value={groupLabel}
+            onChange={(e) => setGroupLabel(e.target.value)}
+            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">— Tous —</option>
+            {groupLabels.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+      {filtered.length === 0 ? (
+        <p className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
+          Aucun SKU ne correspond.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-sm font-semibold text-neutral-700">
+                <th className="p-4">SKU</th>
+                <th className="p-4">Nom / descriptif</th>
+                <th className="p-4">Groupe</th>
+                <th className="p-4"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={s.id} className="border-t border-neutral-100">
+                  <td className="p-4 font-mono text-xs text-neutral-700">{s.sku}</td>
+                  <td className="p-4">{s.name}</td>
+                  <td className="p-4 text-neutral-500">{s.group_label}</td>
+                  <td className="p-4">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        onClick={() => setModal({ mode: "edit", sku: s })}
+                        title="Modifier"
+                        aria-label="Modifier"
+                        className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+                      >
+                        <FilePenIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(s)}
+                        disabled={busyId === s.id}
+                        title="Supprimer"
+                        aria-label="Supprimer"
+                        className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {(modal?.mode === "create" || modal?.mode === "edit") && (
+        <Modal
+          title={modal.mode === "create" ? "Nouveau SKU" : `Modifier « ${modal.sku.sku} »`}
+          onClose={() => setModal(null)}
+        >
+          <SkuForm
+            sku={modal.mode === "edit" ? modal.sku : undefined}
+            groupLabels={groupLabels}
+            onSuccess={handleSuccess}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}

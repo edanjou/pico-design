@@ -10,6 +10,14 @@ export interface Category {
   created_at: string;
 }
 
+export interface Sku {
+  id: string;
+  sku: string;
+  name: string;
+  group_label: string;
+  created_at: string;
+}
+
 export interface Template {
   id: string;
   name: string;

@@ -38,6 +38,8 @@ export default function TemplateForm({
     bleed_mm: template?.bleed_mm ?? 3.175,
     safety_margin_x_mm: template?.safety_margin_x_mm ?? 3.175,
     safety_margin_y_mm: template?.safety_margin_y_mm ?? 3.175,
+    print_margin_x_mm: template?.print_margin_x_mm ?? 0,
+    print_margin_y_mm: template?.print_margin_y_mm ?? 0,
     dpi: template?.dpi ?? 300,
     logo_h_align: template?.logo_h_align ?? ("right" as LogoHAlign),
     logo_v_align: template?.logo_v_align ?? ("bottom" as LogoVAlign),
@@ -80,6 +82,8 @@ export default function TemplateForm({
       | "bleed_mm"
       | "safety_margin_x_mm"
       | "safety_margin_y_mm"
+      | "print_margin_x_mm"
+      | "print_margin_y_mm"
       | "logo_width_mm"
       | "logo_margin_x_mm"
       | "logo_margin_y_mm",
@@ -225,6 +229,39 @@ export default function TemplateForm({
               }
               className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">
+              Marge d&apos;impression horizontale ({unit === "mm" ? "mm" : "po"})
+            </label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.print_margin_x_mm)}
+              onChange={(e) =>
+                updateFromDisplay("print_margin_x_mm", parseFloat(e.target.value) || 0)
+              }
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">
+              Marge d&apos;impression verticale ({unit === "mm" ? "mm" : "po"})
+            </label>
+            <input
+              type="number"
+              step={unit === "mm" ? "0.1" : "0.01"}
+              value={toDisplay(form.print_margin_y_mm)}
+              onChange={(e) =>
+                updateFromDisplay("print_margin_y_mm", parseFloat(e.target.value) || 0)
+              }
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+            <p className="mt-1 text-xs text-neutral-500">
+              Agrandit la page du PDF final d&apos;une bande blanche en plus (l&apos;image
+              imprimée garde sa taille normale) — distinct de la marge de protection, qui reste
+              un simple guide à l&apos;écran.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium">Résolution (dpi)</label>

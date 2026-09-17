@@ -19,6 +19,8 @@ export interface Template {
   bleed_mm: number;
   safety_margin_x_mm: number;
   safety_margin_y_mm: number;
+  print_margin_x_mm: number;
+  print_margin_y_mm: number;
   dpi: number;
   logo_h_align: LogoHAlign;
   logo_v_align: LogoVAlign;

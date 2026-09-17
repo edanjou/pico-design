@@ -47,6 +47,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       bleed_mm: source.bleed_mm,
       safety_margin_x_mm: source.safety_margin_x_mm,
       safety_margin_y_mm: source.safety_margin_y_mm,
+      print_margin_x_mm: source.print_margin_x_mm,
+      print_margin_y_mm: source.print_margin_y_mm,
       dpi: source.dpi,
       logo_h_align: source.logo_h_align,
       logo_v_align: source.logo_v_align,

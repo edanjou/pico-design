@@ -9,6 +9,8 @@ const NUMERIC_FIELDS = [
   "bleed_mm",
   "safety_margin_x_mm",
   "safety_margin_y_mm",
+  "print_margin_x_mm",
+  "print_margin_y_mm",
   "dpi",
   "logo_width_mm",
   "logo_margin_x_mm",

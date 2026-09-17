@@ -1,4 +1,4 @@
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { mmToPt, mmToPx } from "./units";
 import { rasterizeLogoToPng } from "./logo";
@@ -100,11 +100,32 @@ async function addImagePage(
     .jpeg({ quality: 92 })
     .toBuffer();
 
-  const page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
+  // Marge d'impression : bande blanche ajoutée en plus, tout autour de la
+  // page normale (fond perdu compris), pour certains formats qui en ont
+  // besoin (ex. étuis de téléphone) — la page PDF est agrandie en
+  // conséquence, l'image imprimée garde sa taille normale. Distincte de la
+  // marge de protection (`safety_margin_*_mm`), qui reste un simple guide
+  // visuel à l'écran et n'apparaît jamais dans le PDF.
+  const printMarginXPt = mmToPt(template.print_margin_x_mm);
+  const printMarginYPt = mmToPt(template.print_margin_y_mm);
+  const totalPageWidthPt = pageWidthPt + printMarginXPt * 2;
+  const totalPageHeightPt = pageHeightPt + printMarginYPt * 2;
+
+  const page = pdfDoc.addPage([totalPageWidthPt, totalPageHeightPt]);
+  if (printMarginXPt > 0 || printMarginYPt > 0) {
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: totalPageWidthPt,
+      height: totalPageHeightPt,
+      color: rgb(1, 1, 1),
+    });
+  }
+
   const embeddedImage = await pdfDoc.embedJpg(fittedImage);
   page.drawImage(embeddedImage, {
-    x: 0,
-    y: 0,
+    x: printMarginXPt,
+    y: printMarginYPt,
     width: pageWidthPt,
     height: pageHeightPt,
   });
@@ -132,8 +153,8 @@ async function addImagePage(
   );
 
   page.drawImage(embeddedLogo, {
-    x,
-    y,
+    x: x + printMarginXPt,
+    y: y + printMarginYPt,
     width: logoWidthPt,
     height: logoHeightPt,
   });

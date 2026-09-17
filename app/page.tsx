@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon } from "@/components/icons";
 
 const links = [
@@ -27,20 +27,16 @@ const links = [
 ];
 
 export default async function DashboardPage() {
+  const user = await requireUser();
   const supabase = createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  let firstName = user?.email?.split("@")[0] ?? "";
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .single<{ full_name: string | null }>();
-    if (profile?.full_name) firstName = profile.full_name.split(" ")[0];
-  }
+  let firstName = user.email?.split("@")[0] ?? "";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .single<{ full_name: string | null }>();
+  if (profile?.full_name) firstName = profile.full_name.split(" ")[0];
   firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
   return (

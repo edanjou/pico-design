@@ -1,8 +1,9 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import SkusTable from "@/components/SkusTable";
 import type { Sku, SkuGroup } from "@/lib/types";
 
 export default async function SkusPage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const [{ data: skus }, { data: skuGroups }] = await Promise.all([
     supabase.from("skus").select("*").order("sku", { ascending: true }),

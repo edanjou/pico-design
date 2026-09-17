@@ -1,8 +1,9 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import VisualsGrid, { type VisualWithUrl } from "@/components/VisualsGrid";
 import type { Visual, VisualCollection } from "@/lib/types";
 
 export default async function VisualsPage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const [{ data: visuals }, { data: collections }] = await Promise.all([
     supabase.from("visuals").select("*").order("name", { ascending: true }),

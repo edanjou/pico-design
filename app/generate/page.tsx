@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import UploadForm from "@/components/UploadForm";
 import type { Category, Product } from "@/lib/types";
 
@@ -13,6 +13,7 @@ type ProductWithTemplate = Product & {
 };
 
 export default async function GeneratePage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const [{ data: products }, { data: categories }] = await Promise.all([
     supabase

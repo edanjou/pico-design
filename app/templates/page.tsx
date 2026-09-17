@@ -1,8 +1,9 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import TemplatesTable, { type TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import type { Category, Sku, Template } from "@/lib/types";
 
 export default async function TemplatesPage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const [{ data: templates }, { data: categories }, { data: skus }] = await Promise.all([
     supabase.from("templates").select("*").order("name", { ascending: true }),

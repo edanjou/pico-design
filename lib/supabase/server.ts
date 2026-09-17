@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import type { Database } from "../types";
 
 // Client Supabase utilisé dans les Server Components / routes API,
@@ -20,7 +21,9 @@ export function createServerSupabaseClient() {
             cookieStore.set({ name, value, ...options });
           } catch {
             // Appelé depuis un Server Component sans possibilité d'écrire
-            // des cookies — ignoré, le middleware s'en charge.
+            // des cookies — sans effet ici, le client navigateur
+            // (createBrowserClient) gère lui-même le rafraîchissement et
+            // l'écriture du cookie de session.
           }
         },
         remove(name: string, options: CookieOptions) {
@@ -33,6 +36,20 @@ export function createServerSupabaseClient() {
       },
     }
   );
+}
+
+// Protège une page (Server Component) contre l'accès sans connexion —
+// remplace la vérification qui se faisait avant dans middleware.ts (retiré
+// : le Routing Middleware de Vercel s'est révélé instable avec ce projet,
+// sur les deux runtimes disponibles — voir l'historique de commits).
+// À appeler en tout début de chaque page protégée.
+export async function requireUser() {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  return user;
 }
 
 // Client "admin" — utilise la clé service_role, réservé aux routes API

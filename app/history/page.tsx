@@ -1,7 +1,8 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import HistoryTable, { type JobRow } from "@/components/HistoryTable";
 
 export default async function HistoryPage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const { data: jobs } = await supabase
     .from("jobs")

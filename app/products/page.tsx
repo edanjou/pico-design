@@ -1,9 +1,10 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import ProductsTable, { type ProductWithTemplate } from "@/components/ProductsTable";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { Category, ProductCollection, Template, Visual } from "@/lib/types";
 
 export default async function ProductsPage() {
+  await requireUser();
   const supabase = createServerSupabaseClient();
   const [
     { data: products },

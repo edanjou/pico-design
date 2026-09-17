@@ -34,6 +34,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const backTileSizeMm = formData.get("backTileSizeMm");
   const backPositionX = parsePositionValue(formData.get("backPositionX"));
   const backPositionY = parsePositionValue(formData.get("backPositionY"));
+  const rotated = formData.get("rotated") === "true";
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -64,6 +65,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     logo_shape: shape,
     logo_color: color,
     logo_secondary_color: secondaryColor,
+    rotated,
     collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
     image_position_x: positionX,
     image_position_y: positionY,
@@ -106,6 +108,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
         positionX,
         positionY,
+        rotated,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";
@@ -159,6 +162,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         tileSizeMm: typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
         positionX: backPositionX,
         positionY: backPositionY,
+        rotated,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur lors du traitement du verso.";
@@ -217,6 +221,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         logoShape: shape,
         logoColor: color,
         logoSecondaryColor: secondaryColor,
+        rotated,
         positionX,
         positionY,
         backImage: backBufferForPdf,

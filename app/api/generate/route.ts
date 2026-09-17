@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
 import { loadLogoImage } from "@/lib/pdf/logo";
+import { applyOrientation } from "@/lib/pdf/orientation";
 import type { Product, Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Produit ou modèle introuvable." }, { status: 404 });
   }
 
-  const template = product.template;
+  const template = applyOrientation(product.template, product.rotated);
   const admin = createAdminSupabaseClient();
 
   const { data: sourceData, error: sourceError } = await admin.storage

@@ -4,6 +4,7 @@ import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
 import { loadLogoImage } from "@/lib/pdf/logo";
 import { parsePositionValue } from "@/lib/pdf/crop";
+import { applyOrientation } from "@/lib/pdf/orientation";
 import type { LogoShape, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const logoSecondaryColor = formData.get("logoSecondaryColor");
   const positionX = formData.get("positionX");
   const positionY = formData.get("positionY");
+  const rotated = formData.get("rotated") === "true";
   // "frame" : cadre seul (traits + gabarit + logo), fond transparent, sans
   //   image ni visuel — calque fixe pendant le repositionnement.
   // "background" : image/visuel déjà recadré/mosaïqué, sans traits ni logo
@@ -42,14 +44,15 @@ export async function POST(request: Request) {
   const clampedPositionX = parsePositionValue(positionX);
   const clampedPositionY = parsePositionValue(positionY);
 
-  const { data: template, error: templateError } = await supabase
+  const { data: rawTemplate, error: templateError } = await supabase
     .from("templates")
     .select("*")
     .eq("id", templateId)
     .single<Template>();
-  if (templateError || !template) {
+  if (templateError || !rawTemplate) {
     return NextResponse.json({ error: "Modèle introuvable." }, { status: 404 });
   }
+  const template = applyOrientation(rawTemplate, rotated);
 
   const admin = createAdminSupabaseClient();
 
@@ -85,6 +88,7 @@ export async function POST(request: Request) {
       tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
       positionX: clampedPositionX,
       positionY: clampedPositionY,
+      rotated,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";

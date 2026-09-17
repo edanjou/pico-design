@@ -33,6 +33,7 @@ export interface ImageSourceValue {
 export default function ImageSourcePicker({
   side,
   template,
+  rotated,
   visuals,
   value,
   onChange,
@@ -42,6 +43,7 @@ export default function ImageSourcePicker({
 }: {
   side: "front" | "back";
   template: Template | null;
+  rotated: boolean;
   visuals: VisualWithUrl[];
   value: ImageSourceValue;
   onChange: (patch: Partial<ImageSourceValue>) => void;
@@ -106,6 +108,7 @@ export default function ImageSourcePicker({
       formData.append("templateId", template.id);
       formData.append("mode", "frame");
       formData.append("side", side);
+      formData.append("rotated", String(rotated));
       if (logo) {
         formData.append("logoShape", logo.shape);
         formData.append("logoColor", logo.color);
@@ -130,7 +133,7 @@ export default function ImageSourcePicker({
     }, 150);
 
     return () => clearTimeout(timeout);
-  }, [template, side, logo?.shape, logo?.color, logo?.secondaryColor]);
+  }, [template, side, rotated, logo?.shape, logo?.color, logo?.secondaryColor]);
 
   useEffect(() => {
     return () => {
@@ -162,6 +165,7 @@ export default function ImageSourcePicker({
       formData.append("positionX", String(positionX));
       formData.append("positionY", String(positionY));
       formData.append("mode", "background");
+      formData.append("rotated", String(rotated));
 
       const res = await fetch("/api/products/preview", { method: "POST", body: formData });
       if (token !== tileBgTokenRef.current) return;
@@ -181,7 +185,7 @@ export default function ImageSourcePicker({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [sourceMode, canPosition, template, visualId, tileSizeMm, positionX, positionY]);
+  }, [sourceMode, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
 
   useEffect(() => {
     return () => {

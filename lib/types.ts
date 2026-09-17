@@ -88,6 +88,7 @@ export interface Product {
   logo_shape: LogoShape;
   logo_color: string;
   logo_secondary_color: string;
+  rotated: boolean;
   collection_id: string | null;
   pdf_path: string | null;
   image_position_x: number;

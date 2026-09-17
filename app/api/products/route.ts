@@ -46,6 +46,7 @@ export async function POST(request: Request) {
   const backTileSizeMm = formData.get("backTileSizeMm");
   const backPositionX = parsePositionValue(formData.get("backPositionX"));
   const backPositionY = parsePositionValue(formData.get("backPositionY"));
+  const rotated = formData.get("rotated") === "true";
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
       tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
       positionX,
       positionY,
+      rotated,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
         tileSizeMm: typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
         positionX: backPositionX,
         positionY: backPositionY,
+        rotated,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur lors du traitement du verso.";
@@ -148,6 +151,7 @@ export async function POST(request: Request) {
       logoShape: shape,
       logoColor: color,
       logoSecondaryColor: secondaryColor,
+      rotated,
       positionX,
       positionY,
       backImage: resolvedBack?.buffer ?? null,
@@ -171,6 +175,7 @@ export async function POST(request: Request) {
       logo_shape: shape,
       logo_color: color,
       logo_secondary_color: secondaryColor,
+      rotated,
       collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
       pdf_path: pdfPath,
       image_position_x: positionX,

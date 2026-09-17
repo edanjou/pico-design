@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generatePrintReadyPdf } from "./generate";
 import { loadLogoImage } from "./logo";
+import { applyOrientation } from "./orientation";
 import type { LogoShape, Template } from "../types";
 
 export interface GenerateProductPdfInput {
@@ -10,6 +11,7 @@ export interface GenerateProductPdfInput {
   logoShape: LogoShape;
   logoColor: string;
   logoSecondaryColor: string;
+  rotated?: boolean;
   positionX?: number;
   positionY?: number;
   // Image de verso (optionnelle, modèles recto-verso uniquement) — ajoutée
@@ -29,14 +31,15 @@ export async function generateAndStoreProductPdf(
   admin: SupabaseClient<any>,
   input: GenerateProductPdfInput
 ): Promise<string> {
-  const { data: template, error: templateError } = await admin
+  const { data: rawTemplate, error: templateError } = await admin
     .from("templates")
     .select("*")
     .eq("id", input.templateId)
     .single<Template>();
-  if (templateError || !template) {
+  if (templateError || !rawTemplate) {
     throw new Error("Modèle introuvable pour la génération du PDF.");
   }
+  const template = applyOrientation(rawTemplate, input.rotated ?? false);
 
   const needsLogo = template.logo_on_front || (template.two_sided && template.logo_on_back);
   const logoBuffer = needsLogo

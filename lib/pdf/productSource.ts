@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mmToPx } from "./units";
 import { composeFullCoverImage, composeTiledImage } from "./visual";
+import { applyOrientation } from "./orientation";
 import type { Template, Visual, VisualMode } from "../types";
 
 export interface ResolveProductImageInput {
@@ -11,6 +12,7 @@ export interface ResolveProductImageInput {
   tileSizeMm: number | null;
   positionX?: number;
   positionY?: number;
+  rotated?: boolean;
 }
 
 export interface ResolvedProductImage {
@@ -41,14 +43,15 @@ export async function resolveProductImage(
     throw new Error("Aucune image, ni visuel sélectionné.");
   }
 
-  const { data: template, error: templateError } = await supabase
+  const { data: rawTemplate, error: templateError } = await supabase
     .from("templates")
     .select("*")
     .eq("id", input.templateId)
     .single<Template>();
-  if (templateError || !template) {
+  if (templateError || !rawTemplate) {
     throw new Error("Modèle introuvable.");
   }
+  const template = applyOrientation(rawTemplate, input.rotated ?? false);
 
   const { data: visual, error: visualError } = await supabase
     .from("visuals")

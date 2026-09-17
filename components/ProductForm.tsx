@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Category, LogoShape, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import ImageSourcePicker, { type ImageSourceValue } from "@/components/ImageSourcePicker";
 import { formatIn, inToMm } from "@/lib/pdf/units";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
+import { applyOrientation, isLandscape } from "@/lib/pdf/orientation";
 import { SpinnerIcon } from "@/components/icons";
 
 const LOGO_SHAPES: { value: LogoShape; label: string }[] = [
@@ -54,6 +55,7 @@ export default function ProductForm({
     positionX: product?.back_image_position_x ?? 0.5,
     positionY: product?.back_image_position_y ?? 0.5,
   });
+  const [rotated, setRotated] = useState(product?.rotated ?? false);
   const [logoShape, setLogoShape] = useState<LogoShape>(product?.logo_shape ?? "logo");
   const [logoColor, setLogoColor] = useState(product?.logo_color ?? "#000000");
   const [logoSecondaryColor, setLogoSecondaryColor] = useState(
@@ -75,6 +77,22 @@ export default function ProductForm({
     : "";
   const isMultiTemplate = !isEditing && selectedTemplateIds.length > 1;
   const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
+  const effectiveTemplate = previewTemplate ? applyOrientation(previewTemplate, rotated) : null;
+  const showOrientationToggle = Boolean(previewTemplate) && !isMultiTemplate;
+  // "Paysage" = plus large que haut. Le bouton actif reflète l'orientation
+  // effective (après inversion éventuelle par `rotated`), pas le modèle brut.
+  const effectiveIsLandscape = effectiveTemplate
+    ? isLandscape(effectiveTemplate.width_mm, effectiveTemplate.height_mm)
+    : true;
+  // Réinitialisée quand le modèle change (voir useEffect ci-dessous) plutôt
+  // qu'à chaque rendu, pour ne pas écraser le choix de l'utilisateur.
+  const previousPreviewTemplateIdRef = useRef(previewTemplateId);
+  useEffect(() => {
+    if (previousPreviewTemplateIdRef.current !== previewTemplateId) {
+      previousPreviewTemplateIdRef.current = previewTemplateId;
+      setRotated(false);
+    }
+  }, [previewTemplateId]);
   const showBackSection = !isMultiTemplate && Boolean(previewTemplate?.two_sided);
   const someSelectedAreTwoSided =
     !isEditing && selectedTemplateIds.some((id) => templates.find((t) => t.id === id)?.two_sided);
@@ -133,6 +151,7 @@ export default function ProductForm({
     formData.append("positionX", String(front.positionX));
     formData.append("positionY", String(front.positionY));
     if (cId) formData.append("collectionId", cId);
+    formData.append("rotated", String(rotated));
     if (front.sourceMode === "upload") {
       if (front.file) formData.append("image", front.file);
     } else {
@@ -386,11 +405,38 @@ export default function ProductForm({
         )}
       </div>
 
+      {showOrientationToggle && (
+        <div>
+          <label className="mb-2 block text-sm font-medium">Orientation</label>
+          <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setRotated(previewTemplate ? isLandscape(previewTemplate.width_mm, previewTemplate.height_mm) : false)}
+              className={`flex-1 rounded-md px-2 py-1.5 ${
+                !effectiveIsLandscape ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              Portrait
+            </button>
+            <button
+              type="button"
+              onClick={() => setRotated(previewTemplate ? !isLandscape(previewTemplate.width_mm, previewTemplate.height_mm) : false)}
+              className={`flex-1 rounded-md px-2 py-1.5 ${
+                effectiveIsLandscape ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              Paysage
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
         <p className="mb-1 text-sm font-medium">Recto</p>
         <ImageSourcePicker
           side="front"
-          template={previewTemplate}
+          template={effectiveTemplate}
+          rotated={rotated}
           visuals={visuals}
           value={front}
           onChange={updateFront}
@@ -493,7 +539,8 @@ export default function ProductForm({
           </p>
           <ImageSourcePicker
             side="back"
-            template={previewTemplate}
+            template={effectiveTemplate}
+            rotated={rotated}
             visuals={visuals}
             value={back}
             onChange={updateBack}

@@ -151,6 +151,21 @@ export default function ProductForm({
     );
   }
 
+  function toggleAllTemplates() {
+    setSelectedTemplateIds((prev) =>
+      prev.length === templates.length ? [] : templates.map((t) => t.id)
+    );
+  }
+
+  function toggleCategoryTemplates(categoryId: string) {
+    const categoryIds = templates.filter((t) => t.category_id === categoryId).map((t) => t.id);
+    const allSelected = categoryIds.every((id) => selectedTemplateIds.includes(id));
+    setSelectedTemplateIds((prev) => {
+      if (allSelected) return prev.filter((id) => !categoryIds.includes(id));
+      return [...new Set([...prev, ...categoryIds])];
+    });
+  }
+
   function buildFormData(productName: string, tId: string, cId: string) {
     const formData = new FormData();
     formData.append("name", productName);
@@ -352,23 +367,38 @@ export default function ProductForm({
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium">
-            Modèles{" "}
-            {selectedTemplateIds.length > 1 && (
-              <span className="font-normal text-neutral-400">
-                ({selectedTemplateIds.length} sélectionnés — un produit sera créé par modèle)
-              </span>
-            )}
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium">
+              Modèles{" "}
+              {selectedTemplateIds.length > 1 && (
+                <span className="font-normal text-neutral-400">
+                  ({selectedTemplateIds.length} sélectionnés — un produit sera créé par modèle)
+                </span>
+              )}
+            </label>
+            <button
+              type="button"
+              onClick={toggleAllTemplates}
+              className="text-xs text-neutral-500 underline hover:text-pico-black"
+            >
+              {selectedTemplateIds.length === templates.length ? "Tout désélectionner" : "Tout sélectionner"}
+            </button>
+          </div>
           <div className="mt-1 max-h-64 space-y-3 overflow-y-auto rounded border border-neutral-300 p-3">
             {categories.map((category) => {
               const items = templates.filter((t) => t.category_id === category.id);
               if (items.length === 0) return null;
+              const categoryAllSelected = items.every((t) => selectedTemplateIds.includes(t.id));
               return (
                 <div key={category.id}>
-                  <p className="mb-1 text-xs font-semibold uppercase text-neutral-400">
+                  <label className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-neutral-400">
+                    <input
+                      type="checkbox"
+                      checked={categoryAllSelected}
+                      onChange={() => toggleCategoryTemplates(category.id)}
+                    />
                     {category.name}
-                  </p>
+                  </label>
                   <div className="space-y-1">
                     {items.map((t) => (
                       <label key={t.id} className="flex items-center gap-2 text-sm text-pico-black">

@@ -40,11 +40,6 @@ export default function TemplatesTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
 
-  const categoryName = useMemo(() => {
-    const map = new Map(categories.map((c) => [c.id, c.name]));
-    return (id: string) => map.get(id) ?? "—";
-  }, [categories]);
-
   const skuCode = useMemo(() => {
     const map = new Map(skus.map((s) => [s.id, s.sku]));
     return (id: string | null) => (id ? map.get(id) ?? null : null);
@@ -148,7 +143,7 @@ export default function TemplatesTable({
                     Nom <SortIcon />
                   </button>
                 </th>
-                <th className="p-4">Catégorie</th>
+                <th className="p-4">Impression</th>
                 <th className="p-4">SKU</th>
                 <th className="p-4">Dimensions</th>
                 <th className="p-4"></th>
@@ -159,7 +154,6 @@ export default function TemplatesTable({
                 <TemplateRow
                   key={t.id}
                   template={t}
-                  categoryName={categoryName(t.category_id)}
                   skuCode={skuCode(t.sku_id)}
                   onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}

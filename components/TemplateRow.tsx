@@ -9,13 +9,11 @@ import { CopyIcon, EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/compon
 
 export default function TemplateRow({
   template,
-  categoryName,
   skuCode,
   onPreview,
   onEdit,
 }: {
   template: TemplateWithOverlayUrl;
-  categoryName: string;
   skuCode: string | null;
   onPreview: (template: Template) => void;
   onEdit: (template: TemplateWithOverlayUrl) => void;
@@ -52,7 +50,9 @@ export default function TemplateRow({
   return (
     <tr className="border-t border-neutral-100 hover:bg-neutral-50">
       <td className="p-4 font-semibold text-pico-black">{template.name}</td>
-      <td className="p-4 text-neutral-500">{categoryName}</td>
+      <td className="p-4 text-neutral-500">
+        {template.two_sided ? "Recto-verso" : "Recto"}
+      </td>
       <td className="p-4 font-mono text-xs text-neutral-500">{skuCode ?? "—"}</td>
       <td className="p-4 text-neutral-700">
         {formatIn(template.width_mm)}×{formatIn(template.height_mm)}

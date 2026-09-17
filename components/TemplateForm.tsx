@@ -53,7 +53,7 @@ export default function TemplateForm({
     two_sided: template?.two_sided ?? false,
     logo_on_front: template?.logo_on_front ?? true,
     logo_on_back: template?.logo_on_back ?? false,
-    allow_orientation_change: template?.allow_orientation_change ?? true,
+    allow_orientation_change: template?.allow_orientation_change ?? false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

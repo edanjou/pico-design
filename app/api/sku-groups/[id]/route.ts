@@ -9,27 +9,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
   const body = await request.json();
-  const sku = typeof body?.sku === "string" ? body.sku.trim() : "";
   const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const skuGroupId = typeof body?.sku_group_id === "string" ? body.sku_group_id.trim() : "";
-  if (!sku || !name || !skuGroupId) {
-    return NextResponse.json({ error: "Le SKU, le nom et le groupe sont requis." }, { status: 400 });
+  if (!name) {
+    return NextResponse.json({ error: "Le nom est requis." }, { status: 400 });
   }
 
   const { data, error } = await supabase
-    .from("skus")
-    .update({ sku, name, sku_group_id: skuGroupId })
+    .from("sku_groups")
+    .update({ name })
     .eq("id", params.id)
     .select()
     .single();
 
-  if (error) {
-    if (error.code === "23505") {
-      return NextResponse.json({ error: "Ce SKU existe déjà." }, { status: 409 });
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  return NextResponse.json({ sku: data });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ skuGroup: data });
 }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
@@ -39,11 +32,26 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  const { data, error } = await supabase.from("skus").delete().eq("id", params.id).select();
+  const { data, error } = await supabase
+    .from("sku_groups")
+    .delete()
+    .eq("id", params.id)
+    .select();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === "23503") {
+      return NextResponse.json(
+        { error: "Ce groupe est utilisé par au moins un SKU et ne peut pas être supprimé." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   if (!data || data.length === 0) {
-    return NextResponse.json({ error: "SKU introuvable ou suppression non autorisée." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Groupe introuvable ou suppression non autorisée." },
+      { status: 404 }
+    );
   }
   return NextResponse.json({ ok: true });
 }

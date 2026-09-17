@@ -19,14 +19,14 @@ export async function POST(request: Request) {
   const body = await request.json();
   const sku = typeof body?.sku === "string" ? body.sku.trim() : "";
   const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const groupLabel = typeof body?.group_label === "string" ? body.group_label.trim() : "";
-  if (!sku || !name || !groupLabel) {
+  const skuGroupId = typeof body?.sku_group_id === "string" ? body.sku_group_id.trim() : "";
+  if (!sku || !name || !skuGroupId) {
     return NextResponse.json({ error: "Le SKU, le nom et le groupe sont requis." }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("skus")
-    .insert({ sku, name, group_label: groupLabel })
+    .insert({ sku, name, sku_group_id: skuGroupId })
     .select()
     .single();
 

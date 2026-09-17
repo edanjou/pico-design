@@ -1,23 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import type { Sku } from "@/lib/types";
+import type { Sku, SkuGroup } from "@/lib/types";
 import { SpinnerIcon } from "@/components/icons";
 
 export default function SkuForm({
   sku,
-  groupLabels,
+  skuGroups,
   onSuccess,
 }: {
   sku?: Sku;
-  groupLabels: string[];
+  skuGroups: SkuGroup[];
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(sku);
   const [form, setForm] = useState({
     sku: sku?.sku ?? "",
     name: sku?.name ?? "",
-    group_label: sku?.group_label ?? groupLabels[0] ?? "",
+    sku_group_id: sku?.sku_group_id ?? skuGroups[0]?.id ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,19 +66,23 @@ export default function SkuForm({
       </div>
       <div>
         <label className="block text-sm font-medium">Groupe</label>
-        <input
+        <select
           required
-          list="sku-group-labels"
-          value={form.group_label}
-          onChange={(e) => setForm((f) => ({ ...f, group_label: e.target.value }))}
-          placeholder="Ex. Tasses + Tumblers"
+          value={form.sku_group_id}
+          onChange={(e) => setForm((f) => ({ ...f, sku_group_id: e.target.value }))}
           className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-        />
-        <datalist id="sku-group-labels">
-          {groupLabels.map((g) => (
-            <option key={g} value={g} />
+        >
+          {skuGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
           ))}
-        </datalist>
+        </select>
+        {skuGroups.length === 0 && (
+          <p className="mt-1 text-xs text-amber-700">
+            Aucun groupe disponible — crée-en un d&apos;abord.
+          </p>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

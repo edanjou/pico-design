@@ -10,11 +10,17 @@ export interface Category {
   created_at: string;
 }
 
+export interface SkuGroup {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Sku {
   id: string;
   sku: string;
   name: string;
-  group_label: string;
+  sku_group_id: string;
   created_at: string;
 }
 

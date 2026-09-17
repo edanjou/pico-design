@@ -3,31 +3,36 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import SkuForm from "@/components/SkuForm";
+import SkuGroupsManager from "@/components/SkuGroupsManager";
 import Modal from "@/components/Modal";
 import { FilePenIcon, TrashIcon } from "@/components/icons";
-import type { Sku } from "@/lib/types";
+import type { Sku, SkuGroup } from "@/lib/types";
 
-type ModalState = { mode: "create" } | { mode: "edit"; sku: Sku } | null;
+type ModalState =
+  | { mode: "create" }
+  | { mode: "edit"; sku: Sku }
+  | { mode: "groups" }
+  | null;
 
-export default function SkusTable({ skus }: { skus: Sku[] }) {
+export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups: SkuGroup[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [groupLabel, setGroupLabel] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const groupLabels = useMemo(
-    () => [...new Set(skus.map((s) => s.group_label))].sort((a, b) => a.localeCompare(b)),
-    [skus]
-  );
+  const groupName = useMemo(() => {
+    const map = new Map(skuGroups.map((g) => [g.id, g.name]));
+    return (id: string) => map.get(id) ?? "—";
+  }, [skuGroups]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return skus
-      .filter((s) => (groupLabel ? s.group_label === groupLabel : true))
+      .filter((s) => (groupId ? s.sku_group_id === groupId : true))
       .filter((s) => (q ? s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) : true));
-  }, [skus, search, groupLabel]);
+  }, [skus, search, groupId]);
 
   function handleSuccess() {
     setModal(null);
@@ -90,20 +95,29 @@ export default function SkusTable({ skus }: { skus: Sku[] }) {
             className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500">Groupe</label>
-          <select
-            value={groupLabel}
-            onChange={(e) => setGroupLabel(e.target.value)}
-            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="block text-xs font-medium text-neutral-500">Groupe</label>
+            <select
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— Tous —</option>
+              {skuGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal({ mode: "groups" })}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
           >
-            <option value="">— Tous —</option>
-            {groupLabels.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
+            Gérer les groupes
+          </button>
         </div>
       </div>
 
@@ -129,7 +143,7 @@ export default function SkusTable({ skus }: { skus: Sku[] }) {
                 <tr key={s.id} className="border-t border-neutral-100">
                   <td className="p-4 font-mono text-xs text-neutral-700">{s.sku}</td>
                   <td className="p-4">{s.name}</td>
-                  <td className="p-4 text-neutral-500">{s.group_label}</td>
+                  <td className="p-4 text-neutral-500">{groupName(s.sku_group_id)}</td>
                   <td className="p-4">
                     <div className="flex justify-end gap-1">
                       <button
@@ -158,6 +172,17 @@ export default function SkusTable({ skus }: { skus: Sku[] }) {
         </div>
       )}
 
+      {modal?.mode === "groups" && (
+        <Modal title="Gérer les groupes" onClose={() => setModal(null)}>
+          <SkuGroupsManager
+            skuGroups={skuGroups}
+            onChanged={() => {
+              router.refresh();
+            }}
+          />
+        </Modal>
+      )}
+
       {(modal?.mode === "create" || modal?.mode === "edit") && (
         <Modal
           title={modal.mode === "create" ? "Nouveau SKU" : `Modifier « ${modal.sku.sku} »`}
@@ -165,7 +190,7 @@ export default function SkusTable({ skus }: { skus: Sku[] }) {
         >
           <SkuForm
             sku={modal.mode === "edit" ? modal.sku : undefined}
-            groupLabels={groupLabels}
+            skuGroups={skuGroups}
             onSuccess={handleSuccess}
           />
         </Modal>

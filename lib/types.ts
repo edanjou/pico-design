@@ -46,6 +46,7 @@ export interface Template {
   two_sided: boolean;
   logo_on_front: boolean;
   logo_on_back: boolean;
+  allow_orientation_change: boolean;
   created_at: string;
   created_by: string | null;
 }

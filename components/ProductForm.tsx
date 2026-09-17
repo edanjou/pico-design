@@ -79,7 +79,8 @@ export default function ProductForm({
   const isMultiTemplate = !isEditing && selectedTemplateIds.length > 1;
   const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
   const effectiveTemplate = previewTemplate ? applyOrientation(previewTemplate, rotated) : null;
-  const showOrientationToggle = Boolean(previewTemplate) && !isMultiTemplate;
+  const showOrientationToggle =
+    Boolean(previewTemplate?.allow_orientation_change) && !isMultiTemplate;
   // "Paysage" = plus large que haut. Le bouton actif reflète l'orientation
   // effective (après inversion éventuelle par `rotated`), pas le modèle brut.
   const effectiveIsLandscape = effectiveTemplate

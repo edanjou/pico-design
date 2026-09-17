@@ -53,6 +53,7 @@ export default function TemplateForm({
     two_sided: template?.two_sided ?? false,
     logo_on_front: template?.logo_on_front ?? true,
     logo_on_back: template?.logo_on_back ?? false,
+    allow_orientation_change: template?.allow_orientation_change ?? true,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -282,6 +283,19 @@ export default function TemplateForm({
             />
           </div>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-pico-black">
+          <input
+            type="checkbox"
+            checked={form.allow_orientation_change}
+            onChange={(e) => update("allow_orientation_change", e.target.checked)}
+          />
+          Permettre de basculer les produits en portrait/paysage
+        </label>
+        {!form.allow_orientation_change && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Le bouton d&apos;orientation sera masqué dans le formulaire produit pour ce modèle.
+          </p>
+        )}
       </div>
 
       <div>

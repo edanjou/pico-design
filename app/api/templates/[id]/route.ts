@@ -16,7 +16,12 @@ const NUMERIC_FIELDS = [
   "logo_margin_x_mm",
   "logo_margin_y_mm",
 ] as const;
-const BOOLEAN_FIELDS = ["two_sided", "logo_on_front", "logo_on_back"] as const;
+const BOOLEAN_FIELDS = [
+  "two_sided",
+  "logo_on_front",
+  "logo_on_back",
+  "allow_orientation_change",
+] as const;
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();

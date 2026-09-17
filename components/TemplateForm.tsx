@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Category, LogoHAlign, LogoVAlign, Sku, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
+import SkuPicker from "@/components/SkuPicker";
 
 type Unit = "mm" | "in";
 
@@ -156,18 +157,7 @@ export default function TemplateForm({
 
       <div>
         <label className="block text-sm font-medium">SKU</label>
-        <select
-          value={form.sku_id}
-          onChange={(e) => update("sku_id", e.target.value)}
-          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-        >
-          <option value="">— Aucun —</option>
-          {skus.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.sku} — {s.name}
-            </option>
-          ))}
-        </select>
+        <SkuPicker value={form.sku_id} onChange={(id) => update("sku_id", id)} skus={skus} />
       </div>
 
       <div>

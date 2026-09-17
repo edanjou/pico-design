@@ -6,10 +6,12 @@ export default function Modal({
   title,
   onClose,
   children,
+  wide,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -22,7 +24,11 @@ export default function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div
+        className={`relative max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-xl ${
+          wide ? "max-w-4xl" : "max-w-lg"
+        }`}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-heading text-lg font-semibold text-pico-black">{title}</h2>
           <button

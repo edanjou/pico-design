@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LogoShape, Template, VisualMode } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
+import VisualPicker from "@/components/VisualPicker";
 import { mmToIn, inToMm } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
 
@@ -299,17 +300,7 @@ export default function ImageSourcePicker({
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium">Visuel</label>
-            <select
-              value={visualId}
-              onChange={(e) => handleVisualChange(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-            >
-              {visuals.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
+            <VisualPicker visuals={visuals} value={visualId} onChange={handleVisualChange} />
           </div>
 
           {sourceMode === "tile" && (

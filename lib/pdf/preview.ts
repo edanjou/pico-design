@@ -100,8 +100,16 @@ export async function generateTemplatePreviewPng(
   }
 
   if (overlayImage && trimW > 0 && trimH > 0) {
+    // "contain" (et non "cover") : le gabarit est montré à 100%, sans
+    // rognage, centré horizontalement et verticalement dans la zone de
+    // coupe finie (marges transparentes s'il ne fait pas exactement le
+    // même ratio que le modèle).
     const overlayPng = await sharp(overlayImage)
-      .resize(trimW, trimH, { fit: "cover" })
+      .resize(trimW, trimH, {
+        fit: "contain",
+        position: "centre",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
       .png()
       .toBuffer();
     composites.push({ input: overlayPng, left: Math.round(trimX), top: Math.round(trimY) });

@@ -11,6 +11,7 @@ import type { VisualWithUrl } from "@/components/VisualsGrid";
 
 export type ProductWithTemplate = Product & {
   imageUrl: string | null;
+  backImageUrl: string | null;
   template: { name: string; category_id: string; width_mm: number; height_mm: number } | null;
 };
 
@@ -220,6 +221,7 @@ export default function ProductsTable({
             collections={collections}
             product={modal.mode === "edit" ? modal.product : undefined}
             currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
+            currentBackImageUrl={modal.mode === "edit" ? modal.product.backImageUrl : null}
             onSuccess={handleSuccess}
           />
         </Modal>

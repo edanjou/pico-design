@@ -25,6 +25,7 @@ export interface Template {
   logo_margin_x_mm: number;
   logo_margin_y_mm: number;
   overlay_path: string | null;
+  two_sided: boolean;
   created_at: string;
   created_by: string | null;
 }
@@ -71,6 +72,12 @@ export interface Product {
   pdf_path: string | null;
   image_position_x: number;
   image_position_y: number;
+  back_image_path: string | null;
+  back_visual_id: string | null;
+  back_visual_mode: VisualMode | null;
+  back_tile_size_mm: number | null;
+  back_image_position_x: number;
+  back_image_position_y: number;
   created_at: string;
   created_by: string | null;
 }

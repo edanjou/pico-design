@@ -12,6 +12,7 @@ const NUMERIC_FIELDS = [
   "logo_margin_x_mm",
   "logo_margin_y_mm",
 ] as const;
+const BOOLEAN_FIELDS = ["two_sided"] as const;
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -29,6 +30,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   for (const field of NUMERIC_FIELDS) {
     const v = formData.get(field);
     if (typeof v === "string") update[field] = parseFloat(v);
+  }
+  for (const field of BOOLEAN_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") update[field] = v === "true";
   }
 
   const overlayFile = formData.get("overlay");

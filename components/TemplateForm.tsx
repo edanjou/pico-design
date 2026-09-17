@@ -43,6 +43,7 @@ export default function TemplateForm({
     logo_width_mm: template?.logo_width_mm ?? 20,
     logo_margin_x_mm: template?.logo_margin_x_mm ?? 5,
     logo_margin_y_mm: template?.logo_margin_y_mm ?? 5,
+    two_sided: template?.two_sided ?? false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,6 +216,36 @@ export default function TemplateForm({
             />
           </div>
         </div>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-medium">Impression</label>
+        <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+          <button
+            type="button"
+            onClick={() => update("two_sided", false)}
+            className={`flex-1 rounded-md px-2 py-1.5 ${
+              !form.two_sided ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Recto
+          </button>
+          <button
+            type="button"
+            onClick={() => update("two_sided", true)}
+            className={`flex-1 rounded-md px-2 py-1.5 ${
+              form.two_sided ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            Recto-verso
+          </button>
+        </div>
+        {form.two_sided && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Les produits basés sur ce modèle pourront configurer une image de verso, ajoutée comme
+            deuxième page du PDF.
+          </p>
+        )}
       </div>
 
       <div>

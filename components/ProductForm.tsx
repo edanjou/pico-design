@@ -1,26 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type {
-  Category,
-  LogoShape,
-  Product,
-  ProductCollection,
-  Template,
-  VisualMode,
-} from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { Category, LogoShape, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
-import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
+import ImageSourcePicker, { type ImageSourceValue } from "@/components/ImageSourcePicker";
+import { formatIn, inToMm } from "@/lib/pdf/units";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
 import { SpinnerIcon } from "@/components/icons";
-
-type SourceMode = "upload" | VisualMode;
-
-const SOURCE_MODES: { value: SourceMode; label: string }[] = [
-  { value: "upload", label: "Uploader une image" },
-  { value: "full", label: "Visuel — plein format" },
-  { value: "tile", label: "Visuel — mosaïque" },
-];
 
 const LOGO_SHAPES: { value: LogoShape; label: string }[] = [
   { value: "logo", label: "Logo" },
@@ -34,6 +20,7 @@ export default function ProductForm({
   collections,
   product,
   currentImageUrl,
+  currentBackImageUrl,
   onSuccess,
 }: {
   templates: Template[];
@@ -42,6 +29,7 @@ export default function ProductForm({
   collections: ProductCollection[];
   product?: Product;
   currentImageUrl?: string | null;
+  currentBackImageUrl?: string | null;
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(product);
@@ -52,172 +40,54 @@ export default function ProductForm({
     !isEditing && templates[0] ? [templates[0].id] : []
   );
   const [collectionId, setCollectionId] = useState(product?.collection_id ?? "");
-  const [sourceMode, setSourceMode] = useState<SourceMode>(product?.visual_mode ?? "upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [visualId, setVisualId] = useState(product?.visual_id ?? visuals[0]?.id ?? "");
-  const [tileSizeMm, setTileSizeMm] = useState(product?.tile_size_mm ?? inToMm(1));
+  const [front, setFront] = useState<ImageSourceValue>({
+    sourceMode: product?.visual_mode ?? "upload",
+    file: null,
+    visualId: product?.visual_id ?? visuals[0]?.id ?? "",
+    tileSizeMm: product?.tile_size_mm ?? inToMm(1),
+    positionX: product?.image_position_x ?? 0.5,
+    positionY: product?.image_position_y ?? 0.5,
+  });
+  const [back, setBack] = useState<ImageSourceValue>({
+    sourceMode: product?.back_visual_mode ?? "upload",
+    file: null,
+    visualId: product?.back_visual_id ?? visuals[0]?.id ?? "",
+    tileSizeMm: product?.back_tile_size_mm ?? inToMm(1),
+    positionX: product?.back_image_position_x ?? 0.5,
+    positionY: product?.back_image_position_y ?? 0.5,
+  });
   const [logoShape, setLogoShape] = useState<LogoShape>(product?.logo_shape ?? "logo");
   const [logoColor, setLogoColor] = useState(product?.logo_color ?? "#000000");
   const [logoSecondaryColor, setLogoSecondaryColor] = useState(
     product?.logo_secondary_color ?? "#FFFFFF"
   );
-  const [imagePositionX, setImagePositionX] = useState(product?.image_position_x ?? 0.5);
-  const [imagePositionY, setImagePositionY] = useState(product?.image_position_y ?? 0.5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
     null
   );
-  // Le "cadre" (traits de coupe/sécurité, gabarit, logo) est un calque
-  // transparent séparé du fond : il ne bouge jamais pendant le glisser, ce
-  // qui règle le problème "le cadre suit l'image quand on glisse".
-  const [frameOverlayUrl, setFrameOverlayUrl] = useState<string | null>(null);
-  const [frameLoading, setFrameLoading] = useState(false);
-  const [frameError, setFrameError] = useState<string | null>(null);
-  const frameTokenRef = useRef(0);
-  // Le fond, lui, dépend du mode : en upload/plein format, on affiche
-  // directement l'image brute côté client (object-position instantané, pas
-  // d'aller-retour serveur) ; en mosaïque, le motif recadré doit être rendu
-  // côté serveur (régénéré avec un léger débounce pendant le glisser).
-  const [tileBackgroundUrl, setTileBackgroundUrl] = useState<string | null>(null);
-  const [tileBgLoading, setTileBgLoading] = useState(false);
-  const [tileBgError, setTileBgError] = useState<string | null>(null);
-  const tileBgTokenRef = useRef(0);
-  const previewBoxRef = useRef<HTMLDivElement>(null);
-  const draggingPreviewRef = useRef(false);
-  const lastDragPointRef = useRef<{ x: number; y: number } | null>(null);
-  const [dragOffsetPx, setDragOffsetPx] = useState({ x: 0, y: 0 });
 
   // En édition, il n'y a toujours qu'un seul modèle. En création, l'aperçu
-  // n'est possible que si un seul modèle est coché parmi la sélection.
+  // (et le verso) ne sont possibles que si un seul modèle est coché parmi
+  // la sélection.
   const previewTemplateId = isEditing
     ? templateId
     : selectedTemplateIds.length === 1
     ? selectedTemplateIds[0]
     : "";
   const isMultiTemplate = !isEditing && selectedTemplateIds.length > 1;
-  // En édition, mode upload, sans nouveau fichier choisi : l'aperçu peut
-  // quand même être régénéré à partir de l'image déjà enregistrée, pour que
-  // le repositionnement soit possible sans devoir re-uploader.
-  const hasUploadSource = Boolean(file) || (isEditing && sourceMode === "upload" && Boolean(product?.image_path));
+  const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
+  const showBackSection = !isMultiTemplate && Boolean(previewTemplate?.two_sided);
+  const someSelectedAreTwoSided =
+    !isEditing && selectedTemplateIds.some((id) => templates.find((t) => t.id === id)?.two_sided);
 
-  const hasSource = sourceMode === "upload" ? hasUploadSource : Boolean(visualId);
-  const canPosition = !isMultiTemplate && Boolean(previewTemplateId) && hasSource;
+  function updateFront(patch: Partial<ImageSourceValue>) {
+    setFront((f) => ({ ...f, ...patch }));
+  }
 
-  // Régénère le calque "cadre" (traits de coupe/sécurité, gabarit, logo —
-  // fond transparent) dès que le modèle ou le logo changent. Indépendant de
-  // la position : ce calque ne bouge jamais pendant le glisser.
-  useEffect(() => {
-    if (!previewTemplateId || isMultiTemplate) {
-      setFrameOverlayUrl((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return null;
-      });
-      setFrameError(null);
-      return;
-    }
-
-    const token = ++frameTokenRef.current;
-    const timeout = setTimeout(async () => {
-      setFrameLoading(true);
-      setFrameError(null);
-
-      const formData = new FormData();
-      formData.append("templateId", previewTemplateId);
-      formData.append("logoShape", logoShape);
-      formData.append("logoColor", logoColor);
-      formData.append("logoSecondaryColor", logoSecondaryColor);
-      formData.append("mode", "frame");
-
-      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
-      if (token !== frameTokenRef.current) return;
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setFrameError(data.error ?? "Erreur lors de la génération du cadre.");
-        setFrameLoading(false);
-        return;
-      }
-      const blob = await res.blob();
-      setFrameOverlayUrl((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return URL.createObjectURL(blob);
-      });
-      setFrameLoading(false);
-    }, 150);
-
-    return () => clearTimeout(timeout);
-  }, [previewTemplateId, isMultiTemplate, logoShape, logoColor, logoSecondaryColor]);
-
-  useEffect(() => {
-    return () => {
-      if (frameOverlayUrl) URL.revokeObjectURL(frameOverlayUrl);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Régénère le fond en mode mosaïque (motif recadré/répété, sans traits ni
-  // logo) côté serveur — en upload/plein format, le fond est affiché
-  // directement côté client (voir le rendu plus bas), aucun aller-retour
-  // serveur n'est nécessaire pour le glisser.
-  useEffect(() => {
-    if (sourceMode !== "tile" || !canPosition) {
-      setTileBackgroundUrl((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return null;
-      });
-      setTileBgError(null);
-      return;
-    }
-
-    const token = ++tileBgTokenRef.current;
-    const timeout = setTimeout(async () => {
-      setTileBgLoading(true);
-      setTileBgError(null);
-
-      const formData = new FormData();
-      formData.append("templateId", previewTemplateId);
-      formData.append("visualId", visualId);
-      formData.append("visualMode", "tile");
-      formData.append("tileSizeMm", String(tileSizeMm));
-      formData.append("positionX", String(imagePositionX));
-      formData.append("positionY", String(imagePositionY));
-      formData.append("mode", "background");
-
-      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
-      if (token !== tileBgTokenRef.current) return;
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setTileBgError(data.error ?? "Erreur lors de la génération de l'aperçu.");
-        setTileBgLoading(false);
-        return;
-      }
-      const blob = await res.blob();
-      setTileBackgroundUrl((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return URL.createObjectURL(blob);
-      });
-      setTileBgLoading(false);
-    }, 400);
-
-    return () => clearTimeout(timeout);
-  }, [sourceMode, canPosition, previewTemplateId, visualId, tileSizeMm, imagePositionX, imagePositionY]);
-
-  useEffect(() => {
-    return () => {
-      if (tileBackgroundUrl) URL.revokeObjectURL(tileBackgroundUrl);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Une fois le nouveau fond mosaïque (déjà recadré à la bonne position)
-  // chargé, on efface le décalage visuel temporaire appliqué pendant le
-  // glisser.
-  useEffect(() => {
-    setDragOffsetPx({ x: 0, y: 0 });
-  }, [tileBackgroundUrl]);
+  function updateBack(patch: Partial<ImageSourceValue>) {
+    setBack((b) => ({ ...b, ...patch }));
+  }
 
   // Construit le nom automatiquement tant que l'utilisateur n'a pas modifié
   // le champ à la main. Avec un seul modèle : Modèle — Visuel. Avec
@@ -226,64 +96,14 @@ export default function ProductForm({
   useEffect(() => {
     if (nameTouched) return;
     const visualName =
-      sourceMode !== "upload" ? visuals.find((v) => v.id === visualId)?.name ?? "" : "";
+      front.sourceMode !== "upload" ? visuals.find((v) => v.id === front.visualId)?.name ?? "" : "";
     if (isMultiTemplate) {
       setName(visualName);
       return;
     }
     const templateName = templates.find((t) => t.id === previewTemplateId)?.name ?? "";
     setName(visualName ? `${templateName} — ${visualName}` : templateName);
-  }, [previewTemplateId, isMultiTemplate, sourceMode, visualId, templates, visuals, nameTouched]);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setPreview(f ? URL.createObjectURL(f) : null);
-    setImagePositionX(0.5);
-    setImagePositionY(0.5);
-  }
-
-  function handleVisualChange(id: string) {
-    setVisualId(id);
-    setImagePositionX(0.5);
-    setImagePositionY(0.5);
-  }
-
-  function recenterPosition() {
-    setImagePositionX(0.5);
-    setImagePositionY(0.5);
-    setDragOffsetPx({ x: 0, y: 0 });
-  }
-
-  // Glisser directement sur l'aperçu pour repositionner l'image, avec le
-  // cadre (traits + logo) qui reste fixe : en upload/plein format, le fond
-  // est une <img> brute en object-position, mise à jour en direct depuis
-  // imagePositionX/Y (aucun aller-retour serveur, donc parfaitement fluide).
-  // En mosaïque, le fond vient du serveur (débouncé) ; dragOffsetPx ajoute
-  // un retour visuel immédiat via transform en attendant la régénération.
-  function handlePreviewPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    draggingPreviewRef.current = true;
-    lastDragPointRef.current = { x: e.clientX, y: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!draggingPreviewRef.current || !lastDragPointRef.current || !previewBoxRef.current) return;
-    const rect = previewBoxRef.current.getBoundingClientRect();
-    const dxPx = e.clientX - lastDragPointRef.current.x;
-    const dyPx = e.clientY - lastDragPointRef.current.y;
-    lastDragPointRef.current = { x: e.clientX, y: e.clientY };
-    setDragOffsetPx((o) => ({ x: o.x + dxPx, y: o.y + dyPx }));
-    const dx = dxPx / rect.width;
-    const dy = dyPx / rect.height;
-    setImagePositionX((x) => Math.min(1, Math.max(0, x - dx)));
-    setImagePositionY((y) => Math.min(1, Math.max(0, y - dy)));
-  }
-
-  function handlePreviewPointerUp() {
-    draggingPreviewRef.current = false;
-    lastDragPointRef.current = null;
-  }
+  }, [previewTemplateId, isMultiTemplate, front.sourceMode, front.visualId, templates, visuals, nameTouched]);
 
   function toggleTemplate(id: string, checked: boolean) {
     setSelectedTemplateIds((prev) =>
@@ -298,15 +118,25 @@ export default function ProductForm({
     formData.append("logoShape", logoShape);
     formData.append("logoColor", logoColor);
     formData.append("logoSecondaryColor", logoSecondaryColor);
-    formData.append("positionX", String(imagePositionX));
-    formData.append("positionY", String(imagePositionY));
+    formData.append("positionX", String(front.positionX));
+    formData.append("positionY", String(front.positionY));
     if (cId) formData.append("collectionId", cId);
-    if (sourceMode === "upload") {
-      if (file) formData.append("image", file);
+    if (front.sourceMode === "upload") {
+      if (front.file) formData.append("image", front.file);
     } else {
-      formData.append("visualId", visualId);
-      formData.append("visualMode", sourceMode);
-      if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
+      formData.append("visualId", front.visualId);
+      formData.append("visualMode", front.sourceMode);
+      if (front.sourceMode === "tile") formData.append("tileSizeMm", String(front.tileSizeMm));
+    }
+    // Le serveur ignore ces champs si le modèle n'est pas recto-verso.
+    formData.append("backPositionX", String(back.positionX));
+    formData.append("backPositionY", String(back.positionY));
+    if (back.sourceMode === "upload") {
+      if (back.file) formData.append("backImage", back.file);
+    } else {
+      formData.append("backVisualId", back.visualId);
+      formData.append("backVisualMode", back.sourceMode);
+      if (back.sourceMode === "tile") formData.append("backTileSizeMm", String(back.tileSizeMm));
     }
     return formData;
   }
@@ -317,13 +147,24 @@ export default function ProductForm({
       setError("Choisis au moins un modèle.");
       return;
     }
-    if (!isEditing && sourceMode === "upload" && !file) {
+    if (!isEditing && front.sourceMode === "upload" && !front.file) {
       setError("Une image est requise.");
       return;
     }
-    if (sourceMode !== "upload" && !visualId) {
+    if (front.sourceMode !== "upload" && !front.visualId) {
       setError("Choisis un visuel dans la banque.");
       return;
+    }
+    if (showBackSection) {
+      const hasExistingBack = isEditing && Boolean(currentBackImageUrl);
+      if (back.sourceMode === "upload" && !back.file && !hasExistingBack) {
+        setError("Une image de verso est requise (modèle recto-verso).");
+        return;
+      }
+      if (back.sourceMode !== "upload" && !back.visualId) {
+        setError("Choisis un visuel pour le verso.");
+        return;
+      }
     }
 
     setLoading(true);
@@ -351,7 +192,9 @@ export default function ProductForm({
     }
 
     // Création multiple : un produit par modèle sélectionné, regroupés
-    // automatiquement dans une collection si aucune n'a été choisie.
+    // automatiquement dans une collection si aucune n'a été choisie. Le
+    // verso (le cas échéant) n'est pas configuré en lot — à ajouter ensuite
+    // en modifiant chaque produit individuellement.
     let targetCollectionId = collectionId;
     if (!targetCollectionId) {
       const collectionName =
@@ -415,22 +258,6 @@ export default function ProductForm({
     );
   }
 
-  const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
-  const pageAspectRatio = previewTemplate
-    ? (previewTemplate.width_mm + previewTemplate.bleed_mm * 2) /
-      (previewTemplate.height_mm + previewTemplate.bleed_mm * 2)
-    : 1;
-  const selectedVisual = visuals.find((v) => v.id === visualId) ?? null;
-  const rawBackgroundUrl =
-    sourceMode === "upload"
-      ? preview ?? currentImageUrl ?? null
-      : sourceMode === "full"
-      ? selectedVisual?.fileUrl ?? null
-      : null;
-  const backgroundUrl = sourceMode === "tile" ? tileBackgroundUrl : rawBackgroundUrl;
-  const previewLoading = frameLoading || (sourceMode === "tile" && tileBgLoading);
-  const previewError = frameError ?? (sourceMode === "tile" ? tileBgError : null);
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -473,6 +300,7 @@ export default function ProductForm({
                   {items.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
+                      {t.two_sided ? " (recto-verso)" : ""}
                     </option>
                   ))}
                 </optgroup>
@@ -508,6 +336,7 @@ export default function ProductForm({
                           onChange={(e) => toggleTemplate(t.id, e.target.checked)}
                         />
                         {t.name} — {formatIn(t.width_mm)}×{formatIn(t.height_mm)}
+                        {t.two_sided ? " (recto-verso)" : ""}
                       </label>
                     ))}
                   </div>
@@ -515,6 +344,12 @@ export default function ProductForm({
               );
             })}
           </div>
+          {someSelectedAreTwoSided && (
+            <p className="mt-1 text-xs text-neutral-500">
+              Certains modèles sélectionnés sont recto-verso — configure le verso après création,
+              en modifiant chaque produit.
+            </p>
+          )}
         </div>
       )}
 
@@ -540,87 +375,25 @@ export default function ProductForm({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium">Source de l&apos;image</label>
-        <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
-          {SOURCE_MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => setSourceMode(m.value)}
-              className={`flex-1 rounded-md px-2 py-1.5 ${
-                sourceMode === m.value
-                  ? "bg-pico-black text-white"
-                  : "text-neutral-600 hover:bg-neutral-100"
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <p className="mb-1 text-sm font-medium">Recto</p>
+        <ImageSourcePicker
+          side="front"
+          template={previewTemplate}
+          visuals={visuals}
+          value={front}
+          onChange={updateFront}
+          currentImageUrl={currentImageUrl}
+          logo={{ shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor }}
+          previewUnavailableMessage={
+            isMultiTemplate
+              ? "Aperçu disponible pour un seul modèle à la fois — décoche pour n'en garder qu'un si tu veux vérifier le rendu avant de créer la collection."
+              : undefined
+          }
+        />
       </div>
 
-      {sourceMode === "upload" ? (
-        <div>
-          <label className="block text-sm font-medium">
-            Image {isEditing ? "(laisser vide pour garder l'actuelle)" : ""}
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="mt-1 w-full text-sm"
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {preview ? (
-            <img src={preview} alt="Aperçu" className="mt-3 max-h-64 rounded border" />
-          ) : currentImageUrl ? (
-            <img src={currentImageUrl} alt="Image actuelle" className="mt-3 max-h-64 rounded border" />
-          ) : null}
-        </div>
-      ) : visuals.length === 0 ? (
-        <p className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          Aucun visuel dans la banque. Ajoutes-en d&apos;abord dans{" "}
-          <a href="/visuals" className="underline">
-            Banque de visuels
-          </a>
-          .
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium">Visuel</label>
-            <select
-              value={visualId}
-              onChange={(e) => handleVisualChange(e.target.value)}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-            >
-              {visuals.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {sourceMode === "tile" && (
-            <div>
-              <label className="block text-sm font-medium">Taille de répétition (po)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={Math.round(mmToIn(tileSizeMm) * 100) / 100}
-                onChange={(e) => setTileSizeMm(inToMm(parseFloat(e.target.value) || 0.01))}
-                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-              />
-            </div>
-          )}
-
-        </div>
-      )}
-
       <div>
-        <label className="mb-1 block text-sm font-medium">Logo</label>
+        <label className="mb-1 block text-sm font-medium">Logo (recto uniquement)</label>
         <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
           {LOGO_SHAPES.map((s) => (
             <button
@@ -683,88 +456,22 @@ export default function ProductForm({
         )}
       </div>
 
-      <div>
-        <div className="flex items-center justify-between gap-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            Aperçu
-            {previewLoading && (
-              <span className="inline-flex items-center gap-1 text-xs font-normal text-neutral-400">
-                <SpinnerIcon className="h-3.5 w-3.5" /> génération...
-              </span>
-            )}
-          </label>
-          {canPosition && (
-            <button
-              type="button"
-              onClick={recenterPosition}
-              className="text-xs text-neutral-500 underline hover:text-pico-black"
-            >
-              Recentrer
-            </button>
-          )}
-        </div>
-        {isMultiTemplate ? (
-          <p className="mt-1 text-xs text-neutral-500">
-            Aperçu disponible pour un seul modèle à la fois — décoche pour n&apos;en garder qu&apos;un
-            si tu veux vérifier le rendu avant de créer la collection.
+      {showBackSection && (
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="mb-1 text-sm font-medium">
+            Verso <span className="font-normal text-neutral-400">(modèle recto-verso)</span>
           </p>
-        ) : (
-          <>
-            {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
-            {canPosition ? (
-              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                <div
-                  ref={previewBoxRef}
-                  onPointerDown={handlePreviewPointerDown}
-                  onPointerMove={handlePreviewPointerMove}
-                  onPointerUp={handlePreviewPointerUp}
-                  onPointerLeave={handlePreviewPointerUp}
-                  className="relative mx-auto w-full max-w-xs touch-none select-none overflow-hidden rounded border border-neutral-200 bg-neutral-200 cursor-grab active:cursor-grabbing"
-                  style={{ aspectRatio: String(pageAspectRatio) }}
-                >
-                  {/* Fond : bouge pendant le glisser, le cadre (ci-dessous) reste fixe. */}
-                  {backgroundUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={backgroundUrl}
-                      alt=""
-                      draggable={false}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      style={
-                        sourceMode === "tile"
-                          ? { transform: `translate(${dragOffsetPx.x}px, ${dragOffsetPx.y}px)` }
-                          : { objectPosition: `${imagePositionX * 100}% ${imagePositionY * 100}%` }
-                      }
-                    />
-                  )}
-                  {/* Cadre : traits de coupe/sécurité + gabarit + logo, fond transparent, jamais déplacé. */}
-                  {frameOverlayUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={frameOverlayUrl}
-                      alt="Aperçu du produit"
-                      draggable={false}
-                      className="pointer-events-none absolute inset-0 h-full w-full"
-                    />
-                  )}
-                </div>
-                <p className="mt-2 text-center text-xs text-neutral-500">
-                  Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection ·
-                  glisse l&apos;image pour la repositionner.
-                </p>
-              </div>
-            ) : (
-              !previewError && (
-                <p className="mt-1 text-xs text-neutral-500">
-                  {sourceMode === "upload"
-                    ? "Choisis une image pour voir l'aperçu."
-                    : "Choisis un visuel pour voir l'aperçu."}
-                </p>
-              )
-            )}
-          </>
-        )}
-      </div>
+          <ImageSourcePicker
+            side="back"
+            template={previewTemplate}
+            visuals={visuals}
+            value={back}
+            onChange={updateBack}
+            currentImageUrl={currentBackImageUrl}
+            logo={null}
+          />
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {createProgress && (

@@ -29,7 +29,10 @@ export default async function ProductsPage() {
       // TTL généreux : l'URL sert aussi à l'aperçu dans la modale d'édition,
       // ouverte potentiellement longtemps après le chargement de la page.
       const { data } = await supabase.storage.from("uploads").createSignedUrl(p.image_path, 60 * 30);
-      return { ...p, imageUrl: data?.signedUrl ?? null };
+      const backData = p.back_image_path
+        ? await supabase.storage.from("uploads").createSignedUrl(p.back_image_path, 60 * 30)
+        : null;
+      return { ...p, imageUrl: data?.signedUrl ?? null, backImageUrl: backData?.data?.signedUrl ?? null };
     })
   );
 

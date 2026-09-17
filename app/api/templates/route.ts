@@ -13,6 +13,7 @@ const NUMERIC_FIELDS = [
   "logo_margin_x_mm",
   "logo_margin_y_mm",
 ] as const;
+const BOOLEAN_FIELDS = ["two_sided"] as const;
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
@@ -41,6 +42,10 @@ export async function POST(request: Request) {
   for (const field of NUMERIC_FIELDS) {
     const v = formData.get(field);
     if (typeof v === "string") body[field] = parseFloat(v);
+  }
+  for (const field of BOOLEAN_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") body[field] = v === "true";
   }
 
   const templateId = randomUUID();

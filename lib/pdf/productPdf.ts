@@ -12,6 +12,11 @@ export interface GenerateProductPdfInput {
   logoSecondaryColor: string;
   positionX?: number;
   positionY?: number;
+  // Image de verso (optionnelle, modèles recto-verso uniquement) — ajoutée
+  // comme deuxième page, sans logo.
+  backImage?: Buffer | null;
+  backPositionX?: number;
+  backPositionY?: number;
 }
 
 /**
@@ -46,6 +51,9 @@ export async function generateAndStoreProductPdf(
     logoImage: logoBuffer,
     positionX: input.positionX,
     positionY: input.positionY,
+    backImage: template.two_sided ? input.backImage ?? null : null,
+    backPositionX: input.backPositionX,
+    backPositionY: input.backPositionY,
   });
 
   const pdfPath = `products/${input.productId}/output.pdf`;

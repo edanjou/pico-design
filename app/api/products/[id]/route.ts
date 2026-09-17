@@ -4,7 +4,7 @@ import { resolveProductImage } from "@/lib/pdf/productSource";
 import { isValidLogoColor } from "@/lib/pdf/logo";
 import { generateAndStoreProductPdf } from "@/lib/pdf/productPdf";
 import { parsePositionValue } from "@/lib/pdf/crop";
-import type { LogoShape, VisualMode } from "@/lib/types";
+import type { LogoShape, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
 
@@ -28,12 +28,27 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const collectionId = formData.get("collectionId");
   const positionX = parsePositionValue(formData.get("positionX"));
   const positionY = parsePositionValue(formData.get("positionY"));
+  const backFile = formData.get("backImage");
+  const backVisualId = formData.get("backVisualId");
+  const backVisualMode = formData.get("backVisualMode");
+  const backTileSizeMm = formData.get("backTileSizeMm");
+  const backPositionX = parsePositionValue(formData.get("backPositionX"));
+  const backPositionY = parsePositionValue(formData.get("backPositionY"));
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
       { error: "Paramètres manquants (name, templateId)." },
       { status: 400 }
     );
+  }
+
+  const { data: template, error: templateError } = await supabase
+    .from("templates")
+    .select("*")
+    .eq("id", templateId)
+    .single<Template>();
+  if (templateError || !template) {
+    return NextResponse.json({ error: "Modèle introuvable." }, { status: 404 });
   }
 
   const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
@@ -56,9 +71,29 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const hasNewSource = file instanceof File && file.size > 0
     ? true
     : typeof visualId === "string" && typeof visualMode === "string";
+  const hasNewBackSource =
+    template.two_sided &&
+    (backFile instanceof File && backFile.size > 0
+      ? true
+      : typeof backVisualId === "string" && typeof backVisualMode === "string");
 
   const admin = createAdminSupabaseClient();
   let sourceBufferForPdf: Buffer | null = null;
+  let backBufferForPdf: Buffer | null = null;
+
+  // Chargé une seule fois, au besoin, pour régénérer le PDF sans re-upload
+  // (recto et/ou verso inchangés) à partir de ce qui est déjà enregistré.
+  let current: { image_path: string; back_image_path: string | null } | null = null;
+  async function loadCurrent() {
+    if (current) return current;
+    const { data } = await supabase
+      .from("products")
+      .select("image_path, back_image_path")
+      .eq("id", params.id)
+      .single<{ image_path: string; back_image_path: string | null }>();
+    current = data ?? null;
+    return current;
+  }
 
   if (hasNewSource) {
     let resolved;
@@ -97,14 +132,75 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   } else {
     // Pas de nouvelle image : régénérer le PDF (modèle/logo ont pu changer)
     // à partir de l'image actuellement enregistrée pour ce produit.
-    const { data: current } = await supabase
-      .from("products")
-      .select("image_path")
-      .eq("id", params.id)
-      .single<{ image_path: string }>();
-    if (current) {
-      const { data: existingFile } = await admin.storage.from("uploads").download(current.image_path);
+    const row = await loadCurrent();
+    if (row) {
+      const { data: existingFile } = await admin.storage.from("uploads").download(row.image_path);
       if (existingFile) sourceBufferForPdf = Buffer.from(await existingFile.arrayBuffer());
+    }
+  }
+
+  if (!template.two_sided) {
+    // Le modèle n'est plus (ou pas) recto-verso : on ne garde pas de
+    // configuration de verso orpheline.
+    update.back_image_path = null;
+    update.back_visual_id = null;
+    update.back_visual_mode = null;
+    update.back_tile_size_mm = null;
+    update.back_image_position_x = backPositionX;
+    update.back_image_position_y = backPositionY;
+  } else if (hasNewBackSource) {
+    let resolvedBack;
+    try {
+      resolvedBack = await resolveProductImage(supabase, {
+        templateId,
+        file: backFile instanceof File && backFile.size > 0 ? backFile : null,
+        visualId: typeof backVisualId === "string" ? backVisualId : null,
+        visualMode: typeof backVisualMode === "string" ? (backVisualMode as VisualMode) : null,
+        tileSizeMm: typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
+        positionX: backPositionX,
+        positionY: backPositionY,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur lors du traitement du verso.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    const backImagePath = `products/${params.id}/back-${resolvedBack.filename}`;
+    const { error: backUploadError } = await supabase.storage
+      .from("uploads")
+      .upload(backImagePath, resolvedBack.buffer, {
+        contentType: resolvedBack.contentType,
+        upsert: true,
+      });
+    if (backUploadError) {
+      return NextResponse.json({ error: backUploadError.message }, { status: 500 });
+    }
+    update.back_image_path = backImagePath;
+    update.back_visual_id =
+      backFile instanceof File && backFile.size > 0 ? null : (backVisualId as string);
+    update.back_visual_mode =
+      backFile instanceof File && backFile.size > 0 ? null : (backVisualMode as string);
+    update.back_tile_size_mm =
+      backFile instanceof File && backFile.size > 0
+        ? null
+        : typeof backTileSizeMm === "string"
+        ? parseFloat(backTileSizeMm)
+        : null;
+    update.back_image_position_x = backPositionX;
+    update.back_image_position_y = backPositionY;
+    backBufferForPdf = resolvedBack.buffer;
+  } else {
+    // Recto-verso, pas de nouvelle image de verso : réutiliser celle déjà
+    // enregistrée (si présente) pour régénérer le PDF avec la position
+    // éventuellement ajustée.
+    update.back_image_position_x = backPositionX;
+    update.back_image_position_y = backPositionY;
+    const row = await loadCurrent();
+    if (row?.back_image_path) {
+      const { data: existingBackFile } = await admin.storage
+        .from("uploads")
+        .download(row.back_image_path);
+      if (existingBackFile) backBufferForPdf = Buffer.from(await existingBackFile.arrayBuffer());
     }
   }
 
@@ -123,6 +219,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         logoSecondaryColor: secondaryColor,
         positionX,
         positionY,
+        backImage: backBufferForPdf,
+        backPositionX,
+        backPositionY,
       });
     } catch (err) {
       pdfError = err instanceof Error ? err.message : "Erreur lors de la génération du PDF.";

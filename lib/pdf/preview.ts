@@ -47,11 +47,12 @@ export async function generateTemplatePreviewPng(
   const trimW = Math.max(0, pageWidthPx - bleedPx * 2);
   const trimH = Math.max(0, pageHeightPx - bleedPx * 2);
 
-  const safetyPx = mmToPx(template.safety_margin_mm, previewDpi);
-  const safetyX = trimX + safetyPx;
-  const safetyY = trimY + safetyPx;
-  const safetyW = Math.max(0, trimW - safetyPx * 2);
-  const safetyH = Math.max(0, trimH - safetyPx * 2);
+  const safetyXPx = mmToPx(template.safety_margin_x_mm, previewDpi);
+  const safetyYPx = mmToPx(template.safety_margin_y_mm, previewDpi);
+  const safetyX = trimX + safetyXPx;
+  const safetyY = trimY + safetyYPx;
+  const safetyW = Math.max(0, trimW - safetyXPx * 2);
+  const safetyH = Math.max(0, trimH - safetyYPx * 2);
 
   const showPlaceholder = !sourceImage && !transparent;
   // Un gabarit de guidage remplace les marques de coupe/sécurité dans
@@ -68,7 +69,7 @@ export async function generateTemplatePreviewPng(
           : ""
       }
       ${
-        template.safety_margin_mm > 0 && !hasOverlay
+        (template.safety_margin_x_mm > 0 || template.safety_margin_y_mm > 0) && !hasOverlay
           ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }

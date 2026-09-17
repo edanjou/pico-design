@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { mmToPx } from "./units";
-import { rasterizeLogoToPng } from "./logo";
+import { rasterizeLogoToPng, isSvg } from "./logo";
 import { coverCropToBuffer } from "./crop";
 import type { Template } from "../types";
 
@@ -100,19 +100,34 @@ export async function generateTemplatePreviewPng(
   }
 
   if (overlayImage && trimW > 0 && trimH > 0) {
-    // "contain" (et non "cover") : le gabarit est montré à 100%, sans
-    // rognage, centré horizontalement et verticalement dans la zone de
-    // coupe finie (marges transparentes s'il ne fait pas exactement le
-    // même ratio que le modèle).
-    const overlayPng = await sharp(overlayImage)
-      .resize(trimW, trimH, {
-        fit: "contain",
-        position: "centre",
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      })
-      .png()
-      .toBuffer();
-    composites.push({ input: overlayPng, left: Math.round(trimX), top: Math.round(trimY) });
+    // Le gabarit garde sa taille réelle : ses pixels natifs sont considérés
+    // comme exportés à la résolution du modèle (template.dpi), donc mis à
+    // l'échelle uniquement par le même facteur que le reste de l'aperçu
+    // (`scale`) — jamais étiré/rétréci pour remplir la zone de coupe.
+    // Centré horizontalement et verticalement sur cette zone.
+    const overlaySharp = isSvg(overlayImage)
+      ? sharp(overlayImage, { density: template.dpi })
+      : sharp(overlayImage);
+    const overlayMeta = await overlaySharp.metadata();
+    const nativeW = overlayMeta.width ?? trimW;
+    const nativeH = overlayMeta.height ?? trimH;
+    const rawDisplayW = Math.max(1, Math.round(nativeW * scale));
+    const rawDisplayH = Math.max(1, Math.round(nativeH * scale));
+
+    // Ne jamais dépasser la page complète (sharp refuse un composite plus
+    // grand que le calque de base) — repli rare, ratio préservé.
+    const overshootScale = Math.min(1, pageWidthPx / rawDisplayW, pageHeightPx / rawDisplayH);
+    const displayW = Math.max(1, Math.round(rawDisplayW * overshootScale));
+    const displayH = Math.max(1, Math.round(rawDisplayH * overshootScale));
+
+    const overlayPng = await overlaySharp.resize(displayW, displayH, { fit: "fill" }).png().toBuffer();
+    const left = Math.round(
+      Math.max(0, Math.min(trimX + (trimW - displayW) / 2, pageWidthPx - displayW))
+    );
+    const top = Math.round(
+      Math.max(0, Math.min(trimY + (trimH - displayH) / 2, pageHeightPx - displayH))
+    );
+    composites.push({ input: overlayPng, left, top });
   }
 
   if (logoImage && template.logo_width_mm > 0) {

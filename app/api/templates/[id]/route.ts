@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
+const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
 const NUMERIC_FIELDS = [
   "width_mm",
   "height_mm",
@@ -29,6 +30,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   for (const field of STRING_FIELDS) {
     const v = formData.get(field);
     if (typeof v === "string") update[field] = v;
+  }
+  for (const field of NULLABLE_STRING_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") update[field] = v === "" ? null : v;
   }
   for (const field of NUMERIC_FIELDS) {
     const v = formData.get(field);

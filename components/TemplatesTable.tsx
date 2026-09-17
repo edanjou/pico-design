@@ -6,7 +6,7 @@ import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
 import CategoriesManager from "@/components/CategoriesManager";
 import Modal from "@/components/Modal";
-import type { Category, Template } from "@/lib/types";
+import type { Category, Sku, Template } from "@/lib/types";
 
 export type TemplateWithOverlayUrl = Template & { overlayUrl: string | null };
 
@@ -28,9 +28,11 @@ type ModalState =
 export default function TemplatesTable({
   templates,
   categories,
+  skus,
 }: {
   templates: TemplateWithOverlayUrl[];
   categories: Category[];
+  skus: Sku[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -42,6 +44,11 @@ export default function TemplatesTable({
     const map = new Map(categories.map((c) => [c.id, c.name]));
     return (id: string) => map.get(id) ?? "—";
   }, [categories]);
+
+  const skuCode = useMemo(() => {
+    const map = new Map(skus.map((s) => [s.id, s.sku]));
+    return (id: string | null) => (id ? map.get(id) ?? null : null);
+  }, [skus]);
 
   const filtered = useMemo(() => {
     return templates
@@ -142,6 +149,7 @@ export default function TemplatesTable({
                   </button>
                 </th>
                 <th className="p-4">Catégorie</th>
+                <th className="p-4">SKU</th>
                 <th className="p-4">Dimensions</th>
                 <th className="p-4"></th>
               </tr>
@@ -152,6 +160,7 @@ export default function TemplatesTable({
                   key={t.id}
                   template={t}
                   categoryName={categoryName(t.category_id)}
+                  skuCode={skuCode(t.sku_id)}
                   onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
                 />
@@ -196,6 +205,7 @@ export default function TemplatesTable({
           <TemplateForm
             template={modal.mode === "edit" ? modal.template : undefined}
             categories={categories}
+            skus={skus}
             currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
             onSuccess={handleSuccess}
           />

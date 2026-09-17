@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Category, LogoHAlign, LogoVAlign, Template } from "@/lib/types";
+import type { Category, LogoHAlign, LogoVAlign, Sku, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
 
@@ -21,11 +21,13 @@ const V_ALIGNS: { value: LogoVAlign; label: string }[] = [
 export default function TemplateForm({
   template,
   categories,
+  skus,
   currentOverlayUrl,
   onSuccess,
 }: {
   template?: Template;
   categories: Category[];
+  skus: Sku[];
   currentOverlayUrl?: string | null;
   onSuccess: () => void;
 }) {
@@ -33,6 +35,7 @@ export default function TemplateForm({
   const [form, setForm] = useState({
     name: template?.name ?? "",
     category_id: template?.category_id ?? categories[0]?.id ?? "",
+    sku_id: template?.sku_id ?? "",
     width_mm: template?.width_mm ?? 90,
     height_mm: template?.height_mm ?? 50,
     bleed_mm: template?.bleed_mm ?? 3.175,
@@ -149,6 +152,22 @@ export default function TemplateForm({
             Aucune catégorie disponible — crée-en une d&apos;abord.
           </p>
         )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">SKU</label>
+        <select
+          value={form.sku_id}
+          onChange={(e) => update("sku_id", e.target.value)}
+          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+        >
+          <option value="">— Aucun —</option>
+          {skus.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.sku} — {s.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>

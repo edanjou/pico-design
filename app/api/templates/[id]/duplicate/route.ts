@@ -42,6 +42,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
       id: newId,
       name: `${source.name} (copie)`,
       category_id: source.category_id,
+      sku_id: source.sku_id,
       width_mm: source.width_mm,
       height_mm: source.height_mm,
       bleed_mm: source.bleed_mm,

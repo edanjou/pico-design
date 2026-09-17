@@ -22,6 +22,7 @@ export interface Template {
   id: string;
   name: string;
   category_id: string;
+  sku_id: string | null;
   width_mm: number;
   height_mm: number;
   bleed_mm: number;

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
+const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
 const NUMERIC_FIELDS = [
   "width_mm",
   "height_mm",
@@ -41,6 +42,10 @@ export async function POST(request: Request) {
   for (const field of STRING_FIELDS) {
     const v = formData.get(field);
     if (typeof v === "string") body[field] = v;
+  }
+  for (const field of NULLABLE_STRING_FIELDS) {
+    const v = formData.get(field);
+    if (typeof v === "string") body[field] = v === "" ? null : v;
   }
   for (const field of NUMERIC_FIELDS) {
     const v = formData.get(field);

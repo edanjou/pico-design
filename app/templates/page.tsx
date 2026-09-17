@@ -1,12 +1,13 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import TemplatesTable, { type TemplateWithOverlayUrl } from "@/components/TemplatesTable";
-import type { Category, Template } from "@/lib/types";
+import type { Category, Sku, Template } from "@/lib/types";
 
 export default async function TemplatesPage() {
   const supabase = createServerSupabaseClient();
-  const [{ data: templates }, { data: categories }] = await Promise.all([
+  const [{ data: templates }, { data: categories }, { data: skus }] = await Promise.all([
     supabase.from("templates").select("*").order("name", { ascending: true }),
     supabase.from("categories").select("*").order("name", { ascending: true }),
+    supabase.from("skus").select("*").order("sku", { ascending: true }),
   ]);
 
   const rows = (templates as Template[]) ?? [];
@@ -23,6 +24,7 @@ export default async function TemplatesPage() {
     <TemplatesTable
       templates={withOverlayUrls}
       categories={(categories as Category[]) ?? []}
+      skus={(skus as Sku[]) ?? []}
     />
   );
 }

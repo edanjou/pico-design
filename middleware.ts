@@ -46,7 +46,7 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  runtime: "nodejs",
+  runtime: "experimental-edge",
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|api/public|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],

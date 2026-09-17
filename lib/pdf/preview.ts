@@ -54,17 +54,21 @@ export async function generateTemplatePreviewPng(
   const safetyH = Math.max(0, trimH - safetyPx * 2);
 
   const showPlaceholder = !sourceImage && !transparent;
+  // Un gabarit de guidage remplace les marques de coupe/sécurité dans
+  // l'aperçu — il apporte déjà ses propres repères, les deux ensemble
+  // seraient redondants/confus.
+  const hasOverlay = Boolean(overlayImage);
 
   const linesSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
       ${showPlaceholder ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ""}
       ${
-        template.bleed_mm > 0
+        template.bleed_mm > 0 && !hasOverlay
           ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ff00ff" stroke-width="1.5"/>`
           : ""
       }
       ${
-        template.safety_margin_mm > 0
+        template.safety_margin_mm > 0 && !hasOverlay
           ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }

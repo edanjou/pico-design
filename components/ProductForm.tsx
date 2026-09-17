@@ -36,9 +36,7 @@ export default function ProductForm({
   const [name, setName] = useState(product?.name ?? "");
   const [nameTouched, setNameTouched] = useState(isEditing);
   const [templateId, setTemplateId] = useState(product?.template_id ?? templates[0]?.id ?? "");
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(
-    !isEditing && templates[0] ? [templates[0].id] : []
-  );
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [collectionId, setCollectionId] = useState(product?.collection_id ?? "");
   const [front, setFront] = useState<ImageSourceValue>({
     sourceMode: product?.visual_mode ?? "upload",

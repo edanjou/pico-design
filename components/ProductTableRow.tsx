@@ -13,6 +13,8 @@ export default function ProductTableRow({
   collectionLabel,
   dimensions,
   imageUrl,
+  selected,
+  onToggleSelect,
   onEdit,
 }: {
   product: Product;
@@ -21,6 +23,8 @@ export default function ProductTableRow({
   collectionLabel: string | null;
   dimensions: { width_mm: number; height_mm: number } | null;
   imageUrl: string | null;
+  selected: boolean;
+  onToggleSelect: () => void;
   onEdit: (product: Product) => void;
 }) {
   const router = useRouter();
@@ -41,6 +45,9 @@ export default function ProductTableRow({
 
   return (
     <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+      <td className="p-4">
+        <input type="checkbox" checked={selected} onChange={onToggleSelect} />
+      </td>
       <td className="p-4">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

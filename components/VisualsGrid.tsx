@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import VisualForm from "@/components/VisualForm";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import { useSelection } from "@/components/useSelection";
 import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import type { Visual, VisualCollection } from "@/lib/types";
 
@@ -28,6 +30,8 @@ export default function VisualsGrid({
   const [collectionId, setCollectionId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const selection = useSelection();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const collectionName = useMemo(() => {
     const map = new Map(collections.map((c) => [c.id, c.name]));
@@ -58,6 +62,19 @@ export default function VisualsGrid({
       return;
     }
     router.refresh();
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selection.selected];
+    if (ids.length === 0) return;
+    if (!confirm(`Supprimer ${ids.length} visuel(s) ?`)) return;
+    setBulkDeleting(true);
+    const results = await Promise.all(ids.map((id) => fetch(`/api/visuals/${id}`, { method: "DELETE" })));
+    setBulkDeleting(false);
+    selection.clear();
+    router.refresh();
+    const failed = results.filter((r) => !r.ok).length;
+    if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
 
   return (
@@ -126,8 +143,25 @@ export default function VisualsGrid({
           >
             Gérer les collections
           </button>
+          {filtered.length > 0 && (
+            <button
+              type="button"
+              onClick={() => selection.toggleAll(filtered.map((v) => v.id))}
+              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
+            >
+              {filtered.every((v) => selection.selected.has(v.id)) ? "Tout désélectionner" : "Tout sélectionner"}
+            </button>
+          )}
         </div>
       </div>
+
+      <BulkActionsBar
+        count={selection.selected.size}
+        label="visuel"
+        deleting={bulkDeleting}
+        onDelete={handleBulkDelete}
+        onClear={selection.clear}
+      />
 
       {filtered.length === 0 ? (
         <p className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
@@ -138,9 +172,17 @@ export default function VisualsGrid({
           {filtered.map((v) => (
             <div
               key={v.id}
-              className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm"
+              className={`overflow-hidden rounded-xl border bg-white shadow-sm ${
+                selection.selected.has(v.id) ? "border-pico-maroon" : "border-neutral-200"
+              }`}
             >
-              <div className="flex h-32 items-center justify-center bg-neutral-50 p-3">
+              <div className="relative flex h-32 items-center justify-center bg-neutral-50 p-3">
+                <input
+                  type="checkbox"
+                  checked={selection.selected.has(v.id)}
+                  onChange={() => selection.toggle(v.id)}
+                  className="absolute left-2 top-2 h-4 w-4"
+                />
                 {v.fileUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={v.fileUrl} alt={v.name} className="max-h-full max-w-full object-contain" />

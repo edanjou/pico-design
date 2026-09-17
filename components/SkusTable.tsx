@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import SkuForm from "@/components/SkuForm";
 import SkuGroupsManager from "@/components/SkuGroupsManager";
 import Modal from "@/components/Modal";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import { useSelection } from "@/components/useSelection";
 import { FilePenIcon, TrashIcon } from "@/components/icons";
 import type { Sku, SkuGroup } from "@/lib/types";
 
@@ -21,6 +23,8 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
   const [modal, setModal] = useState<ModalState>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selection = useSelection();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const groupName = useMemo(() => {
     const map = new Map(skuGroups.map((g) => [g.id, g.name]));
@@ -51,6 +55,20 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
       return;
     }
     router.refresh();
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selection.selected];
+    if (ids.length === 0) return;
+    if (!confirm(`Supprimer ${ids.length} SKU ?`)) return;
+    setBulkDeleting(true);
+    setError(null);
+    const results = await Promise.all(ids.map((id) => fetch(`/api/skus/${id}`, { method: "DELETE" })));
+    setBulkDeleting(false);
+    selection.clear();
+    router.refresh();
+    const failed = results.filter((r) => !r.ok).length;
+    if (failed > 0) setError(`${failed} suppression(s) ont échoué.`);
   }
 
   return (
@@ -123,6 +141,14 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
+      <BulkActionsBar
+        count={selection.selected.size}
+        label="SKU"
+        deleting={bulkDeleting}
+        onDelete={handleBulkDelete}
+        onClear={selection.clear}
+      />
+
       {filtered.length === 0 ? (
         <p className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
           Aucun SKU ne correspond.
@@ -132,6 +158,13 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-sm font-semibold text-neutral-700">
+                <th className="w-10 p-4">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((s) => selection.selected.has(s.id))}
+                    onChange={() => selection.toggleAll(filtered.map((s) => s.id))}
+                  />
+                </th>
                 <th className="p-4">SKU</th>
                 <th className="p-4">Nom / descriptif</th>
                 <th className="p-4">Groupe</th>
@@ -141,6 +174,13 @@ export default function SkusTable({ skus, skuGroups }: { skus: Sku[]; skuGroups:
             <tbody>
               {filtered.map((s) => (
                 <tr key={s.id} className="border-t border-neutral-100">
+                  <td className="p-4">
+                    <input
+                      type="checkbox"
+                      checked={selection.selected.has(s.id)}
+                      onChange={() => selection.toggle(s.id)}
+                    />
+                  </td>
                   <td className="p-4 font-mono text-xs text-neutral-700">{s.sku}</td>
                   <td className="p-4">{s.name}</td>
                   <td className="p-4 text-neutral-500">{groupName(s.sku_group_id)}</td>

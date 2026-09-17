@@ -6,6 +6,8 @@ import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import { useSelection } from "@/components/useSelection";
 import type { Category, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 
@@ -48,6 +50,8 @@ export default function ProductsTable({
   const [collectionId, setCollectionId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
+  const selection = useSelection();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const categoryName = useMemo(() => {
     const map = new Map(categories.map((c) => [c.id, c.name]));
@@ -70,6 +74,21 @@ export default function ProductsTable({
   function handleSuccess() {
     setModal(null);
     router.refresh();
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selection.selected];
+    if (ids.length === 0) return;
+    if (!confirm(`Supprimer ${ids.length} produit(s) ?`)) return;
+    setBulkDeleting(true);
+    const results = await Promise.all(
+      ids.map((id) => fetch(`/api/products/${id}`, { method: "DELETE" }))
+    );
+    setBulkDeleting(false);
+    selection.clear();
+    router.refresh();
+    const failed = results.filter((r) => !r.ok).length;
+    if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
 
   return (
@@ -155,6 +174,14 @@ export default function ProductsTable({
         </div>
       </div>
 
+      <BulkActionsBar
+        count={selection.selected.size}
+        label="produit"
+        deleting={bulkDeleting}
+        onDelete={handleBulkDelete}
+        onClear={selection.clear}
+      />
+
       {filtered.length === 0 ? (
         <p className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
           Aucun produit ne correspond.
@@ -164,6 +191,13 @@ export default function ProductsTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-sm font-semibold text-neutral-700">
+                <th className="w-10 p-4">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((p) => selection.selected.has(p.id))}
+                    onChange={() => selection.toggleAll(filtered.map((p) => p.id))}
+                  />
+                </th>
                 <th className="p-4">Image</th>
                 <th className="p-4">
                   <button
@@ -191,6 +225,8 @@ export default function ProductsTable({
                   categoryLabel={categoryName(p.template?.category_id)}
                   collectionLabel={collectionName(p.collection_id)}
                   imageUrl={p.imageUrl}
+                  selected={selection.selected.has(p.id)}
+                  onToggleSelect={() => selection.toggle(p.id)}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
                 />
               ))}

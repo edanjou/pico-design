@@ -10,11 +10,15 @@ import { CopyIcon, EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/compon
 export default function TemplateRow({
   template,
   skuCode,
+  selected,
+  onToggleSelect,
   onPreview,
   onEdit,
 }: {
   template: TemplateWithOverlayUrl;
   skuCode: string | null;
+  selected: boolean;
+  onToggleSelect: () => void;
   onPreview: (template: Template) => void;
   onEdit: (template: TemplateWithOverlayUrl) => void;
 }) {
@@ -49,6 +53,9 @@ export default function TemplateRow({
 
   return (
     <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+      <td className="p-4">
+        <input type="checkbox" checked={selected} onChange={onToggleSelect} />
+      </td>
       <td className="p-4 font-semibold text-pico-black">{template.name}</td>
       <td className="p-4 text-neutral-500">
         {template.two_sided ? "Recto-verso" : "Recto"}

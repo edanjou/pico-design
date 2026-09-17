@@ -1,0 +1,46 @@
+"use client";
+
+import { SpinnerIcon } from "@/components/icons";
+
+export default function BulkActionsBar({
+  count,
+  label,
+  deleting,
+  onDelete,
+  onClear,
+}: {
+  count: number;
+  label: string;
+  deleting: boolean;
+  onDelete: () => void;
+  onClear: () => void;
+}) {
+  if (count === 0) return null;
+
+  return (
+    <div className="mb-4 flex items-center justify-between rounded-lg border border-pico-maroon/30 bg-pico-cream px-4 py-2 text-sm">
+      <span className="text-pico-black">
+        {count} {label}
+        {count > 1 ? "s" : ""} sélectionné{count > 1 ? "s" : ""}
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-neutral-600 hover:bg-neutral-50"
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-1.5 text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          {deleting && <SpinnerIcon className="h-4 w-4" />}
+          Supprimer
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -6,6 +6,8 @@ import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
 import CategoriesManager from "@/components/CategoriesManager";
 import Modal from "@/components/Modal";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import { useSelection } from "@/components/useSelection";
 import type { Category, Sku, Template } from "@/lib/types";
 
 export type TemplateWithOverlayUrl = Template & { overlayUrl: string | null };
@@ -39,6 +41,8 @@ export default function TemplatesTable({
   const [categoryId, setCategoryId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
+  const selection = useSelection();
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const skuCode = useMemo(() => {
     const map = new Map(skus.map((s) => [s.id, s.sku]));
@@ -55,6 +59,21 @@ export default function TemplatesTable({
   function handleSuccess() {
     setModal(null);
     router.refresh();
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selection.selected];
+    if (ids.length === 0) return;
+    if (!confirm(`Supprimer ${ids.length} modèle(s) ?`)) return;
+    setBulkDeleting(true);
+    const results = await Promise.all(
+      ids.map((id) => fetch(`/api/templates/${id}`, { method: "DELETE" }))
+    );
+    setBulkDeleting(false);
+    selection.clear();
+    router.refresh();
+    const failed = results.filter((r) => !r.ok).length;
+    if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
 
   return (
@@ -125,6 +144,14 @@ export default function TemplatesTable({
         </div>
       </div>
 
+      <BulkActionsBar
+        count={selection.selected.size}
+        label="modèle"
+        deleting={bulkDeleting}
+        onDelete={handleBulkDelete}
+        onClear={selection.clear}
+      />
+
       {filtered.length === 0 ? (
         <p className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
           Aucun modèle ne correspond.
@@ -134,6 +161,13 @@ export default function TemplatesTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-sm font-semibold text-neutral-700">
+                <th className="w-10 p-4">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((t) => selection.selected.has(t.id))}
+                    onChange={() => selection.toggleAll(filtered.map((t) => t.id))}
+                  />
+                </th>
                 <th className="p-4">
                   <button
                     type="button"
@@ -155,6 +189,8 @@ export default function TemplatesTable({
                   key={t.id}
                   template={t}
                   skuCode={skuCode(t.sku_id)}
+                  selected={selection.selected.has(t.id)}
+                  onToggleSelect={() => selection.toggle(t.id)}
                   onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
                 />

@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   const positionX = formData.get("positionX");
   const positionY = formData.get("positionY");
   const rotated = formData.get("rotated") === "true";
+  const logoEnabled = formData.get("showLogo") !== "false";
   // "frame" : cadre seul (traits + gabarit + logo), fond transparent, sans
   //   image ni visuel — calque fixe pendant le repositionnement.
   // "background" : image/visuel déjà recadré/mosaïqué, sans traits ni logo
@@ -60,7 +61,8 @@ export async function POST(request: Request) {
     let logoBuffer: Buffer | null = null;
     let overlayBuffer: Buffer | null = null;
     const showLogo =
-      side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back;
+      logoEnabled &&
+      (side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back);
     if (showLogo) {
       const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
       const color = typeof logoColor === "string" ? logoColor : "#000000";
@@ -101,10 +103,16 @@ export async function POST(request: Request) {
     });
   }
 
-  const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
-  const color = typeof logoColor === "string" ? logoColor : "#000000";
-  const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
-  const logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
+  const showLogo =
+    logoEnabled &&
+    (side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back);
+  let logoBuffer: Buffer | null = null;
+  if (showLogo) {
+    const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
+    const color = typeof logoColor === "string" ? logoColor : "#000000";
+    const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
+    logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
+  }
 
   let overlayBuffer: Buffer | null = null;
   if (template.overlay_path) {

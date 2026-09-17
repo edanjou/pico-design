@@ -47,13 +47,16 @@ export async function POST(request: Request) {
   const sourceBuffer = Buffer.from(await sourceData.arrayBuffer());
 
   // Logo Pico : forme + couleur choisies sur le produit (fichiers "neutres"
-  // du bucket "assets", recolorés dynamiquement).
-  const logoBuffer = await loadLogoImage(
-    admin,
-    product.logo_shape,
-    product.logo_color,
-    product.logo_secondary_color
-  );
+  // du bucket "assets", recolorés dynamiquement) — sauf si désactivé sur ce
+  // produit (product.show_logo).
+  const logoBuffer = product.show_logo
+    ? await loadLogoImage(
+        admin,
+        product.logo_shape,
+        product.logo_color,
+        product.logo_secondary_color
+      )
+    : null;
 
   const jobId = randomUUID();
   const outputPath = `${user.id}/${jobId}/output.pdf`;

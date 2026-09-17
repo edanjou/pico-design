@@ -47,6 +47,7 @@ export async function POST(request: Request) {
   const backPositionX = parsePositionValue(formData.get("backPositionX"));
   const backPositionY = parsePositionValue(formData.get("backPositionY"));
   const rotated = formData.get("rotated") === "true";
+  const showLogo = formData.get("showLogo") !== "false";
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -151,6 +152,7 @@ export async function POST(request: Request) {
       logoShape: shape,
       logoColor: color,
       logoSecondaryColor: secondaryColor,
+      showLogo,
       rotated,
       positionX,
       positionY,
@@ -175,6 +177,7 @@ export async function POST(request: Request) {
       logo_shape: shape,
       logo_color: color,
       logo_secondary_color: secondaryColor,
+      show_logo: showLogo,
       rotated,
       collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
       pdf_path: pdfPath,

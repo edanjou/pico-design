@@ -57,6 +57,7 @@ export default function ProductForm({
   });
   const [sameAsFront, setSameAsFront] = useState(false);
   const [rotated, setRotated] = useState(product?.rotated ?? false);
+  const [showLogo, setShowLogo] = useState(product?.show_logo ?? true);
   const [logoShape, setLogoShape] = useState<LogoShape>(product?.logo_shape ?? "logo");
   const [logoColor, setLogoColor] = useState(product?.logo_color ?? "#000000");
   const [logoSecondaryColor, setLogoSecondaryColor] = useState(
@@ -161,6 +162,7 @@ export default function ProductForm({
     formData.append("positionY", String(front.positionY));
     if (cId) formData.append("collectionId", cId);
     formData.append("rotated", String(rotated));
+    formData.append("showLogo", String(showLogo));
     if (front.sourceMode === "upload") {
       if (front.file) formData.append("image", front.file);
     } else {
@@ -450,7 +452,7 @@ export default function ProductForm({
           value={front}
           onChange={updateFront}
           currentImageUrl={currentImageUrl}
-          logo={frontLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
+          logo={frontLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
           previewUnavailableMessage={
             isMultiTemplate
               ? "Aperçu disponible pour un seul modèle à la fois — décoche pour n'en garder qu'un si tu veux vérifier le rendu avant de créer la collection."
@@ -461,7 +463,19 @@ export default function ProductForm({
 
       {showLogoSection && (
         <div>
-          <label className="mb-1 block text-sm font-medium">{logoLabel}</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-sm font-medium">{logoLabel}</label>
+            <label className="flex items-center gap-2 text-sm text-pico-black">
+              <input
+                type="checkbox"
+                checked={showLogo}
+                onChange={(e) => setShowLogo(e.target.checked)}
+              />
+              Afficher le logo
+            </label>
+          </div>
+          {showLogo && (
+          <>
           <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
             {LOGO_SHAPES.map((s) => (
               <button
@@ -538,6 +552,8 @@ export default function ProductForm({
               </div>
             </>
           )}
+          </>
+          )}
         </div>
       )}
 
@@ -570,7 +586,7 @@ export default function ProductForm({
               value={back}
               onChange={updateBack}
               currentImageUrl={currentBackImageUrl}
-              logo={backLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
+              logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
             />
           )}
         </div>

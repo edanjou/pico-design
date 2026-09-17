@@ -35,6 +35,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const backPositionX = parsePositionValue(formData.get("backPositionX"));
   const backPositionY = parsePositionValue(formData.get("backPositionY"));
   const rotated = formData.get("rotated") === "true";
+  const showLogo = formData.get("showLogo") !== "false";
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -65,6 +66,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     logo_shape: shape,
     logo_color: color,
     logo_secondary_color: secondaryColor,
+    show_logo: showLogo,
     rotated,
     collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
     image_position_x: positionX,
@@ -221,6 +223,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         logoShape: shape,
         logoColor: color,
         logoSecondaryColor: secondaryColor,
+        showLogo,
         rotated,
         positionX,
         positionY,

@@ -11,6 +11,7 @@ export interface GenerateProductPdfInput {
   logoShape: LogoShape;
   logoColor: string;
   logoSecondaryColor: string;
+  showLogo?: boolean;
   rotated?: boolean;
   positionX?: number;
   positionY?: number;
@@ -41,7 +42,9 @@ export async function generateAndStoreProductPdf(
   }
   const template = applyOrientation(rawTemplate, input.rotated ?? false);
 
-  const needsLogo = template.logo_on_front || (template.two_sided && template.logo_on_back);
+  const showLogo = input.showLogo ?? true;
+  const needsLogo =
+    showLogo && (template.logo_on_front || (template.two_sided && template.logo_on_back));
   const logoBuffer = needsLogo
     ? await loadLogoImage(admin, input.logoShape, input.logoColor, input.logoSecondaryColor)
     : null;
@@ -49,13 +52,13 @@ export async function generateAndStoreProductPdf(
   const pdfBuffer = await generatePrintReadyPdf({
     template,
     sourceImage: input.sourceImage,
-    logoImage: template.logo_on_front ? logoBuffer : null,
+    logoImage: showLogo && template.logo_on_front ? logoBuffer : null,
     positionX: input.positionX,
     positionY: input.positionY,
     backImage: template.two_sided ? input.backImage ?? null : null,
     backPositionX: input.backPositionX,
     backPositionY: input.backPositionY,
-    backLogoImage: template.two_sided && template.logo_on_back ? logoBuffer : null,
+    backLogoImage: showLogo && template.two_sided && template.logo_on_back ? logoBuffer : null,
   });
 
   const pdfPath = `products/${input.productId}/output.pdf`;

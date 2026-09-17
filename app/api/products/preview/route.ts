@@ -27,6 +27,12 @@ export async function POST(request: Request) {
   const positionX = formData.get("positionX");
   const positionY = formData.get("positionY");
   const existingImagePath = formData.get("existingImagePath");
+  // "frame" : cadre seul (traits + gabarit + logo), fond transparent, sans
+  //   image ni visuel — calque fixe pendant le repositionnement.
+  // "background" : image/visuel déjà recadré/mosaïqué, sans traits ni logo
+  //   — utilisé pour le calque mobile en mode mosaïque.
+  // (par défaut) : aperçu complet aplati (fond + traits + logo).
+  const mode = formData.get("mode");
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -42,6 +48,26 @@ export async function POST(request: Request) {
     .single<Template>();
   if (templateError || !template) {
     return NextResponse.json({ error: "Modèle introuvable." }, { status: 404 });
+  }
+
+  const admin = createAdminSupabaseClient();
+
+  if (mode === "frame") {
+    const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
+    const color = typeof logoColor === "string" ? logoColor : "#000000";
+    const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
+    const logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
+
+    let overlayBuffer: Buffer | null = null;
+    if (template.overlay_path) {
+      const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
+      overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
+    }
+
+    const png = await generateTemplatePreviewPng(template, logoBuffer, null, overlayBuffer, 0.5, 0.5, true);
+    return new NextResponse(new Uint8Array(png), {
+      headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+    });
   }
 
   let resolved;
@@ -61,7 +87,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const admin = createAdminSupabaseClient();
+  if (mode === "background") {
+    return new NextResponse(new Uint8Array(resolved.buffer), {
+      headers: { "Content-Type": resolved.contentType, "Cache-Control": "private, no-store" },
+    });
+  }
+
   const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
   const color = typeof logoColor === "string" ? logoColor : "#000000";
   const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";

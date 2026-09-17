@@ -15,6 +15,11 @@ const PREVIEW_MAX_DIM_PX = 900;
  * `overlayImage`, si fourni, est un gabarit de guidage (ex. position des
  * caméras) plaqué sur la zone de coupe finie — uniquement pour l'aperçu,
  * jamais inclus dans le PDF imprimé (voir lib/pdf/generate.ts).
+ *
+ * `transparent`, si vrai, ignore `sourceImage` et rend uniquement le
+ * "cadre" (ligne de coupe, marge de sécurité, gabarit, logo) sur fond
+ * transparent — utilisé côté client comme calque fixe pendant que l'image
+ * de fond est déplacée séparément pour le repositionnement.
  */
 export async function generateTemplatePreviewPng(
   template: Template,
@@ -22,7 +27,8 @@ export async function generateTemplatePreviewPng(
   sourceImage?: Buffer | null,
   overlayImage?: Buffer | null,
   positionX = 0.5,
-  positionY = 0.5
+  positionY = 0.5,
+  transparent = false
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -47,12 +53,14 @@ export async function generateTemplatePreviewPng(
   const safetyW = Math.max(0, trimW - safetyPx * 2);
   const safetyH = Math.max(0, trimH - safetyPx * 2);
 
+  const showPlaceholder = !sourceImage && !transparent;
+
   const linesSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
-      ${!sourceImage ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ""}
+      ${showPlaceholder ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ""}
       ${
         template.bleed_mm > 0
-          ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ef4444" stroke-width="1.5"/>`
+          ? `<rect x="${trimX}" y="${trimY}" width="${trimW}" height="${trimH}" fill="none" stroke="#ff00ff" stroke-width="1.5"/>`
           : ""
       }
       ${
@@ -61,7 +69,7 @@ export async function generateTemplatePreviewPng(
           : ""
       }
       ${
-        !sourceImage
+        showPlaceholder
           ? `<text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(
               14,
               Math.round(pageWidthPx * 0.06)
@@ -71,16 +79,25 @@ export async function generateTemplatePreviewPng(
     </svg>
   `;
 
-  const base = sourceImage
-    ? await sharp(await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY))
-        .flatten({ background: "#ffffff" })
-        .png()
-        .toBuffer()
-    : await sharp(Buffer.from(linesSvg)).png().toBuffer();
+  let base: Buffer;
+  const composites: sharp.OverlayOptions[] = [];
 
-  const composites: sharp.OverlayOptions[] = sourceImage
-    ? [{ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 }]
-    : [];
+  if (transparent) {
+    base = await sharp({
+      create: { width: pageWidthPx, height: pageHeightPx, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .png()
+      .toBuffer();
+    composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
+  } else if (sourceImage) {
+    base = await sharp(await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY))
+      .flatten({ background: "#ffffff" })
+      .png()
+      .toBuffer();
+    composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
+  } else {
+    base = await sharp(Buffer.from(linesSvg)).png().toBuffer();
+  }
 
   if (overlayImage && trimW > 0 && trimH > 0) {
     const overlayPng = await sharp(overlayImage)

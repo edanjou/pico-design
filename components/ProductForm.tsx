@@ -69,11 +69,22 @@ export default function ProductForm({
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
     null
   );
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const previewTokenRef = useRef(0);
-  const previewImgRef = useRef<HTMLImageElement>(null);
+  // Le "cadre" (traits de coupe/sécurité, gabarit, logo) est un calque
+  // transparent séparé du fond : il ne bouge jamais pendant le glisser, ce
+  // qui règle le problème "le cadre suit l'image quand on glisse".
+  const [frameOverlayUrl, setFrameOverlayUrl] = useState<string | null>(null);
+  const [frameLoading, setFrameLoading] = useState(false);
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const frameTokenRef = useRef(0);
+  // Le fond, lui, dépend du mode : en upload/plein format, on affiche
+  // directement l'image brute côté client (object-position instantané, pas
+  // d'aller-retour serveur) ; en mosaïque, le motif recadré doit être rendu
+  // côté serveur (régénéré avec un léger débounce pendant le glisser).
+  const [tileBackgroundUrl, setTileBackgroundUrl] = useState<string | null>(null);
+  const [tileBgLoading, setTileBgLoading] = useState(false);
+  const [tileBgError, setTileBgError] = useState<string | null>(null);
+  const tileBgTokenRef = useRef(0);
+  const previewBoxRef = useRef<HTMLDivElement>(null);
   const draggingPreviewRef = useRef(false);
   const lastDragPointRef = useRef<{ x: number; y: number } | null>(null);
   const [dragOffsetPx, setDragOffsetPx] = useState({ x: 0, y: 0 });
@@ -91,86 +102,122 @@ export default function ProductForm({
   // le repositionnement soit possible sans devoir re-uploader.
   const hasUploadSource = Boolean(file) || (isEditing && sourceMode === "upload" && Boolean(product?.image_path));
 
-  // Régénère automatiquement l'aperçu (visuel + logo, exactement comme sur
-  // le PDF final) dès que le modèle, le visuel, le mode ou la taille de
-  // répétition changent — pas besoin de cliquer sur un bouton séparé.
+  const hasSource = sourceMode === "upload" ? hasUploadSource : Boolean(visualId);
+  const canPosition = !isMultiTemplate && Boolean(previewTemplateId) && hasSource;
+
+  // Régénère le calque "cadre" (traits de coupe/sécurité, gabarit, logo —
+  // fond transparent) dès que le modèle ou le logo changent. Indépendant de
+  // la position : ce calque ne bouge jamais pendant le glisser.
   useEffect(() => {
-    const ready =
-      Boolean(previewTemplateId) && (sourceMode === "upload" ? hasUploadSource : Boolean(visualId));
-    if (!ready) {
-      setPreviewImageUrl((old) => {
+    if (!previewTemplateId || isMultiTemplate) {
+      setFrameOverlayUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
       });
-      setPreviewError(null);
+      setFrameError(null);
       return;
     }
 
-    const token = ++previewTokenRef.current;
+    const token = ++frameTokenRef.current;
     const timeout = setTimeout(async () => {
-      setPreviewLoading(true);
-      setPreviewError(null);
+      setFrameLoading(true);
+      setFrameError(null);
 
       const formData = new FormData();
       formData.append("templateId", previewTemplateId);
       formData.append("logoShape", logoShape);
       formData.append("logoColor", logoColor);
       formData.append("logoSecondaryColor", logoSecondaryColor);
-      formData.append("positionX", String(imagePositionX));
-      formData.append("positionY", String(imagePositionY));
-      if (sourceMode === "upload") {
-        if (file) formData.append("image", file);
-        else if (isEditing && product?.image_path) formData.append("existingImagePath", product.image_path);
-      } else {
-        formData.append("visualId", visualId);
-        formData.append("visualMode", sourceMode);
-        if (sourceMode === "tile") formData.append("tileSizeMm", String(tileSizeMm));
-      }
+      formData.append("mode", "frame");
 
       const res = await fetch("/api/products/preview", { method: "POST", body: formData });
-      if (token !== previewTokenRef.current) return; // une saisie plus récente a pris le relais
+      if (token !== frameTokenRef.current) return;
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setPreviewError(data.error ?? "Erreur lors de la génération de l'aperçu.");
-        setPreviewLoading(false);
+        setFrameError(data.error ?? "Erreur lors de la génération du cadre.");
+        setFrameLoading(false);
         return;
       }
       const blob = await res.blob();
-      setPreviewImageUrl((old) => {
+      setFrameOverlayUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return URL.createObjectURL(blob);
       });
-      setPreviewLoading(false);
-    }, 400);
+      setFrameLoading(false);
+    }, 150);
 
     return () => clearTimeout(timeout);
-  }, [
-    previewTemplateId,
-    sourceMode,
-    visualId,
-    tileSizeMm,
-    file,
-    hasUploadSource,
-    logoShape,
-    logoColor,
-    logoSecondaryColor,
-    imagePositionX,
-    imagePositionY,
-  ]);
+  }, [previewTemplateId, isMultiTemplate, logoShape, logoColor, logoSecondaryColor]);
 
   useEffect(() => {
     return () => {
-      if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
+      if (frameOverlayUrl) URL.revokeObjectURL(frameOverlayUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Une fois le nouvel aperçu (déjà recadré à la bonne position) chargé, on
-  // efface le décalage visuel temporaire appliqué pendant le glisser.
+  // Régénère le fond en mode mosaïque (motif recadré/répété, sans traits ni
+  // logo) côté serveur — en upload/plein format, le fond est affiché
+  // directement côté client (voir le rendu plus bas), aucun aller-retour
+  // serveur n'est nécessaire pour le glisser.
+  useEffect(() => {
+    if (sourceMode !== "tile" || !canPosition) {
+      setTileBackgroundUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return null;
+      });
+      setTileBgError(null);
+      return;
+    }
+
+    const token = ++tileBgTokenRef.current;
+    const timeout = setTimeout(async () => {
+      setTileBgLoading(true);
+      setTileBgError(null);
+
+      const formData = new FormData();
+      formData.append("templateId", previewTemplateId);
+      formData.append("visualId", visualId);
+      formData.append("visualMode", "tile");
+      formData.append("tileSizeMm", String(tileSizeMm));
+      formData.append("positionX", String(imagePositionX));
+      formData.append("positionY", String(imagePositionY));
+      formData.append("mode", "background");
+
+      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
+      if (token !== tileBgTokenRef.current) return;
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTileBgError(data.error ?? "Erreur lors de la génération de l'aperçu.");
+        setTileBgLoading(false);
+        return;
+      }
+      const blob = await res.blob();
+      setTileBackgroundUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return URL.createObjectURL(blob);
+      });
+      setTileBgLoading(false);
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [sourceMode, canPosition, previewTemplateId, visualId, tileSizeMm, imagePositionX, imagePositionY]);
+
+  useEffect(() => {
+    return () => {
+      if (tileBackgroundUrl) URL.revokeObjectURL(tileBackgroundUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Une fois le nouveau fond mosaïque (déjà recadré à la bonne position)
+  // chargé, on efface le décalage visuel temporaire appliqué pendant le
+  // glisser.
   useEffect(() => {
     setDragOffsetPx({ x: 0, y: 0 });
-  }, [previewImageUrl]);
+  }, [tileBackgroundUrl]);
 
   // Construit le nom automatiquement tant que l'utilisateur n'a pas modifié
   // le champ à la main. Avec un seul modèle : Modèle — Visuel. Avec
@@ -208,20 +255,21 @@ export default function ProductForm({
     setDragOffsetPx({ x: 0, y: 0 });
   }
 
-  // Glisser directement sur l'aperçu pour repositionner l'image : le drag
-  // met à jour la position (0..1) envoyée au serveur (régénération
-  // debouncée), tout en déplaçant l'aperçu déjà affiché via une transform
-  // CSS pour un retour visuel immédiat, remis à zéro dès que le nouvel
-  // aperçu recadré arrive (voir l'effet sur previewImageUrl ci-dessus).
-  function handlePreviewPointerDown(e: React.PointerEvent<HTMLImageElement>) {
+  // Glisser directement sur l'aperçu pour repositionner l'image, avec le
+  // cadre (traits + logo) qui reste fixe : en upload/plein format, le fond
+  // est une <img> brute en object-position, mise à jour en direct depuis
+  // imagePositionX/Y (aucun aller-retour serveur, donc parfaitement fluide).
+  // En mosaïque, le fond vient du serveur (débouncé) ; dragOffsetPx ajoute
+  // un retour visuel immédiat via transform en attendant la régénération.
+  function handlePreviewPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     draggingPreviewRef.current = true;
     lastDragPointRef.current = { x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
-  function handlePreviewPointerMove(e: React.PointerEvent<HTMLImageElement>) {
-    if (!draggingPreviewRef.current || !lastDragPointRef.current || !previewImgRef.current) return;
-    const rect = previewImgRef.current.getBoundingClientRect();
+  function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draggingPreviewRef.current || !lastDragPointRef.current || !previewBoxRef.current) return;
+    const rect = previewBoxRef.current.getBoundingClientRect();
     const dxPx = e.clientX - lastDragPointRef.current.x;
     const dyPx = e.clientY - lastDragPointRef.current.y;
     lastDragPointRef.current = { x: e.clientX, y: e.clientY };
@@ -367,7 +415,21 @@ export default function ProductForm({
     );
   }
 
-  const canDragPreview = !isMultiTemplate && Boolean(previewImageUrl);
+  const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
+  const pageAspectRatio = previewTemplate
+    ? (previewTemplate.width_mm + previewTemplate.bleed_mm * 2) /
+      (previewTemplate.height_mm + previewTemplate.bleed_mm * 2)
+    : 1;
+  const selectedVisual = visuals.find((v) => v.id === visualId) ?? null;
+  const rawBackgroundUrl =
+    sourceMode === "upload"
+      ? preview ?? currentImageUrl ?? null
+      : sourceMode === "full"
+      ? selectedVisual?.fileUrl ?? null
+      : null;
+  const backgroundUrl = sourceMode === "tile" ? tileBackgroundUrl : rawBackgroundUrl;
+  const previewLoading = frameLoading || (sourceMode === "tile" && tileBgLoading);
+  const previewError = frameError ?? (sourceMode === "tile" ? tileBgError : null);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -631,7 +693,7 @@ export default function ProductForm({
               </span>
             )}
           </label>
-          {canDragPreview && (
+          {canPosition && (
             <button
               type="button"
               onClick={recenterPosition}
@@ -649,23 +711,45 @@ export default function ProductForm({
         ) : (
           <>
             {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
-            {previewImageUrl ? (
-              <div className="mt-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  ref={previewImgRef}
-                  src={previewImageUrl}
-                  alt="Aperçu du produit"
-                  draggable={false}
+            {canPosition ? (
+              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <div
+                  ref={previewBoxRef}
                   onPointerDown={handlePreviewPointerDown}
                   onPointerMove={handlePreviewPointerMove}
                   onPointerUp={handlePreviewPointerUp}
                   onPointerLeave={handlePreviewPointerUp}
-                  className="mx-auto max-h-72 w-auto cursor-grab touch-none select-none active:cursor-grabbing"
-                  style={{ transform: `translate(${dragOffsetPx.x}px, ${dragOffsetPx.y}px)` }}
-                />
+                  className="relative mx-auto w-full max-w-xs touch-none select-none overflow-hidden rounded border border-neutral-200 bg-neutral-200 cursor-grab active:cursor-grabbing"
+                  style={{ aspectRatio: String(pageAspectRatio) }}
+                >
+                  {/* Fond : bouge pendant le glisser, le cadre (ci-dessous) reste fixe. */}
+                  {backgroundUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={backgroundUrl}
+                      alt=""
+                      draggable={false}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={
+                        sourceMode === "tile"
+                          ? { transform: `translate(${dragOffsetPx.x}px, ${dragOffsetPx.y}px)` }
+                          : { objectPosition: `${imagePositionX * 100}% ${imagePositionY * 100}%` }
+                      }
+                    />
+                  )}
+                  {/* Cadre : traits de coupe/sécurité + gabarit + logo, fond transparent, jamais déplacé. */}
+                  {frameOverlayUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={frameOverlayUrl}
+                      alt="Aperçu du produit"
+                      draggable={false}
+                      className="pointer-events-none absolute inset-0 h-full w-full"
+                    />
+                  )}
+                </div>
                 <p className="mt-2 text-center text-xs text-neutral-500">
-                  Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection ·
+                  Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection ·
                   glisse l&apos;image pour la repositionner.
                 </p>
               </div>

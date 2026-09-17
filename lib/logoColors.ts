@@ -18,6 +18,11 @@ export const LOGO_COLOR_PALETTE: { name: string; hex: string }[] = [
 
 export const DEFAULT_LOGO_COLOR = "#000000";
 
+// N'importe quelle couleur hexadécimale valide est acceptée (pas seulement
+// celles de la palette Pico) — le sélecteur de couleur libre permet de
+// choisir en dehors de la palette.
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
 export function isValidLogoColor(hex: string): boolean {
-  return LOGO_COLOR_PALETTE.some((c) => c.hex.toLowerCase() === hex.toLowerCase());
+  return HEX_COLOR_RE.test(hex);
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon } from "@/components/icons";
 
 const links = [
   {
@@ -7,42 +8,21 @@ const links = [
     title: "Modèles",
     description: "Dimensions, fond perdu et positionnement du logo.",
     gradient: "from-teal-400 to-emerald-600",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M4 5.75A1.75 1.75 0 0 1 5.75 4h4.5A1.75 1.75 0 0 1 12 5.75v4.5A1.75 1.75 0 0 1 10.25 12h-4.5A1.75 1.75 0 0 1 4 10.25v-4.5ZM4 18.25A1.75 1.75 0 0 1 5.75 16.5h4.5A1.75 1.75 0 0 1 12 18.25v.5A1.75 1.75 0 0 1 10.25 20.5h-4.5A1.75 1.75 0 0 1 4 18.75v-.5ZM12 13.75A1.75 1.75 0 0 1 13.75 12h4.5A1.75 1.75 0 0 1 20 13.75v4.5A1.75 1.75 0 0 1 18.25 20h-4.5A1.75 1.75 0 0 1 12 18.25v-4.5ZM12 5.75A1.75 1.75 0 0 1 13.75 4h4.5A1.75 1.75 0 0 1 20 5.75v.5A1.75 1.75 0 0 1 18.25 8h-4.5A1.75 1.75 0 0 1 12 6.25v-.5Z"
-      />
-    ),
+    icon: SquareDashedKanbanIcon,
   },
   {
     href: "/visuals",
     title: "Visuels",
     description: "Une banque de patterns réutilisables sur les produits.",
     gradient: "from-amber-400 to-yellow-500",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25V6.75ZM8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM4.5 16.5l5-5 3.5 3.5L16.5 11l3.5 4"
-      />
-    ),
+    icon: SwatchBookIcon,
   },
   {
     href: "/products",
     title: "Produits",
     description: "Créer des produits à partir d'un modèle et d'une image.",
     gradient: "from-pink-400 to-rose-500",
-    icon: (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M4 6.75A1.75 1.75 0 0 1 5.75 5h12.5A1.75 1.75 0 0 1 20 6.75v10.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25V6.75ZM4 15l4-4 3 3 4.5-4.5L20 14M9 9.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"
-      />
-    ),
+    icon: RocketIcon,
   },
 ];
 
@@ -90,9 +70,7 @@ export default async function DashboardPage() {
             <span
               className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white ${link.gradient}`}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
-                {link.icon}
-              </svg>
+              <link.icon className="h-6 w-6" />
             </span>
             <span className="font-heading text-lg font-semibold text-pico-black">
               {link.title}

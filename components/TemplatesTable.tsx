@@ -173,7 +173,7 @@ export default function TemplatesTable({
       )}
 
       {modal?.mode === "preview" && (
-        <Modal title={`Aperçu — ${modal.template.name}`} onClose={() => setModal(null)}>
+        <Modal title={`Aperçu — ${modal.template.name}`} onClose={() => setModal(null)} wide>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/templates/${modal.template.id}/preview?t=${modal.nonce}`}
@@ -191,6 +191,7 @@ export default function TemplatesTable({
         <Modal
           title={modal.mode === "create" ? "Nouveau modèle" : `Modifier « ${modal.template.name} »`}
           onClose={() => setModal(null)}
+          wide
         >
           <TemplateForm
             template={modal.mode === "edit" ? modal.template : undefined}

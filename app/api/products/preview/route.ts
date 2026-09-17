@@ -56,16 +56,17 @@ export async function POST(request: Request) {
   if (mode === "frame") {
     let logoBuffer: Buffer | null = null;
     let overlayBuffer: Buffer | null = null;
-    if (side === "front") {
+    const showLogo =
+      side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back;
+    if (showLogo) {
       const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
       const color = typeof logoColor === "string" ? logoColor : "#000000";
       const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
       logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
-
-      if (template.overlay_path) {
-        const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
-        overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
-      }
+    }
+    if (side === "front" && template.overlay_path) {
+      const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
+      overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
     }
 
     const png = await generateTemplatePreviewPng(template, logoBuffer, null, overlayBuffer, 0.5, 0.5, true);

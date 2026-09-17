@@ -103,3 +103,71 @@ export function TrashIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function SquareDashedKanbanIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M9 3h1" />
+      <path d="M14 3h1" />
+      <path d="M19 3a2 2 0 0 1 2 2" />
+      <path d="M21 9v1" />
+      <path d="M21 14v1" />
+      <path d="M21 19a2 2 0 0 1-2 2" />
+      <path d="M14 21h1" />
+      <path d="M9 21h1" />
+      <path d="M5 21a2 2 0 0 1-2-2" />
+      <path d="M3 14v1" />
+      <path d="M3 9v1" />
+      <path d="M3 5a2 2 0 0 1 2-2" />
+      <path d="M7 8v8" />
+      <path d="M12 8v8" />
+      <path d="M17 8v5" />
+    </svg>
+  );
+}
+
+export function SwatchBookIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M11 17a4 4 0 0 1-8 0V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2Z" />
+      <path d="M16.7 13H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3" />
+      <path d="M7 17h.01" />
+      <path d="m11 8 2.3-2.3a2.4 2.4 0 0 1 3.404.004L18.6 7.6a2.4 2.4 0 0 1 .026 3.434L9.9 19.8" />
+    </svg>
+  );
+}
+
+export function RocketIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    </svg>
+  );
+}

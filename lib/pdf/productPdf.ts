@@ -38,22 +38,21 @@ export async function generateAndStoreProductPdf(
     throw new Error("Modèle introuvable pour la génération du PDF.");
   }
 
-  const logoBuffer = await loadLogoImage(
-    admin,
-    input.logoShape,
-    input.logoColor,
-    input.logoSecondaryColor
-  );
+  const needsLogo = template.logo_on_front || (template.two_sided && template.logo_on_back);
+  const logoBuffer = needsLogo
+    ? await loadLogoImage(admin, input.logoShape, input.logoColor, input.logoSecondaryColor)
+    : null;
 
   const pdfBuffer = await generatePrintReadyPdf({
     template,
     sourceImage: input.sourceImage,
-    logoImage: logoBuffer,
+    logoImage: template.logo_on_front ? logoBuffer : null,
     positionX: input.positionX,
     positionY: input.positionY,
     backImage: template.two_sided ? input.backImage ?? null : null,
     backPositionX: input.backPositionX,
     backPositionY: input.backPositionY,
+    backLogoImage: template.two_sided && template.logo_on_back ? logoBuffer : null,
   });
 
   const pdfPath = `products/${input.productId}/output.pdf`;

@@ -44,6 +44,8 @@ export default function TemplateForm({
     logo_margin_x_mm: template?.logo_margin_x_mm ?? 5,
     logo_margin_y_mm: template?.logo_margin_y_mm ?? 5,
     two_sided: template?.two_sided ?? false,
+    logo_on_front: template?.logo_on_front ?? true,
+    logo_on_back: template?.logo_on_back ?? false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,7 +225,7 @@ export default function TemplateForm({
         <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
           <button
             type="button"
-            onClick={() => update("two_sided", false)}
+            onClick={() => setForm((f) => ({ ...f, two_sided: false, logo_on_back: false }))}
             className={`flex-1 rounded-md px-2 py-1.5 ${
               !form.two_sided ? "bg-pico-black text-white" : "text-neutral-600 hover:bg-neutral-100"
             }`}
@@ -249,82 +251,113 @@ export default function TemplateForm({
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Position du logo</label>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-neutral-500">Alignement horizontal</label>
-            <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
-              {H_ALIGNS.map((h) => (
-                <button
-                  key={h.value}
-                  type="button"
-                  onClick={() => update("logo_h_align", h.value)}
-                  className={`flex-1 rounded-md px-2 py-1.5 ${
-                    form.logo_h_align === h.value
-                      ? "bg-pico-black text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  {h.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-neutral-500">Alignement vertical</label>
-            <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
-              {V_ALIGNS.map((v) => (
-                <button
-                  key={v.value}
-                  type="button"
-                  onClick={() => update("logo_v_align", v.value)}
-                  className={`flex-1 rounded-md px-2 py-1.5 ${
-                    form.logo_v_align === v.value
-                      ? "bg-pico-black text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <label className="mb-2 block text-sm font-medium">Logo Pico</label>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm text-pico-black">
+            <input
+              type="checkbox"
+              checked={form.logo_on_front}
+              onChange={(e) => update("logo_on_front", e.target.checked)}
+            />
+            Sur le recto
+          </label>
+          {form.two_sided && (
+            <label className="flex items-center gap-2 text-sm text-pico-black">
+              <input
+                type="checkbox"
+                checked={form.logo_on_back}
+                onChange={(e) => update("logo_on_back", e.target.checked)}
+              />
+              Sur le verso
+            </label>
+          )}
         </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Largeur logo ({unit === "mm" ? "mm" : "po"})</label>
-            <input
-              type="number"
-              step={unit === "mm" ? "0.1" : "0.01"}
-              value={toDisplay(form.logo_width_mm)}
-              onChange={(e) => updateFromDisplay("logo_width_mm", parseFloat(e.target.value) || 0)}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Marge côtés ({unit === "mm" ? "mm" : "po"})</label>
-            <input
-              type="number"
-              step={unit === "mm" ? "0.1" : "0.01"}
-              value={toDisplay(form.logo_margin_x_mm)}
-              onChange={(e) => updateFromDisplay("logo_margin_x_mm", parseFloat(e.target.value) || 0)}
-              disabled={form.logo_h_align === "center"}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 disabled:bg-neutral-100 disabled:text-neutral-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Marge hauteur ({unit === "mm" ? "mm" : "po"})</label>
-            <input
-              type="number"
-              step={unit === "mm" ? "0.1" : "0.01"}
-              value={toDisplay(form.logo_margin_y_mm)}
-              onChange={(e) => updateFromDisplay("logo_margin_y_mm", parseFloat(e.target.value) || 0)}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-            />
-          </div>
-        </div>
+        {!form.logo_on_front && !form.logo_on_back && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Les produits basés sur ce modèle n&apos;auront pas de logo Pico.
+          </p>
+        )}
       </div>
+
+      {(form.logo_on_front || form.logo_on_back) && (
+        <div>
+          <label className="mb-2 block text-sm font-medium">Position du logo</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-neutral-500">Alignement horizontal</label>
+              <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+                {H_ALIGNS.map((h) => (
+                  <button
+                    key={h.value}
+                    type="button"
+                    onClick={() => update("logo_h_align", h.value)}
+                    className={`flex-1 rounded-md px-2 py-1.5 ${
+                      form.logo_h_align === h.value
+                        ? "bg-pico-black text-white"
+                        : "text-neutral-600 hover:bg-neutral-100"
+                    }`}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-neutral-500">Alignement vertical</label>
+              <div className="mt-1 flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+                {V_ALIGNS.map((v) => (
+                  <button
+                    key={v.value}
+                    type="button"
+                    onClick={() => update("logo_v_align", v.value)}
+                    className={`flex-1 rounded-md px-2 py-1.5 ${
+                      form.logo_v_align === v.value
+                        ? "bg-pico-black text-white"
+                        : "text-neutral-600 hover:bg-neutral-100"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium">Largeur logo ({unit === "mm" ? "mm" : "po"})</label>
+              <input
+                type="number"
+                step={unit === "mm" ? "0.1" : "0.01"}
+                value={toDisplay(form.logo_width_mm)}
+                onChange={(e) => updateFromDisplay("logo_width_mm", parseFloat(e.target.value) || 0)}
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Marge côtés ({unit === "mm" ? "mm" : "po"})</label>
+              <input
+                type="number"
+                step={unit === "mm" ? "0.1" : "0.01"}
+                value={toDisplay(form.logo_margin_x_mm)}
+                onChange={(e) => updateFromDisplay("logo_margin_x_mm", parseFloat(e.target.value) || 0)}
+                disabled={form.logo_h_align === "center"}
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 disabled:bg-neutral-100 disabled:text-neutral-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Marge hauteur ({unit === "mm" ? "mm" : "po"})</label>
+              <input
+                type="number"
+                step={unit === "mm" ? "0.1" : "0.01"}
+                value={toDisplay(form.logo_margin_y_mm)}
+                onChange={(e) => updateFromDisplay("logo_margin_y_mm", parseFloat(e.target.value) || 0)}
+                className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium">

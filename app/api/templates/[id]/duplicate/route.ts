@@ -53,6 +53,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       logo_margin_x_mm: source.logo_margin_x_mm,
       logo_margin_y_mm: source.logo_margin_y_mm,
       two_sided: source.two_sided,
+      logo_on_front: source.logo_on_front,
+      logo_on_back: source.logo_on_back,
       overlay_path: overlayPath,
       created_by: user.id,
     })

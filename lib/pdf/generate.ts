@@ -11,11 +11,16 @@ export interface GeneratePdfInput {
   logoImage: Buffer | null;
   positionX?: number;
   positionY?: number;
-  // Image de verso (optionnelle) : ajoutée comme deuxième page du PDF, sans
-  // logo. Uniquement pertinent pour les modèles recto-verso.
+  // Image de verso (optionnelle) : ajoutée comme deuxième page du PDF.
+  // Uniquement pertinent pour les modèles recto-verso.
   backImage?: Buffer | null;
   backPositionX?: number;
   backPositionY?: number;
+  // Logo à afficher sur le verso, si le modèle est configuré pour ça
+  // (`logo_on_back`) — indépendant du logo du recto, qui peut avoir sa
+  // propre forme/couleur mais utilise le même fichier ici (voir
+  // lib/pdf/productPdf.ts, qui décide quel côté reçoit `logoImage`).
+  backLogoImage?: Buffer | null;
 }
 
 /**
@@ -34,6 +39,7 @@ export async function generatePrintReadyPdf({
   backImage = null,
   backPositionX = 0.5,
   backPositionY = 0.5,
+  backLogoImage = null,
 }: GeneratePdfInput): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -62,7 +68,7 @@ export async function generatePrintReadyPdf({
       backPositionY,
       targetPxWidth,
       targetPxHeight,
-      null
+      backLogoImage
     );
   }
 

@@ -213,6 +213,7 @@ export default function ProductsTable({
         <Modal
           title={modal.mode === "create" ? "Nouveau produit" : `Modifier « ${modal.product.name} »`}
           onClose={() => setModal(null)}
+          wide
         >
           <ProductForm
             templates={templates}

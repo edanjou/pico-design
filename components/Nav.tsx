@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon } from "@/components/icons";
 
 export default function Nav() {
   const router = useRouter();
@@ -22,13 +23,16 @@ export default function Nav() {
             <img src="/pico-noir.svg" alt="Pico Design" className="h-6 w-auto" />
           </Link>
           <nav className="flex gap-4 text-sm text-neutral-600">
-            <Link href="/templates" className="hover:text-pico-accent">
+            <Link href="/templates" className="flex items-center gap-1.5 hover:text-pico-accent">
+              <SquareDashedKanbanIcon className="h-4 w-4" />
               Modèles
             </Link>
-            <Link href="/visuals" className="hover:text-pico-accent">
+            <Link href="/visuals" className="flex items-center gap-1.5 hover:text-pico-accent">
+              <SwatchBookIcon className="h-4 w-4" />
               Visuels
             </Link>
-            <Link href="/products" className="hover:text-pico-accent">
+            <Link href="/products" className="flex items-center gap-1.5 hover:text-pico-accent">
+              <RocketIcon className="h-4 w-4" />
               Produits
             </Link>
           </nav>

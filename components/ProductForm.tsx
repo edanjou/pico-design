@@ -78,6 +78,20 @@ export default function ProductForm({
   const showBackSection = !isMultiTemplate && Boolean(previewTemplate?.two_sided);
   const someSelectedAreTwoSided =
     !isEditing && selectedTemplateIds.some((id) => templates.find((t) => t.id === id)?.two_sided);
+  // Sans modèle unique connu (aucun choisi, ou plusieurs sélectionnés), on
+  // ne peut pas savoir si le logo s'applique — on affiche l'option par
+  // défaut, le serveur respecte de toute façon les réglages du modèle réel
+  // à la génération.
+  const frontLogoEnabled = previewTemplate ? previewTemplate.logo_on_front : true;
+  const backLogoEnabled = previewTemplate ? previewTemplate.two_sided && previewTemplate.logo_on_back : false;
+  const showLogoSection = !previewTemplate || frontLogoEnabled || backLogoEnabled;
+  const logoLabel = !previewTemplate
+    ? "Logo"
+    : frontLogoEnabled && backLogoEnabled
+    ? "Logo (recto et verso)"
+    : backLogoEnabled
+    ? "Logo (verso uniquement)"
+    : "Logo (recto uniquement)";
 
   function updateFront(patch: Partial<ImageSourceValue>) {
     setFront((f) => ({ ...f, ...patch }));
@@ -381,7 +395,7 @@ export default function ProductForm({
           value={front}
           onChange={updateFront}
           currentImageUrl={currentImageUrl}
-          logo={{ shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor }}
+          logo={frontLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
           previewUnavailableMessage={
             isMultiTemplate
               ? "Aperçu disponible pour un seul modèle à la fois — décoche pour n'en garder qu'un si tu veux vérifier le rendu avant de créer la collection."
@@ -390,69 +404,87 @@ export default function ProductForm({
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium">Logo (recto uniquement)</label>
-        <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
-          {LOGO_SHAPES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => setLogoShape(s.value)}
-              className={`flex-1 rounded-md px-2 py-1.5 ${
-                logoShape === s.value
-                  ? "bg-pico-black text-white"
-                  : "text-neutral-600 hover:bg-neutral-100"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+      {showLogoSection && (
+        <div>
+          <label className="mb-1 block text-sm font-medium">{logoLabel}</label>
+          <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
+            {LOGO_SHAPES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setLogoShape(s.value)}
+                className={`flex-1 rounded-md px-2 py-1.5 ${
+                  logoShape === s.value
+                    ? "bg-pico-black text-white"
+                    : "text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
 
-        <p className="mb-1 mt-3 text-xs text-neutral-500">
-          {logoShape === "pastille" ? "Couleur de la pastille" : "Couleur du logo"}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {LOGO_COLOR_PALETTE.map((c) => (
-            <button
-              key={c.hex}
-              type="button"
-              onClick={() => setLogoColor(c.hex)}
-              title={c.name}
-              aria-label={c.name}
-              className={`h-7 w-7 rounded-full border ${
-                logoColor === c.hex
-                  ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
-                  : "border-neutral-300"
-              }`}
-              style={{ backgroundColor: c.hex }}
+          <p className="mb-1 mt-3 text-xs text-neutral-500">
+            {logoShape === "pastille" ? "Couleur de la pastille" : "Couleur du logo"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {LOGO_COLOR_PALETTE.map((c) => (
+              <button
+                key={c.hex}
+                type="button"
+                onClick={() => setLogoColor(c.hex)}
+                title={c.name}
+                aria-label={c.name}
+                className={`h-7 w-7 rounded-full border ${
+                  logoColor === c.hex
+                    ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
+                    : "border-neutral-300"
+                }`}
+                style={{ backgroundColor: c.hex }}
+              />
+            ))}
+            <input
+              type="color"
+              value={logoColor}
+              onChange={(e) => setLogoColor(e.target.value)}
+              title="Couleur personnalisée"
+              aria-label="Couleur personnalisée"
+              className="h-7 w-7 cursor-pointer rounded-full border border-neutral-300 bg-transparent p-0.5"
             />
-          ))}
-        </div>
+          </div>
 
-        {logoShape === "pastille" && (
-          <>
-            <p className="mb-1 mt-3 text-xs text-neutral-500">Couleur du logo à l&apos;intérieur</p>
-            <div className="flex flex-wrap gap-2">
-              {LOGO_COLOR_PALETTE.map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => setLogoSecondaryColor(c.hex)}
-                  title={c.name}
-                  aria-label={c.name}
-                  className={`h-7 w-7 rounded-full border ${
-                    logoSecondaryColor === c.hex
-                      ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
-                      : "border-neutral-300"
-                  }`}
-                  style={{ backgroundColor: c.hex }}
+          {logoShape === "pastille" && (
+            <>
+              <p className="mb-1 mt-3 text-xs text-neutral-500">Couleur du logo à l&apos;intérieur</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {LOGO_COLOR_PALETTE.map((c) => (
+                  <button
+                    key={c.hex}
+                    type="button"
+                    onClick={() => setLogoSecondaryColor(c.hex)}
+                    title={c.name}
+                    aria-label={c.name}
+                    className={`h-7 w-7 rounded-full border ${
+                      logoSecondaryColor === c.hex
+                        ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
+                        : "border-neutral-300"
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={logoSecondaryColor}
+                  onChange={(e) => setLogoSecondaryColor(e.target.value)}
+                  title="Couleur personnalisée"
+                  aria-label="Couleur personnalisée"
+                  className="h-7 w-7 cursor-pointer rounded-full border border-neutral-300 bg-transparent p-0.5"
                 />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {showBackSection && (
         <div className="border-t border-neutral-200 pt-4">
@@ -466,7 +498,7 @@ export default function ProductForm({
             value={back}
             onChange={updateBack}
             currentImageUrl={currentBackImageUrl}
-            logo={null}
+            logo={backLogoEnabled ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
           />
         </div>
       )}

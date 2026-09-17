@@ -26,6 +26,8 @@ export interface Template {
   logo_margin_y_mm: number;
   overlay_path: string | null;
   two_sided: boolean;
+  logo_on_front: boolean;
+  logo_on_back: boolean;
   created_at: string;
   created_by: string | null;
 }

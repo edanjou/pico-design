@@ -13,7 +13,7 @@ const NUMERIC_FIELDS = [
   "logo_margin_x_mm",
   "logo_margin_y_mm",
 ] as const;
-const BOOLEAN_FIELDS = ["two_sided"] as const;
+const BOOLEAN_FIELDS = ["two_sided", "logo_on_front", "logo_on_back"] as const;
 
 export async function GET() {
   const supabase = createServerSupabaseClient();

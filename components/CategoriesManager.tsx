@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Category } from "@/lib/types";
-import { FilePenIcon, TrashIcon } from "@/components/icons";
+import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function CategoriesManager({
   categories,
@@ -105,9 +105,13 @@ export default function CategoriesManager({
                   aria-label="Enregistrer"
                   className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black disabled:opacity-50"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  {busyId === c.id ? (
+                    <SpinnerIcon className="h-4 w-4" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
                 </button>
               ) : (
                 <button
@@ -126,7 +130,7 @@ export default function CategoriesManager({
                 aria-label="Supprimer"
                 className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               >
-                <TrashIcon className="h-4 w-4" />
+                {busyId === c.id ? <SpinnerIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
               </button>
             </div>
           </li>
@@ -148,8 +152,9 @@ export default function CategoriesManager({
         <button
           type="submit"
           disabled={creating || !newName.trim()}
-          className="rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-50"
         >
+          {creating && <SpinnerIcon className="h-4 w-4" />}
           Ajouter
         </button>
       </form>

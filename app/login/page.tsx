@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { SpinnerIcon } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,8 +57,9 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
         >
+          {loading && <SpinnerIcon className="h-4 w-4" />}
           {loading ? "Connexion..." : "Se connecter"}
         </button>
       </form>

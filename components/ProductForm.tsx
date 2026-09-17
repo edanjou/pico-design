@@ -12,6 +12,7 @@ import type {
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import { formatIn, inToMm, mmToIn } from "@/lib/pdf/units";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
+import { SpinnerIcon } from "@/components/icons";
 
 type SourceMode = "upload" | VisualMode;
 
@@ -72,6 +73,10 @@ export default function ProductForm({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewTokenRef = useRef(0);
+  const previewImgRef = useRef<HTMLImageElement>(null);
+  const draggingPreviewRef = useRef(false);
+  const lastDragPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragOffsetPx, setDragOffsetPx] = useState({ x: 0, y: 0 });
 
   // En édition, il n'y a toujours qu'un seul modèle. En création, l'aperçu
   // n'est possible que si un seul modèle est coché parmi la sélection.
@@ -81,13 +86,17 @@ export default function ProductForm({
     ? selectedTemplateIds[0]
     : "";
   const isMultiTemplate = !isEditing && selectedTemplateIds.length > 1;
+  // En édition, mode upload, sans nouveau fichier choisi : l'aperçu peut
+  // quand même être régénéré à partir de l'image déjà enregistrée, pour que
+  // le repositionnement soit possible sans devoir re-uploader.
+  const hasUploadSource = Boolean(file) || (isEditing && sourceMode === "upload" && Boolean(product?.image_path));
 
   // Régénère automatiquement l'aperçu (visuel + logo, exactement comme sur
   // le PDF final) dès que le modèle, le visuel, le mode ou la taille de
   // répétition changent — pas besoin de cliquer sur un bouton séparé.
   useEffect(() => {
     const ready =
-      Boolean(previewTemplateId) && (sourceMode === "upload" ? Boolean(file) : Boolean(visualId));
+      Boolean(previewTemplateId) && (sourceMode === "upload" ? hasUploadSource : Boolean(visualId));
     if (!ready) {
       setPreviewImageUrl((old) => {
         if (old) URL.revokeObjectURL(old);
@@ -111,6 +120,7 @@ export default function ProductForm({
       formData.append("positionY", String(imagePositionY));
       if (sourceMode === "upload") {
         if (file) formData.append("image", file);
+        else if (isEditing && product?.image_path) formData.append("existingImagePath", product.image_path);
       } else {
         formData.append("visualId", visualId);
         formData.append("visualMode", sourceMode);
@@ -141,6 +151,7 @@ export default function ProductForm({
     visualId,
     tileSizeMm,
     file,
+    hasUploadSource,
     logoShape,
     logoColor,
     logoSecondaryColor,
@@ -154,6 +165,12 @@ export default function ProductForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Une fois le nouvel aperçu (déjà recadré à la bonne position) chargé, on
+  // efface le décalage visuel temporaire appliqué pendant le glisser.
+  useEffect(() => {
+    setDragOffsetPx({ x: 0, y: 0 });
+  }, [previewImageUrl]);
 
   // Construit le nom automatiquement tant que l'utilisateur n'a pas modifié
   // le champ à la main. Avec un seul modèle : Modèle — Visuel. Avec
@@ -183,6 +200,41 @@ export default function ProductForm({
     setVisualId(id);
     setImagePositionX(0.5);
     setImagePositionY(0.5);
+  }
+
+  function recenterPosition() {
+    setImagePositionX(0.5);
+    setImagePositionY(0.5);
+    setDragOffsetPx({ x: 0, y: 0 });
+  }
+
+  // Glisser directement sur l'aperçu pour repositionner l'image : le drag
+  // met à jour la position (0..1) envoyée au serveur (régénération
+  // debouncée), tout en déplaçant l'aperçu déjà affiché via une transform
+  // CSS pour un retour visuel immédiat, remis à zéro dès que le nouvel
+  // aperçu recadré arrive (voir l'effet sur previewImageUrl ci-dessus).
+  function handlePreviewPointerDown(e: React.PointerEvent<HTMLImageElement>) {
+    draggingPreviewRef.current = true;
+    lastDragPointRef.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePreviewPointerMove(e: React.PointerEvent<HTMLImageElement>) {
+    if (!draggingPreviewRef.current || !lastDragPointRef.current || !previewImgRef.current) return;
+    const rect = previewImgRef.current.getBoundingClientRect();
+    const dxPx = e.clientX - lastDragPointRef.current.x;
+    const dyPx = e.clientY - lastDragPointRef.current.y;
+    lastDragPointRef.current = { x: e.clientX, y: e.clientY };
+    setDragOffsetPx((o) => ({ x: o.x + dxPx, y: o.y + dyPx }));
+    const dx = dxPx / rect.width;
+    const dy = dyPx / rect.height;
+    setImagePositionX((x) => Math.min(1, Math.max(0, x - dx)));
+    setImagePositionY((y) => Math.min(1, Math.max(0, y - dy)));
+  }
+
+  function handlePreviewPointerUp() {
+    draggingPreviewRef.current = false;
+    lastDragPointRef.current = null;
   }
 
   function toggleTemplate(id: string, checked: boolean) {
@@ -315,19 +367,7 @@ export default function ProductForm({
     );
   }
 
-  const previewTemplate = templates.find((t) => t.id === previewTemplateId) ?? null;
-  const positionAspectRatio = previewTemplate
-    ? (previewTemplate.width_mm + previewTemplate.bleed_mm * 2) /
-      (previewTemplate.height_mm + previewTemplate.bleed_mm * 2)
-    : 1;
-  const selectedVisual = visuals.find((v) => v.id === visualId) ?? null;
-  const positionImageUrl =
-    sourceMode === "upload"
-      ? preview ?? currentImageUrl ?? null
-      : sourceMode === "full"
-      ? selectedVisual?.fileUrl ?? null
-      : null;
-  const showPositionPad = !isMultiTemplate && Boolean(previewTemplateId) && Boolean(positionImageUrl);
+  const canDragPreview = !isMultiTemplate && Boolean(previewImageUrl);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -517,36 +557,6 @@ export default function ProductForm({
         </div>
       )}
 
-      {showPositionPad && (
-        <div>
-          <label className="mb-1 block text-sm font-medium">Positionnement de l&apos;image</label>
-          <p className="mb-2 text-xs text-neutral-500">
-            Glisse l&apos;image pour ajuster ce qui sera visible dans le cadrage (fond perdu
-            compris).
-          </p>
-          <PositionPad
-            imageUrl={positionImageUrl!}
-            aspectRatio={positionAspectRatio}
-            x={imagePositionX}
-            y={imagePositionY}
-            onChange={(pos) => {
-              setImagePositionX(pos.x);
-              setImagePositionY(pos.y);
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setImagePositionX(0.5);
-              setImagePositionY(0.5);
-            }}
-            className="mt-2 text-xs text-neutral-500 underline hover:text-pico-black"
-          >
-            Recentrer
-          </button>
-        </div>
-      )}
-
       <div>
         <label className="mb-1 block text-sm font-medium">Logo</label>
         <div className="flex rounded-lg border border-neutral-300 p-0.5 text-sm">
@@ -612,9 +622,25 @@ export default function ProductForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium">
-          Aperçu {previewLoading && <span className="text-neutral-400">(génération...)</span>}
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            Aperçu
+            {previewLoading && (
+              <span className="inline-flex items-center gap-1 text-xs font-normal text-neutral-400">
+                <SpinnerIcon className="h-3.5 w-3.5" /> génération...
+              </span>
+            )}
+          </label>
+          {canDragPreview && (
+            <button
+              type="button"
+              onClick={recenterPosition}
+              className="text-xs text-neutral-500 underline hover:text-pico-black"
+            >
+              Recentrer
+            </button>
+          )}
+        </div>
         {isMultiTemplate ? (
           <p className="mt-1 text-xs text-neutral-500">
             Aperçu disponible pour un seul modèle à la fois — décoche pour n&apos;en garder qu&apos;un
@@ -624,11 +650,23 @@ export default function ProductForm({
           <>
             {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
             {previewImageUrl ? (
-              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+              <div className="mt-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={previewImageUrl} alt="Aperçu du produit" className="mx-auto max-h-72 w-auto" />
+                <img
+                  ref={previewImgRef}
+                  src={previewImageUrl}
+                  alt="Aperçu du produit"
+                  draggable={false}
+                  onPointerDown={handlePreviewPointerDown}
+                  onPointerMove={handlePreviewPointerMove}
+                  onPointerUp={handlePreviewPointerUp}
+                  onPointerLeave={handlePreviewPointerUp}
+                  className="mx-auto max-h-72 w-auto cursor-grab touch-none select-none active:cursor-grabbing"
+                  style={{ transform: `translate(${dragOffsetPx.x}px, ${dragOffsetPx.y}px)` }}
+                />
                 <p className="mt-2 text-center text-xs text-neutral-500">
-                  Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection.
+                  Ligne rouge = coupe (fond perdu) · pointillés bleus = marge de protection ·
+                  glisse l&apos;image pour la repositionner.
                 </p>
               </div>
             ) : (
@@ -646,7 +684,8 @@ export default function ProductForm({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {createProgress && (
-        <p className="text-sm text-neutral-500">
+        <p className="flex items-center gap-2 text-sm text-neutral-500">
+          <SpinnerIcon className="h-4 w-4" />
           Création des produits... ({createProgress.done}/{createProgress.total})
         </p>
       )}
@@ -654,8 +693,9 @@ export default function ProductForm({
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
+        {loading && <SpinnerIcon className="h-4 w-4" />}
         {loading
           ? "Enregistrement..."
           : isEditing
@@ -665,71 +705,5 @@ export default function ProductForm({
           : "Créer le produit"}
       </button>
     </form>
-  );
-}
-
-// Pavé de positionnement : affiche l'image en plein format (object-fit:
-// cover, comme le sera le recadrage final) et laisse glisser pour choisir
-// le point focal — le drag est traduit en delta de position (0..1) plutôt
-// qu'en position absolue, pour un geste "attraper la photo" naturel.
-function PositionPad({
-  imageUrl,
-  aspectRatio,
-  x,
-  y,
-  onChange,
-}: {
-  imageUrl: string;
-  aspectRatio: number;
-  x: number;
-  y: number;
-  onChange: (pos: { x: number; y: number }) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    draggingRef.current = true;
-    lastPointRef.current = { x: e.clientX, y: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!draggingRef.current || !lastPointRef.current || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const dx = (e.clientX - lastPointRef.current.x) / rect.width;
-    const dy = (e.clientY - lastPointRef.current.y) / rect.height;
-    lastPointRef.current = { x: e.clientX, y: e.clientY };
-    onChange({
-      x: Math.min(1, Math.max(0, x - dx)),
-      y: Math.min(1, Math.max(0, y - dy)),
-    });
-  }
-
-  function handlePointerUp() {
-    draggingRef.current = false;
-    lastPointRef.current = null;
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      style={{ aspectRatio: String(aspectRatio), touchAction: "none" }}
-      className="relative w-full max-w-xs select-none overflow-hidden rounded border border-neutral-300 bg-neutral-100"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={imageUrl}
-        alt="Positionnement de l'image"
-        draggable={false}
-        className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
-        style={{ objectPosition: `${x * 100}% ${y * 100}%` }}
-      />
-    </div>
   );
 }

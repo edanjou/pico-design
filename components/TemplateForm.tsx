@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Category, LogoHAlign, LogoVAlign, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
+import { SpinnerIcon } from "@/components/icons";
 
 type Unit = "mm" | "in";
 
@@ -329,8 +330,9 @@ export default function TemplateForm({
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
+        {loading && <SpinnerIcon className="h-4 w-4" />}
         {loading ? "Enregistrement..." : isEditing ? "Enregistrer" : "Créer le modèle"}
       </button>
     </form>

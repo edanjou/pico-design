@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
 import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
-import { EyeIcon, FilePenIcon, TrashIcon } from "@/components/icons";
+import { EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function TemplateRow({
   template,
@@ -66,7 +66,7 @@ export default function TemplateRow({
             aria-label="Supprimer"
             className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
           >
-            <TrashIcon className="h-4 w-4" />
+            {deleting ? <SpinnerIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
           </button>
         </div>
       </td>

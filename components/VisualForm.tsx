@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Visual, VisualCollection } from "@/lib/types";
+import { SpinnerIcon } from "@/components/icons";
 
 function stripExtension(filename: string): string {
   const idx = filename.lastIndexOf(".");
@@ -153,7 +154,8 @@ export default function VisualForm({
       </div>
 
       {progress && (
-        <p className="text-sm text-neutral-600">
+        <p className="flex items-center gap-2 text-sm text-neutral-600">
+          <SpinnerIcon className="h-4 w-4" />
           Envoi {progress.done + 1}/{progress.total}...
         </p>
       )}
@@ -163,8 +165,9 @@ export default function VisualForm({
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
+        {loading && <SpinnerIcon className="h-4 w-4" />}
         {loading
           ? "Enregistrement..."
           : isEditing

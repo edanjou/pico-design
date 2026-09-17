@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Category, Product } from "@/lib/types";
+import { SpinnerIcon } from "@/components/icons";
 
 type ProductOption = Product & {
   imageUrl: string | null;
@@ -110,8 +111,9 @@ export default function UploadForm({
       <button
         type="submit"
         disabled={loading}
-        className="rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded bg-pico-black px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
       >
+        {loading && <SpinnerIcon className="h-4 w-4" />}
         {loading ? "Génération en cours..." : "Générer le PDF"}
       </button>
 

@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   const logoSecondaryColor = formData.get("logoSecondaryColor");
   const positionX = formData.get("positionX");
   const positionY = formData.get("positionY");
+  const existingImagePath = formData.get("existingImagePath");
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
       positionX: clampedPositionX,
       positionY: clampedPositionY,
+      existingImagePath: typeof existingImagePath === "string" ? existingImagePath : null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";

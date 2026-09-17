@@ -11,6 +11,11 @@ export interface ResolveProductImageInput {
   tileSizeMm: number | null;
   positionX?: number;
   positionY?: number;
+  // Chemin (bucket "uploads") de l'image actuellement enregistrée pour un
+  // produit en édition — utilisé en repli quand ni fichier ni visuel ne
+  // sont fournis (ex. aperçu régénéré après un simple repositionnement,
+  // sans re-upload).
+  existingImagePath?: string | null;
 }
 
 export interface ResolvedProductImage {
@@ -38,6 +43,19 @@ export async function resolveProductImage(
   }
 
   if (!input.visualId || !input.visualMode) {
+    if (input.existingImagePath) {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("uploads")
+        .download(input.existingImagePath);
+      if (downloadError || !fileData) {
+        throw new Error("Impossible de télécharger l'image actuelle.");
+      }
+      return {
+        buffer: Buffer.from(await fileData.arrayBuffer()),
+        contentType: fileData.type || "image/jpeg",
+        filename: "current.jpg",
+      };
+    }
     throw new Error("Aucune image, ni visuel sélectionné.");
   }
 
@@ -75,7 +93,14 @@ export async function resolveProductImage(
   if (input.visualMode === "tile") {
     const tileSizeMm = input.tileSizeMm ?? 25;
     const tileWidthPx = Math.max(1, mmToPx(tileSizeMm, template.dpi));
-    const buffer = await composeTiledImage(visualBuffer, tileWidthPx, targetWidthPx, targetHeightPx);
+    const buffer = await composeTiledImage(
+      visualBuffer,
+      tileWidthPx,
+      targetWidthPx,
+      targetHeightPx,
+      input.positionX,
+      input.positionY
+    );
     return { buffer, contentType: "image/jpeg", filename: "visual-tile.jpg" };
   }
 

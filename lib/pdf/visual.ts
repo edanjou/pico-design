@@ -42,7 +42,9 @@ export async function composeTiledImage(
   visual: Buffer,
   tileWidthPx: number,
   targetWidthPx: number,
-  targetHeightPx: number
+  targetHeightPx: number,
+  positionX = 0.5,
+  positionY = 0.5
 ): Promise<Buffer> {
   const rawTilePng = await toPngBuffer(visual, tileWidthPx);
   const meta = await sharp(rawTilePng).metadata();
@@ -53,10 +55,17 @@ export async function composeTiledImage(
   const tilePng = await sharp(rawTilePng).resize(tileWidthPx, tileHeightPx).png().toBuffer();
   const base64 = tilePng.toString("base64");
 
+  // Décalage de phase du motif (0.5 = origine par défaut, non décalée).
+  // Une plage de 0..1 couvre déjà une période complète : au-delà, le motif
+  // ne fait que se répéter, donc pas besoin d'un décalage non borné.
+  const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+  const offsetX = (0.5 - clamp01(positionX)) * tileWidthPx;
+  const offsetY = (0.5 - clamp01(positionY)) * tileHeightPx;
+
   const patternSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${targetWidthPx}" height="${targetHeightPx}">
       <defs>
-        <pattern id="tile" x="0" y="0" width="${tileWidthPx}" height="${tileHeightPx}" patternUnits="userSpaceOnUse">
+        <pattern id="tile" x="${offsetX}" y="${offsetY}" width="${tileWidthPx}" height="${tileHeightPx}" patternUnits="userSpaceOnUse">
           <image href="data:image/png;base64,${base64}" width="${tileWidthPx}" height="${tileHeightPx}"/>
         </pattern>
       </defs>

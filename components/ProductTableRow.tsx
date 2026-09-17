@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
-import { DownloadIcon, FilePenIcon, TrashIcon } from "@/components/icons";
+import { DownloadIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function ProductTableRow({
   product,
@@ -91,7 +91,7 @@ export default function ProductTableRow({
             aria-label="Supprimer"
             className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
           >
-            <TrashIcon className="h-4 w-4" />
+            {deleting ? <SpinnerIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
           </button>
         </div>
       </td>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import VisualForm from "@/components/VisualForm";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
-import { FilePenIcon, TrashIcon } from "@/components/icons";
+import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import type { Visual, VisualCollection } from "@/lib/types";
 
 export type VisualWithUrl = Visual & { fileUrl: string | null };
@@ -167,7 +167,11 @@ export default function VisualsGrid({
                       aria-label="Supprimer"
                       className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                     >
-                      <TrashIcon className="h-4 w-4" />
+                      {deletingId === v.id ? (
+                        <SpinnerIcon className="h-4 w-4" />
+                      ) : (
+                        <TrashIcon className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>

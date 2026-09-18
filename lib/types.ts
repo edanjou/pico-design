@@ -43,6 +43,8 @@ export interface Template {
   logo_margin_x_mm: number;
   logo_margin_y_mm: number;
   overlay_path: string | null;
+  mask_path: string | null;
+  shading_path: string | null;
   two_sided: boolean;
   logo_on_front: boolean;
   logo_on_back: boolean;

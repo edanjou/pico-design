@@ -13,12 +13,19 @@ export default async function TemplatesPage() {
 
   const rows = (templates as Template[]) ?? [];
 
+  async function signedUrl(path: string | null) {
+    if (!path) return null;
+    const { data } = await supabase.storage.from("overlays").createSignedUrl(path, 60 * 30);
+    return data?.signedUrl ?? null;
+  }
+
   const withOverlayUrls: TemplateWithOverlayUrl[] = await Promise.all(
-    rows.map(async (t) => {
-      if (!t.overlay_path) return { ...t, overlayUrl: null };
-      const { data } = await supabase.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30);
-      return { ...t, overlayUrl: data?.signedUrl ?? null };
-    })
+    rows.map(async (t) => ({
+      ...t,
+      overlayUrl: await signedUrl(t.overlay_path),
+      maskUrl: await signedUrl(t.mask_path),
+      shadingUrl: await signedUrl(t.shading_path),
+    }))
   );
 
   return (

@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import ProductTableRow from "@/components/ProductTableRow";
 import ProductForm from "@/components/ProductForm";
+import ProductMockupModal from "@/components/ProductMockupModal";
 import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
@@ -15,7 +16,14 @@ import type { VisualWithUrl } from "@/components/VisualsGrid";
 export type ProductWithTemplate = Product & {
   imageUrl: string | null;
   backImageUrl: string | null;
-  template: { name: string; category_id: string; width_mm: number; height_mm: number } | null;
+  template: {
+    name: string;
+    category_id: string;
+    width_mm: number;
+    height_mm: number;
+    mask_path: string | null;
+    shading_path: string | null;
+  } | null;
 };
 
 function SortIcon() {
@@ -30,6 +38,7 @@ type ModalState =
   | { mode: "create" }
   | { mode: "edit"; product: ProductWithTemplate }
   | { mode: "collections" }
+  | { mode: "mockup"; product: ProductWithTemplate }
   | null;
 
 export default function ProductsTable({
@@ -234,9 +243,11 @@ export default function ProductsTable({
                   categoryLabel={categoryName(p.template?.category_id)}
                   collectionLabel={collectionName(p.collection_id)}
                   imageUrl={p.imageUrl}
+                  hasMockup={Boolean(p.template?.mask_path && p.template?.shading_path)}
                   selected={selection.selected.has(p.id)}
                   onToggleSelect={() => selection.toggle(p.id)}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
+                  onViewMockup={() => setModal({ mode: "mockup", product: p })}
                 />
               ))}
             </tbody>
@@ -271,6 +282,14 @@ export default function ProductsTable({
             onSuccess={handleSuccess}
           />
         </Modal>
+      )}
+
+      {modal?.mode === "mockup" && (
+        <ProductMockupModal
+          productId={modal.product.id}
+          productName={modal.product.name}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

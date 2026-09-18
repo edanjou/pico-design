@@ -62,23 +62,41 @@ export async function POST(request: Request) {
   }
 
   const templateId = randomUUID();
-  const overlayFile = formData.get("overlay");
-  let overlayPath: string | null = null;
 
-  if (overlayFile instanceof File && overlayFile.size > 0) {
-    overlayPath = `${templateId}/${overlayFile.name}`;
-    const buffer = Buffer.from(await overlayFile.arrayBuffer());
+  async function uploadOptionalFile(field: string): Promise<string | null> {
+    const file = formData.get(field);
+    if (!(file instanceof File) || file.size === 0) return null;
+    const path = `${templateId}/${field}-${file.name}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
     const { error: uploadError } = await supabase.storage
       .from("overlays")
-      .upload(overlayPath, buffer, { contentType: overlayFile.type || "image/png", upsert: true });
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
+      .upload(path, buffer, { contentType: file.type || "image/png", upsert: true });
+    if (uploadError) throw uploadError;
+    return path;
+  }
+
+  let overlayPath: string | null;
+  let maskPath: string | null;
+  let shadingPath: string | null;
+  try {
+    overlayPath = await uploadOptionalFile("overlay");
+    maskPath = await uploadOptionalFile("mask");
+    shadingPath = await uploadOptionalFile("shading");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors de l'envoi d'un fichier.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
   const { data, error } = await supabase
     .from("templates")
-    .insert({ id: templateId, ...body, overlay_path: overlayPath, created_by: user.id })
+    .insert({
+      id: templateId,
+      ...body,
+      overlay_path: overlayPath,
+      mask_path: maskPath,
+      shading_path: shadingPath,
+      created_by: user.id,
+    })
     .select()
     .single();
 

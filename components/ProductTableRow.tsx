@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
-import { DownloadIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import { DownloadIcon, FilePenIcon, LayersIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function ProductTableRow({
   product,
@@ -13,9 +13,11 @@ export default function ProductTableRow({
   collectionLabel,
   dimensions,
   imageUrl,
+  hasMockup,
   selected,
   onToggleSelect,
   onEdit,
+  onViewMockup,
 }: {
   product: Product;
   templateName: string;
@@ -23,9 +25,11 @@ export default function ProductTableRow({
   collectionLabel: string | null;
   dimensions: { width_mm: number; height_mm: number } | null;
   imageUrl: string | null;
+  hasMockup: boolean;
   selected: boolean;
   onToggleSelect: () => void;
   onEdit: (product: Product) => void;
+  onViewMockup: (product: Product) => void;
 }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -86,6 +90,16 @@ export default function ProductTableRow({
             >
               <DownloadIcon className="h-4 w-4" />
             </span>
+          )}
+          {hasMockup && (
+            <button
+              onClick={() => onViewMockup(product)}
+              title="Voir le mockup"
+              aria-label="Voir le mockup"
+              className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+            >
+              <LayersIcon className="h-4 w-4" />
+            </button>
           )}
           <button
             onClick={() => onEdit(product)}

@@ -49,21 +49,29 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (typeof v === "string") update[field] = v === "true";
   }
 
-  const overlayFile = formData.get("overlay");
-  const removeOverlay = formData.get("removeOverlay") === "true";
-
-  if (overlayFile instanceof File && overlayFile.size > 0) {
-    const overlayPath = `${params.id}/${overlayFile.name}`;
-    const buffer = Buffer.from(await overlayFile.arrayBuffer());
-    const { error: uploadError } = await supabase.storage
-      .from("overlays")
-      .upload(overlayPath, buffer, { contentType: overlayFile.type || "image/png", upsert: true });
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  async function handleOptionalFile(field: string, dbColumn: string) {
+    const file = formData.get(field);
+    const remove = formData.get(`remove${field[0].toUpperCase()}${field.slice(1)}`) === "true";
+    if (file instanceof File && file.size > 0) {
+      const path = `${params.id}/${field}-${file.name}`;
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from("overlays")
+        .upload(path, buffer, { contentType: file.type || "image/png", upsert: true });
+      if (uploadError) throw uploadError;
+      update[dbColumn] = path;
+    } else if (remove) {
+      update[dbColumn] = null;
     }
-    update.overlay_path = overlayPath;
-  } else if (removeOverlay) {
-    update.overlay_path = null;
+  }
+
+  try {
+    await handleOptionalFile("overlay", "overlay_path");
+    await handleOptionalFile("mask", "mask_path");
+    await handleOptionalFile("shading", "shading_path");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors de l'envoi d'un fichier.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
   const { data, error } = await supabase

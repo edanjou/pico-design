@@ -24,12 +24,16 @@ export default function TemplateForm({
   categories,
   skus,
   currentOverlayUrl,
+  currentMaskUrl,
+  currentShadingUrl,
   onSuccess,
 }: {
   template?: Template;
   categories: Category[];
   skus: Sku[];
   currentOverlayUrl?: string | null;
+  currentMaskUrl?: string | null;
+  currentShadingUrl?: string | null;
   onSuccess: () => void;
 }) {
   const isEditing = Boolean(template);
@@ -61,12 +65,32 @@ export default function TemplateForm({
   const [overlayFile, setOverlayFile] = useState<File | null>(null);
   const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
   const [removeOverlay, setRemoveOverlay] = useState(false);
+  const [maskFile, setMaskFile] = useState<File | null>(null);
+  const [maskPreview, setMaskPreview] = useState<string | null>(null);
+  const [removeMask, setRemoveMask] = useState(false);
+  const [shadingFile, setShadingFile] = useState<File | null>(null);
+  const [shadingPreview, setShadingPreview] = useState<string | null>(null);
+  const [removeShading, setRemoveShading] = useState(false);
 
   function handleOverlayChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setOverlayFile(f);
     setOverlayPreview(f ? URL.createObjectURL(f) : null);
     if (f) setRemoveOverlay(false);
+  }
+
+  function handleMaskChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setMaskFile(f);
+    setMaskPreview(f ? URL.createObjectURL(f) : null);
+    if (f) setRemoveMask(false);
+  }
+
+  function handleShadingChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setShadingFile(f);
+    setShadingPreview(f ? URL.createObjectURL(f) : null);
+    if (f) setRemoveShading(false);
   }
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -108,6 +132,10 @@ export default function TemplateForm({
     }
     if (overlayFile) formData.append("overlay", overlayFile);
     if (removeOverlay) formData.append("removeOverlay", "true");
+    if (maskFile) formData.append("mask", maskFile);
+    if (removeMask) formData.append("removeMask", "true");
+    if (shadingFile) formData.append("shading", shadingFile);
+    if (removeShading) formData.append("removeShading", "true");
 
     const res = await fetch(isEditing ? `/api/templates/${template!.id}` : "/api/templates", {
       method: isEditing ? "PATCH" : "POST",
@@ -462,6 +490,62 @@ export default function TemplateForm({
               className="mt-2 text-sm text-red-600 hover:underline"
             >
               Retirer le gabarit
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Masque (PNG) — optionnel</label>
+        <p className="mt-1 text-xs text-neutral-500">
+          Pour la création de mockups — pas encore utilisé dans l&apos;aperçu ni le PDF.
+        </p>
+        <input
+          type="file"
+          accept="image/png"
+          onChange={handleMaskChange}
+          className="mt-2 w-full text-sm"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {maskPreview ? (
+          <img src={maskPreview} alt="Aperçu du masque" className="mt-3 max-h-48 rounded border" />
+        ) : !removeMask && currentMaskUrl ? (
+          <div className="mt-3">
+            <img src={currentMaskUrl} alt="Masque actuel" className="max-h-48 rounded border" />
+            <button
+              type="button"
+              onClick={() => setRemoveMask(true)}
+              className="mt-2 text-sm text-red-600 hover:underline"
+            >
+              Retirer le masque
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Ombrage (PNG) — optionnel</label>
+        <p className="mt-1 text-xs text-neutral-500">
+          Pour la création de mockups — pas encore utilisé dans l&apos;aperçu ni le PDF.
+        </p>
+        <input
+          type="file"
+          accept="image/png"
+          onChange={handleShadingChange}
+          className="mt-2 w-full text-sm"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {shadingPreview ? (
+          <img src={shadingPreview} alt="Aperçu de l'ombrage" className="mt-3 max-h-48 rounded border" />
+        ) : !removeShading && currentShadingUrl ? (
+          <div className="mt-3">
+            <img src={currentShadingUrl} alt="Ombrage actuel" className="max-h-48 rounded border" />
+            <button
+              type="button"
+              onClick={() => setRemoveShading(true)}
+              className="mt-2 text-sm text-red-600 hover:underline"
+            >
+              Retirer l&apos;ombrage
             </button>
           </div>
         ) : null}

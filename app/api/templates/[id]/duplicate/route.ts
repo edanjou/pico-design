@@ -21,19 +21,29 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
   const newId = randomUUID();
 
-  // Le gabarit (si présent) est copié dans Storage sous le nouvel id, pour
-  // que chaque modèle reste propriétaire de son propre fichier (modifier ou
-  // supprimer le gabarit de l'un n'affecte pas l'autre).
-  let overlayPath: string | null = null;
-  if (source.overlay_path) {
-    const filename = source.overlay_path.split("/").pop() ?? "overlay";
-    overlayPath = `${newId}/${filename}`;
-    const { error: copyError } = await supabase.storage
-      .from("overlays")
-      .copy(source.overlay_path, overlayPath);
-    if (copyError) {
-      return NextResponse.json({ error: copyError.message }, { status: 500 });
-    }
+  // Le gabarit, le masque et l'ombrage (si présents) sont copiés dans
+  // Storage sous le nouvel id, pour que chaque modèle reste propriétaire de
+  // ses propres fichiers (modifier ou supprimer ceux de l'un n'affecte pas
+  // l'autre).
+  async function copyOptionalFile(sourcePath: string | null, fallbackName: string) {
+    if (!sourcePath) return null;
+    const filename = sourcePath.split("/").pop() ?? fallbackName;
+    const newPath = `${newId}/${filename}`;
+    const { error: copyError } = await supabase.storage.from("overlays").copy(sourcePath, newPath);
+    if (copyError) throw copyError;
+    return newPath;
+  }
+
+  let overlayPath: string | null;
+  let maskPath: string | null;
+  let shadingPath: string | null;
+  try {
+    overlayPath = await copyOptionalFile(source.overlay_path, "overlay");
+    maskPath = await copyOptionalFile(source.mask_path, "mask");
+    shadingPath = await copyOptionalFile(source.shading_path, "shading");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors de la copie d'un fichier.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
   const { data, error } = await supabase
@@ -61,6 +71,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       logo_on_back: source.logo_on_back,
       allow_orientation_change: source.allow_orientation_change,
       overlay_path: overlayPath,
+      mask_path: maskPath,
+      shading_path: shadingPath,
       created_by: user.id,
     })
     .select()

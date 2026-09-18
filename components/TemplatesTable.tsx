@@ -11,7 +11,11 @@ import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import type { Category, Sku, Template } from "@/lib/types";
 
-export type TemplateWithOverlayUrl = Template & { overlayUrl: string | null };
+export type TemplateWithOverlayUrl = Template & {
+  overlayUrl: string | null;
+  maskUrl: string | null;
+  shadingUrl: string | null;
+};
 
 function SortIcon() {
   return (
@@ -246,6 +250,8 @@ export default function TemplatesTable({
             categories={categories}
             skus={skus}
             currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
+            currentMaskUrl={modal.mode === "edit" ? modal.template.maskUrl : null}
+            currentShadingUrl={modal.mode === "edit" ? modal.template.shadingUrl : null}
             onSuccess={handleSuccess}
           />
         </Modal>

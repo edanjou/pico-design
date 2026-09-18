@@ -7,6 +7,7 @@ export type LogoVAlign = "top" | "bottom";
 export interface Category {
   id: string;
   name: string;
+  sort_order: number;
   created_at: string;
 }
 
@@ -59,6 +60,7 @@ export type LogoShape = "logo" | "pastille";
 export interface VisualCollection {
   id: string;
   name: string;
+  sort_order: number;
   created_at: string;
   created_by: string | null;
 }
@@ -76,6 +78,7 @@ export interface Visual {
 export interface ProductCollection {
   id: string;
   name: string;
+  sort_order: number;
   created_at: string;
   created_by: string | null;
 }

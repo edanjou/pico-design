@@ -7,7 +7,7 @@ export default async function VisualsPage() {
   const supabase = createServerSupabaseClient();
   const [{ data: visuals }, { data: collections }] = await Promise.all([
     supabase.from("visuals").select("*").order("name", { ascending: true }),
-    supabase.from("visual_collections").select("*").order("name", { ascending: true }),
+    supabase.from("visual_collections").select("*").order("sort_order", { ascending: true }),
   ]);
 
   const rows = (visuals as Visual[]) ?? [];

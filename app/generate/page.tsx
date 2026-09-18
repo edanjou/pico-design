@@ -20,7 +20,7 @@ export default async function GeneratePage() {
       .from("products")
       .select("*, template:templates(name, category_id, width_mm, height_mm, dpi)")
       .order("name", { ascending: true }),
-    supabase.from("categories").select("*").order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("sort_order", { ascending: true }),
   ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];

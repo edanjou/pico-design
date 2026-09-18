@@ -240,8 +240,9 @@ export default function VisualsGrid({
       {modal?.mode === "collections" && (
         <Modal title="Gérer les collections" onClose={() => setModal(null)}>
           <CollectionsManager
-            collections={collections}
+            items={collections}
             apiBasePath="/api/visual-collections"
+            deleteWarning="Son contenu ne sera pas supprimé."
             onChanged={() => refresh()}
           />
         </Modal>

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
-import CategoriesManager from "@/components/CategoriesManager";
+import CollectionsManager from "@/components/CollectionsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
 import UpdatingBadge from "@/components/UpdatingBadge";
@@ -223,8 +223,10 @@ export default function TemplatesTable({
 
       {modal?.mode === "categories" && (
         <Modal title="Gérer les catégories" onClose={() => setModal(null)}>
-          <CategoriesManager
-            categories={categories}
+          <CollectionsManager
+            items={categories}
+            apiBasePath="/api/categories"
+            itemLabel="catégorie"
             onChanged={() => {
               refresh();
             }}

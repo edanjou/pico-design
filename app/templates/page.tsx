@@ -7,7 +7,7 @@ export default async function TemplatesPage() {
   const supabase = createServerSupabaseClient();
   const [{ data: templates }, { data: categories }, { data: skus }] = await Promise.all([
     supabase.from("templates").select("*").order("name", { ascending: true }),
-    supabase.from("categories").select("*").order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("sort_order", { ascending: true }),
     supabase.from("skus").select("*").order("sku", { ascending: true }),
   ]);
 

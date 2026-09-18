@@ -266,8 +266,9 @@ export default function ProductsTable({
       {modal?.mode === "collections" && (
         <Modal title="Gérer les collections" onClose={() => setModal(null)}>
           <CollectionsManager
-            collections={collections}
+            items={collections}
             apiBasePath="/api/product-collections"
+            deleteWarning="Son contenu ne sera pas supprimé."
             onChanged={() => refresh()}
           />
         </Modal>

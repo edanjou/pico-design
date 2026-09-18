@@ -18,9 +18,9 @@ export default async function ProductsPage() {
       .select("*, template:templates(name, category_id, width_mm, height_mm, mask_path, shading_path)")
       .order("name", { ascending: true }),
     supabase.from("templates").select("*").order("name", { ascending: true }),
-    supabase.from("categories").select("*").order("name", { ascending: true }),
+    supabase.from("categories").select("*").order("sort_order", { ascending: true }),
     supabase.from("visuals").select("*").order("name", { ascending: true }),
-    supabase.from("product_collections").select("*").order("name", { ascending: true }),
+    supabase.from("product_collections").select("*").order("sort_order", { ascending: true }),
   ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];

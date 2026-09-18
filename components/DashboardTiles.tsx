@@ -59,7 +59,7 @@ function SortableTile({ menuKey }: { menuKey: MenuKey }) {
         {...attributes}
         {...listeners}
         aria-label="Déplacer"
-        className="flex h-8 w-8 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg text-neutral-300 transition-colors duration-150 hover:bg-neutral-100 hover:text-neutral-500 active:cursor-grabbing"
+        className="flex h-8 w-8 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg text-neutral-300 opacity-50 transition-colors transition-opacity duration-150 hover:bg-neutral-100 hover:text-neutral-500 hover:opacity-100 active:cursor-grabbing"
       >
         <GripVerticalIcon className="h-5 w-5" />
       </button>

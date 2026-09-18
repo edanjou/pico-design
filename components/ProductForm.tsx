@@ -23,6 +23,7 @@ export default function ProductForm({
   currentImageUrl,
   currentBackImageUrl,
   onSuccess,
+  onBusyChange,
 }: {
   templates: Template[];
   categories: Category[];
@@ -32,6 +33,7 @@ export default function ProductForm({
   currentImageUrl?: string | null;
   currentBackImageUrl?: string | null;
   onSuccess: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const isEditing = Boolean(product);
   const [name, setName] = useState(product?.name ?? "");
@@ -68,6 +70,11 @@ export default function ProductForm({
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
     null
   );
+
+  useEffect(() => {
+    onBusyChange?.(loading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // En édition, il n'y a toujours qu'un seul modèle. En création, l'aperçu
   // (et le verso) ne sont possibles que si un seul modèle est coché parmi

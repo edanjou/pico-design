@@ -47,6 +47,7 @@ export default function TemplatesTable({
   const [categoryId, setCategoryId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
+  const [formBusy, setFormBusy] = useState(false);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -79,10 +80,16 @@ export default function TemplatesTable({
     const results = await Promise.all(
       ids.map((id) => fetch(`/api/templates/${id}`, { method: "DELETE" }))
     );
-    setBulkDeleting(false);
-    selection.clear();
-    refresh();
     const failed = results.filter((r) => !r.ok).length;
+    // Regroupés dans la même transition que le refresh : la barre reste
+    // visible (avec son spinner) jusqu'à ce que les données rafraîchies
+    // soient prêtes, au lieu de disparaître aussitôt en laissant les lignes
+    // encore affichées un instant, sans indicateur.
+    startTransition(() => {
+      router.refresh();
+      selection.clear();
+      setBulkDeleting(false);
+    });
     if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
 
@@ -206,6 +213,7 @@ export default function TemplatesTable({
                   onToggleSelect={() => selection.toggle(t.id)}
                   onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
+                  onRefresh={refresh}
                 />
               ))}
             </tbody>
@@ -244,6 +252,7 @@ export default function TemplatesTable({
           title={modal.mode === "create" ? "Nouveau modèle" : `Modifier « ${modal.template.name} »`}
           onClose={() => setModal(null)}
           wide
+          busy={formBusy}
         >
           <TemplateForm
             template={modal.mode === "edit" ? modal.template : undefined}
@@ -253,6 +262,7 @@ export default function TemplatesTable({
             currentMaskUrl={modal.mode === "edit" ? modal.template.maskUrl : null}
             currentShadingUrl={modal.mode === "edit" ? modal.template.shadingUrl : null}
             onSuccess={handleSuccess}
+            onBusyChange={setFormBusy}
           />
         </Modal>
       )}

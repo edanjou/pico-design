@@ -32,6 +32,7 @@ export default function UsersTable({
   const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
+  const [formBusy, setFormBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function refresh() {
@@ -55,12 +56,15 @@ export default function UsersTable({
     if (!confirm(`Supprimer le compte de « ${u.full_name || u.email} » ?`)) return;
     setDeletingId(u.id);
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
-    setDeletingId(null);
     if (!res.ok) {
+      setDeletingId(null);
       const data = await res.json().catch(() => ({}));
       alert(data.error ?? "Erreur lors de la suppression.");
       return;
     }
+    // Ne pas remettre `deletingId` à null ici : la ligne doit rester
+    // grisée/en chargement jusqu'à sa disparition effective (données
+    // rafraîchies), pas revenir à la normale juste avant de disparaître.
     refresh();
   }
 
@@ -163,11 +167,13 @@ export default function UsersTable({
               : `Modifier « ${modal.user.full_name || modal.user.email} »`
           }
           onClose={() => setModal(null)}
+          busy={formBusy}
         >
           <UserForm
             user={modal.mode === "edit" ? modal.user : undefined}
             currentUserId={currentUserId}
             onSuccess={handleSuccess}
+            onBusyChange={setFormBusy}
           />
         </Modal>
       )}

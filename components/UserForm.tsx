@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Profile } from "@/lib/types";
 import { CopyIcon, SpinnerIcon } from "@/components/icons";
 
@@ -15,10 +15,12 @@ export default function UserForm({
   user,
   currentUserId,
   onSuccess,
+  onBusyChange,
 }: {
   user?: Profile & { email: string };
   currentUserId: string;
   onSuccess: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const isEditing = Boolean(user);
   const isSelf = user?.id === currentUserId;
@@ -30,6 +32,11 @@ export default function UserForm({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(saving);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving]);
 
   async function handleCopy() {
     try {

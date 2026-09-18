@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
 import { DownloadIcon, FilePenIcon, LayersIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
@@ -18,6 +17,7 @@ export default function ProductTableRow({
   onToggleSelect,
   onEdit,
   onViewMockup,
+  onRefresh,
 }: {
   product: Product;
   templateName: string;
@@ -30,21 +30,26 @@ export default function ProductTableRow({
   onToggleSelect: () => void;
   onEdit: (product: Product) => void;
   onViewMockup: (product: Product) => void;
+  onRefresh: () => void;
 }) {
-  const router = useRouter();
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
     if (!confirm(`Supprimer le produit « ${product.name} » ?`)) return;
     setDeleting(true);
     const res = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
-    setDeleting(false);
     if (!res.ok) {
+      setDeleting(false);
       const data = await res.json().catch(() => ({}));
       alert(data.error ?? "Erreur lors de la suppression.");
       return;
     }
-    router.refresh();
+    // Ne pas repasser `deleting` à false ici : la ligne doit rester
+    // grisée/en chargement jusqu'à sa disparition effective (données
+    // rafraîchies), sinon elle "revient à la normale" un instant avant de
+    // disparaître, ce qui donne l'impression que rien ne se passe puis que
+    // ça plante.
+    onRefresh();
   }
 
   return (

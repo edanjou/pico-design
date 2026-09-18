@@ -61,6 +61,7 @@ export default function ProductsTable({
   const [collectionId, setCollectionId] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [modal, setModal] = useState<ModalState>(null);
+  const [formBusy, setFormBusy] = useState(false);
   const selection = useSelection();
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -99,10 +100,16 @@ export default function ProductsTable({
     const results = await Promise.all(
       ids.map((id) => fetch(`/api/products/${id}`, { method: "DELETE" }))
     );
-    setBulkDeleting(false);
-    selection.clear();
-    refresh();
     const failed = results.filter((r) => !r.ok).length;
+    // Regroupés dans la même transition que le refresh : la barre reste
+    // visible (avec son spinner) jusqu'à ce que les données rafraîchies
+    // soient prêtes, au lieu de disparaître aussitôt en laissant les lignes
+    // encore affichées un instant, sans indicateur.
+    startTransition(() => {
+      router.refresh();
+      selection.clear();
+      setBulkDeleting(false);
+    });
     if (failed > 0) alert(`${failed} suppression(s) ont échoué.`);
   }
 
@@ -248,6 +255,7 @@ export default function ProductsTable({
                   onToggleSelect={() => selection.toggle(p.id)}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}
                   onViewMockup={() => setModal({ mode: "mockup", product: p })}
+                  onRefresh={refresh}
                 />
               ))}
             </tbody>
@@ -270,6 +278,7 @@ export default function ProductsTable({
           title={modal.mode === "create" ? "Nouveau produit" : `Modifier « ${modal.product.name} »`}
           onClose={() => setModal(null)}
           wide
+          busy={formBusy}
         >
           <ProductForm
             templates={templates}
@@ -280,6 +289,7 @@ export default function ProductsTable({
             currentImageUrl={modal.mode === "edit" ? modal.product.imageUrl : null}
             currentBackImageUrl={modal.mode === "edit" ? modal.product.backImageUrl : null}
             onSuccess={handleSuccess}
+            onBusyChange={setFormBusy}
           />
         </Modal>
       )}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { Template } from "@/lib/types";
 import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
@@ -14,6 +13,7 @@ export default function TemplateRow({
   onToggleSelect,
   onPreview,
   onEdit,
+  onRefresh,
 }: {
   template: TemplateWithOverlayUrl;
   skuCode: string | null;
@@ -21,8 +21,8 @@ export default function TemplateRow({
   onToggleSelect: () => void;
   onPreview: (template: Template) => void;
   onEdit: (template: TemplateWithOverlayUrl) => void;
+  onRefresh: () => void;
 }) {
-  const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -30,13 +30,18 @@ export default function TemplateRow({
     if (!confirm(`Supprimer le modèle « ${template.name} » ?`)) return;
     setDeleting(true);
     const res = await fetch(`/api/templates/${template.id}`, { method: "DELETE" });
-    setDeleting(false);
     if (!res.ok) {
+      setDeleting(false);
       const data = await res.json().catch(() => ({}));
       alert(data.error ?? "Erreur lors de la suppression.");
       return;
     }
-    router.refresh();
+    // Ne pas repasser `deleting` à false ici : la ligne doit rester
+    // grisée/en chargement jusqu'à sa disparition effective (données
+    // rafraîchies), sinon elle "revient à la normale" un instant avant de
+    // disparaître, ce qui donne l'impression que rien ne se passe puis que
+    // ça plante.
+    onRefresh();
   }
 
   async function handleDuplicate() {
@@ -48,7 +53,7 @@ export default function TemplateRow({
       alert(data.error ?? "Erreur lors de la duplication.");
       return;
     }
-    router.refresh();
+    onRefresh();
   }
 
   return (

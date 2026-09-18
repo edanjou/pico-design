@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Category, LogoHAlign, LogoVAlign, Sku, Template } from "@/lib/types";
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
@@ -27,6 +27,7 @@ export default function TemplateForm({
   currentMaskUrl,
   currentShadingUrl,
   onSuccess,
+  onBusyChange,
 }: {
   template?: Template;
   categories: Category[];
@@ -35,6 +36,7 @@ export default function TemplateForm({
   currentMaskUrl?: string | null;
   currentShadingUrl?: string | null;
   onSuccess: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const isEditing = Boolean(template);
   const [form, setForm] = useState({
@@ -62,6 +64,11 @@ export default function TemplateForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<Unit>("in");
+
+  useEffect(() => {
+    onBusyChange?.(loading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
   const [overlayFile, setOverlayFile] = useState<File | null>(null);
   const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
   const [removeOverlay, setRemoveOverlay] = useState(false);

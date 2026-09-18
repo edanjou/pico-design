@@ -52,6 +52,37 @@ export async function requireUser() {
   return user;
 }
 
+// Protège une page (Server Component) réservée aux administrateurs (ex.
+// gestion des utilisateurs) — redirige les employés vers l'accueil.
+export async function requireAdmin() {
+  const user = await requireUser();
+  const supabase = createServerSupabaseClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single<{ role: string }>();
+  if (profile?.role !== "admin") redirect("/");
+  return user;
+}
+
+// Équivalent de `requireAdmin`, mais pour les routes API (`redirect()` n'y
+// fonctionne pas comme dans les Server Components) : à chaque route
+// réservée aux admins de vérifier `isAdmin` et retourner une réponse 401/403
+// elle-même.
+export async function getAuthorizedAdmin(supabase: ReturnType<typeof createServerSupabaseClient>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { user: null, isAdmin: false };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single<{ role: string }>();
+  return { user, isAdmin: profile?.role === "admin" };
+}
+
 // Client "admin" — utilise la clé service_role, réservé aux routes API
 // serveur qui doivent écrire dans Storage/DB sans contrainte RLS
 // (ex: enregistrer le PDF généré). Ne jamais importer côté client.

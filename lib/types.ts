@@ -122,7 +122,7 @@ export interface Job {
 export interface Profile {
   id: string;
   full_name: string | null;
-  role: "admin" | "employee";
+  role: "admin" | "designer" | "gestionnaire";
   created_at: string;
 }
 

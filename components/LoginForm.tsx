@@ -64,8 +64,7 @@ export default function LoginForm() {
         </button>
       </form>
       <p className="mt-4 text-xs text-neutral-500">
-        Les comptes employés sont créés par un admin depuis le tableau de bord Supabase
-        (Authentication → Users → Invite). Pas d'auto-inscription.
+        Les comptes sont créés par un admin depuis la page « Utilisateurs ». Pas d'auto-inscription.
       </p>
     </div>
   );

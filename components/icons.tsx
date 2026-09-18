@@ -122,7 +122,7 @@ export function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-export function SquareDashedKanbanIcon({ className }: { className?: string }) {
+export function PencilRulerIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -133,26 +133,17 @@ export function SquareDashedKanbanIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
       className={className}
     >
-      <path d="M9 3h1" />
-      <path d="M14 3h1" />
-      <path d="M19 3a2 2 0 0 1 2 2" />
-      <path d="M21 9v1" />
-      <path d="M21 14v1" />
-      <path d="M21 19a2 2 0 0 1-2 2" />
-      <path d="M14 21h1" />
-      <path d="M9 21h1" />
-      <path d="M5 21a2 2 0 0 1-2-2" />
-      <path d="M3 14v1" />
-      <path d="M3 9v1" />
-      <path d="M3 5a2 2 0 0 1 2-2" />
-      <path d="M7 8v8" />
-      <path d="M12 8v8" />
-      <path d="M17 8v5" />
+      <path d="M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13" />
+      <path d="m8 6 2-2" />
+      <path d="m18 16 2-2" />
+      <path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17" />
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+      <path d="m15 5 4 4" />
     </svg>
   );
 }
 
-export function SwatchBookIcon({ className }: { className?: string }) {
+export function ImageIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -163,10 +154,9 @@ export function SwatchBookIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
       className={className}
     >
-      <path d="M11 17a4 4 0 0 1-8 0V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2Z" />
-      <path d="M16.7 13H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3" />
-      <path d="M7 17h.01" />
-      <path d="m11 8 2.3-2.3a2.4 2.4 0 0 1 3.404.004L18.6 7.6a2.4 2.4 0 0 1 .026 3.434L9.9 19.8" />
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
 }

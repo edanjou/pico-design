@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
-import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon, TagIcon } from "@/components/icons";
+import { RocketIcon, PencilRulerIcon, ImageIcon, TagIcon } from "@/components/icons";
 
 const links = [
   {
@@ -8,14 +8,14 @@ const links = [
     title: "Modèles",
     description: "Dimensions, fond perdu et positionnement du logo.",
     gradient: "from-teal-400 to-emerald-600",
-    icon: SquareDashedKanbanIcon,
+    icon: PencilRulerIcon,
   },
   {
     href: "/visuals",
     title: "Visuels",
     description: "Une banque de patterns réutilisables sur les produits.",
     gradient: "from-amber-400 to-yellow-500",
-    icon: SwatchBookIcon,
+    icon: ImageIcon,
   },
   {
     href: "/products",

@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   LogOutIcon,
   RocketIcon,
-  SquareDashedKanbanIcon,
-  SwatchBookIcon,
+  PencilRulerIcon,
+  ImageIcon,
   TagIcon,
   UsersIcon,
 } from "@/components/icons";
@@ -72,12 +72,12 @@ export default function Nav() {
 
         <nav className="flex items-center gap-4 text-sm text-text-muted">
           <Link href="/templates" className="flex items-center gap-1.5 hover:text-primary">
-            <SquareDashedKanbanIcon className="h-4 w-4" />
+            <PencilRulerIcon className="h-4 w-4" />
             Modèles
           </Link>
           <span className="h-4 w-px bg-border" aria-hidden="true" />
           <Link href="/visuals" className="flex items-center gap-1.5 hover:text-primary">
-            <SwatchBookIcon className="h-4 w-4" />
+            <ImageIcon className="h-4 w-4" />
             Visuels
           </Link>
           <span className="h-4 w-px bg-border" aria-hidden="true" />

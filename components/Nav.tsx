@@ -1,17 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  LogOutIcon,
-  RocketIcon,
-  PencilRulerIcon,
-  ImageIcon,
-  TagIcon,
-  UsersIcon,
-} from "@/components/icons";
+import { LogOutIcon } from "@/components/icons";
+import { DEFAULT_MENU_ORDER, MENU_ITEMS, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrateur",
@@ -22,11 +16,17 @@ const ROLE_LABELS: Record<string, string> = {
   employee: "Designer",
 };
 
+const DEFAULT_ORDER_NO_ADMIN = DEFAULT_MENU_ORDER.filter((k) => k !== "users");
+
 export default function Nav() {
   const router = useRouter();
   const supabase = createClient();
   const [name, setName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  // Ordre par défaut en attendant le chargement du profil, pour éviter un
+  // flash de nav vide — synchronisé avec l'ordre choisi sur le tableau de
+  // bord une fois le profil chargé (voir DashboardTiles).
+  const [menuOrder, setMenuOrder] = useState<MenuKey[]>(DEFAULT_ORDER_NO_ADMIN);
 
   useEffect(() => {
     async function loadUser() {
@@ -36,14 +36,27 @@ export default function Nav() {
       if (!user) return;
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, role")
+        .select("full_name, role, menu_order")
         .eq("id", user.id)
-        .single<{ full_name: string | null; role: string | null }>();
+        .single<{ full_name: string | null; role: string | null; menu_order: string[] | null }>();
       setName(profile?.full_name ?? user.email ?? null);
       setRole(profile?.role ?? null);
+      const allowedKeys: MenuKey[] = profile?.role === "admin" ? DEFAULT_MENU_ORDER : DEFAULT_ORDER_NO_ADMIN;
+      setMenuOrder(resolveMenuOrder(profile?.menu_order, allowedKeys));
     }
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Resynchronise immédiatement avec un glisser-déposer effectué sur le
+    // tableau de bord (composant séparé) dans le même onglet.
+    function onMenuOrderChanged(e: Event) {
+      const detail = (e as CustomEvent<MenuKey[]>).detail;
+      if (Array.isArray(detail)) setMenuOrder(detail);
+    }
+    window.addEventListener("pico:menu-order-changed", onMenuOrderChanged);
+    return () => window.removeEventListener("pico:menu-order-changed", onMenuOrderChanged);
   }, []);
 
   const initials = name
@@ -71,34 +84,18 @@ export default function Nav() {
         </div>
 
         <nav className="flex items-center gap-4 text-sm text-text-muted">
-          <Link href="/templates" className="flex items-center gap-1.5 hover:text-primary">
-            <PencilRulerIcon className="h-4 w-4" />
-            Modèles
-          </Link>
-          <span className="h-4 w-px bg-border" aria-hidden="true" />
-          <Link href="/visuals" className="flex items-center gap-1.5 hover:text-primary">
-            <ImageIcon className="h-4 w-4" />
-            Visuels
-          </Link>
-          <span className="h-4 w-px bg-border" aria-hidden="true" />
-          <Link href="/products" className="flex items-center gap-1.5 hover:text-primary">
-            <RocketIcon className="h-4 w-4" />
-            Produits
-          </Link>
-          <span className="h-4 w-px bg-border" aria-hidden="true" />
-          <Link href="/skus" className="flex items-center gap-1.5 hover:text-primary">
-            <TagIcon className="h-4 w-4" />
-            SKU
-          </Link>
-          {role === "admin" && (
-            <>
-              <span className="h-4 w-px bg-border" aria-hidden="true" />
-              <Link href="/users" className="flex items-center gap-1.5 hover:text-primary">
-                <UsersIcon className="h-4 w-4" />
-                Utilisateurs
-              </Link>
-            </>
-          )}
+          {menuOrder.map((key, i) => {
+            const item = MENU_ITEMS[key];
+            return (
+              <Fragment key={key}>
+                {i > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}
+                <Link href={item.href} className="flex items-center gap-1.5 hover:text-primary">
+                  <item.icon className="h-4 w-4" />
+                  {item.title}
+                </Link>
+              </Fragment>
+            );
+          })}
         </nav>
 
         <div className="flex items-center justify-self-end gap-1">

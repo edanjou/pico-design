@@ -126,6 +126,7 @@ export interface Profile {
   id: string;
   full_name: string | null;
   role: "admin" | "designer" | "gestionnaire";
+  menu_order: string[] | null;
   created_at: string;
 }
 

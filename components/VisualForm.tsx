@@ -40,8 +40,13 @@ export default function VisualForm({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const list = Array.from(e.target.files ?? []);
     setFiles(list);
-    setPreview(list.length === 1 ? URL.createObjectURL(list[0]) : null);
+    // Un PDF ne peut pas s'afficher dans une balise <img> — pas d'aperçu
+    // local dans ce cas (il sera converti en PNG côté serveur à l'envoi).
+    const single = list.length === 1 ? list[0] : null;
+    setPreview(single && single.type !== "application/pdf" ? URL.createObjectURL(single) : null);
   }
+
+  const singlePdfSelected = files.length === 1 && files[0].type === "application/pdf";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -114,12 +119,12 @@ export default function VisualForm({
 
       <div>
         <label className="block text-sm font-medium">
-          Fichier{!isEditing ? "s" : ""} (SVG, PNG, JPG){" "}
+          Fichier{!isEditing ? "s" : ""} (SVG, PNG, JPG, PDF){" "}
           {isEditing ? "(laisser vide pour garder l'actuel)" : ""}
         </label>
         <input
           type="file"
-          accept="image/svg+xml,image/png,image/jpeg"
+          accept="image/svg+xml,image/png,image/jpeg,application/pdf"
           multiple={!isEditing}
           onChange={handleFileChange}
           className="mt-1 w-full text-sm"
@@ -128,6 +133,10 @@ export default function VisualForm({
           <p className="mt-2 text-sm text-neutral-600">
             {files.length} fichiers sélectionnés — chacun sera ajouté comme un visuel séparé,
             nommé d&apos;après son nom de fichier.
+          </p>
+        ) : singlePdfSelected ? (
+          <p className="mt-2 text-sm text-neutral-600">
+            📄 {files[0].name} — sera converti en image (PNG) à l&apos;enregistrement.
           </p>
         ) : /* eslint-disable-next-line @next/next/no-img-element */
         preview ? (

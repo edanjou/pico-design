@@ -30,6 +30,10 @@ function zoomToTileSizeIn(zoom: number): number {
   return TILE_ZOOM_MIN_IN * Math.pow(TILE_ZOOM_MAX_IN / TILE_ZOOM_MIN_IN, t);
 }
 
+function isPdfFile(file: File | null): boolean {
+  return Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name)));
+}
+
 export const SOURCE_MODES: { value: SourceMode; label: string }[] = [
   { value: "upload", label: "Uploader une image" },
   { value: "full", label: "Visuel — plein format" },
@@ -82,13 +86,14 @@ export default function ImageSourcePicker({
   const [frameError, setFrameError] = useState<string | null>(null);
   const frameTokenRef = useRef(0);
 
-  // Le fond, lui, dépend du mode : en upload/plein format, l'image brute est
-  // affichée directement côté client (object-position instantané) ; en
-  // mosaïque, le motif recadré doit être rendu côté serveur (débouncé).
-  const [tileBackgroundUrl, setTileBackgroundUrl] = useState<string | null>(null);
-  const [tileBgLoading, setTileBgLoading] = useState(false);
-  const [tileBgError, setTileBgError] = useState<string | null>(null);
-  const tileBgTokenRef = useRef(0);
+  // Le fond, lui, dépend du mode : en upload (image)/plein format, l'image
+  // brute est affichée directement côté client (object-position instantané) ;
+  // en mosaïque, ou pour un PDF uploadé (illisible tel quel par <img>), le
+  // fond doit être rendu côté serveur (débouncé).
+  const [renderedBackgroundUrl, setRenderedBackgroundUrl] = useState<string | null>(null);
+  const [renderedBgLoading, setRenderedBgLoading] = useState(false);
+  const [renderedBgError, setRenderedBgError] = useState<string | null>(null);
+  const renderedBgTokenRef = useRef(0);
 
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -99,9 +104,11 @@ export default function ImageSourcePicker({
   const canPosition = Boolean(template) && hasSource;
 
   // Aperçu local du fichier uploadé (aperçu brut sous le champ + fond de
-  // l'aperçu positionnable).
+  // l'aperçu positionnable) — sauf pour un PDF, qu'une balise <img> ne peut
+  // pas afficher : son aperçu est rendu côté serveur à la place (voir
+  // l'effet ci-dessous).
   useEffect(() => {
-    if (!file) {
+    if (!file || isPdfFile(file)) {
       setPreview(null);
       return;
     }
@@ -163,61 +170,67 @@ export default function ImageSourcePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isPdfUpload = sourceMode === "upload" && isPdfFile(file);
+
   useEffect(() => {
-    if (sourceMode !== "tile" || !canPosition || !template) {
-      setTileBackgroundUrl((old) => {
+    if (!((sourceMode === "tile" || isPdfUpload) && canPosition && template)) {
+      setRenderedBackgroundUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
       });
-      setTileBgError(null);
+      setRenderedBgError(null);
       return;
     }
 
-    const token = ++tileBgTokenRef.current;
+    const token = ++renderedBgTokenRef.current;
     const timeout = setTimeout(async () => {
-      setTileBgLoading(true);
-      setTileBgError(null);
+      setRenderedBgLoading(true);
+      setRenderedBgError(null);
 
       const formData = new FormData();
       formData.append("templateId", template.id);
-      formData.append("visualId", visualId);
-      formData.append("visualMode", "tile");
-      formData.append("tileSizeMm", String(tileSizeMm));
+      if (isPdfUpload && file) {
+        formData.append("image", file);
+      } else {
+        formData.append("visualId", visualId);
+        formData.append("visualMode", "tile");
+        formData.append("tileSizeMm", String(tileSizeMm));
+      }
       formData.append("positionX", String(positionX));
       formData.append("positionY", String(positionY));
       formData.append("mode", "background");
       formData.append("rotated", String(rotated));
 
       const res = await fetch("/api/products/preview", { method: "POST", body: formData });
-      if (token !== tileBgTokenRef.current) return;
+      if (token !== renderedBgTokenRef.current) return;
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setTileBgError(data.error ?? "Erreur lors de la génération de l'aperçu.");
-        setTileBgLoading(false);
+        setRenderedBgError(data.error ?? "Erreur lors de la génération de l'aperçu.");
+        setRenderedBgLoading(false);
         return;
       }
       const blob = await res.blob();
-      setTileBackgroundUrl((old) => {
+      setRenderedBackgroundUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return URL.createObjectURL(blob);
       });
-      setTileBgLoading(false);
+      setRenderedBgLoading(false);
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [sourceMode, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
+  }, [sourceMode, isPdfUpload, file, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
 
   useEffect(() => {
     return () => {
-      if (tileBackgroundUrl) URL.revokeObjectURL(tileBackgroundUrl);
+      if (renderedBackgroundUrl) URL.revokeObjectURL(renderedBackgroundUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     setDragOffsetPx({ x: 0, y: 0 });
-  }, [tileBackgroundUrl]);
+  }, [renderedBackgroundUrl]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -269,9 +282,10 @@ export default function ImageSourcePicker({
       : sourceMode === "full"
       ? selectedVisual?.fileUrl ?? null
       : null;
-  const backgroundUrl = sourceMode === "tile" ? tileBackgroundUrl : rawBackgroundUrl;
-  const previewLoading = frameLoading || (sourceMode === "tile" && tileBgLoading);
-  const previewError = frameError ?? (sourceMode === "tile" ? tileBgError : null);
+  const backgroundUrl =
+    sourceMode === "tile" || isPdfUpload ? renderedBackgroundUrl ?? rawBackgroundUrl : rawBackgroundUrl;
+  const previewLoading = frameLoading || ((sourceMode === "tile" || isPdfUpload) && renderedBgLoading);
+  const previewError = frameError ?? (sourceMode === "tile" || isPdfUpload ? renderedBgError : null);
 
   return (
     <div className="space-y-4">
@@ -302,12 +316,16 @@ export default function ImageSourcePicker({
           </label>
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             onChange={handleFileChange}
             className="mt-1 w-full text-sm"
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {preview ? (
+          {isPdfUpload ? (
+            <p className="mt-2 text-sm text-neutral-600">
+              📄 {file?.name} — sera converti en image ; aperçu ci-dessous.
+            </p>
+          ) : /* eslint-disable-next-line @next/next/no-img-element */
+          preview ? (
             <img src={preview} alt="Aperçu" className="mt-3 max-h-64 rounded border" />
           ) : currentImageUrl ? (
             <img src={currentImageUrl} alt="Image actuelle" className="mt-3 max-h-64 rounded border" />

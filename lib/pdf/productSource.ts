@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mmToPx } from "./units";
 import { composeFullCoverImage, composeTiledImage } from "./visual";
 import { applyOrientation } from "./orientation";
+import { prepareUploadedFile } from "../visualUpload";
 import type { Template, Visual, VisualMode } from "../types";
 
 export interface ResolveProductImageInput {
@@ -32,10 +33,15 @@ export async function resolveProductImage(
   input: ResolveProductImageInput
 ): Promise<ResolvedProductImage> {
   if (input.file) {
+    // Un PDF uploadé directement (plutôt qu'un visuel de la banque) est
+    // converti en PNG (première page, 300 dpi) — le reste du pipeline
+    // (recadrage "cover", génération du PDF final) ne traite que des
+    // images matricielles.
+    const prepared = await prepareUploadedFile(input.file);
     return {
-      buffer: Buffer.from(await input.file.arrayBuffer()),
-      contentType: input.file.type || "image/jpeg",
-      filename: input.file.name,
+      buffer: prepared.buffer,
+      contentType: prepared.contentType || "image/jpeg",
+      filename: prepared.filename,
     };
   }
 

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { ALLOWED_VISUAL_TYPES, prepareUploadedFile } from "@/lib/visualUpload";
 
-const ALLOWED_TYPES = ["image/svg+xml", "image/png", "image/jpeg"];
+export const runtime = "nodejs"; // la rasterisation PDF a besoin du runtime Node, pas Edge.
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -25,22 +26,28 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   };
 
   if (file instanceof File && file.size > 0) {
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!ALLOWED_VISUAL_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { error: "Format non supporté (SVG, PNG ou JPG uniquement)." },
+        { error: "Format non supporté (SVG, PNG, JPG ou PDF uniquement)." },
         { status: 400 }
       );
     }
-    const filePath = `${params.id}/${file.name}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    let prepared;
+    try {
+      prepared = await prepareUploadedFile(file);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur lors du traitement du fichier.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    const filePath = `${params.id}/${prepared.filename}`;
     const { error: uploadError } = await supabase.storage
       .from("visuals")
-      .upload(filePath, buffer, { contentType: file.type, upsert: true });
+      .upload(filePath, prepared.buffer, { contentType: prepared.contentType, upsert: true });
     if (uploadError) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
     update.file_path = filePath;
-    update.mime_type = file.type;
+    update.mime_type = prepared.contentType;
   }
 
   const { data, error } = await supabase

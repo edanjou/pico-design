@@ -1,7 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ["sharp", "pdf-lib"],
+    serverComponentsExternalPackages: [
+      "sharp",
+      "pdf-lib",
+      "pdf-to-png-converter",
+      "pdfjs-dist",
+      "@napi-rs/canvas",
+    ],
   },
   images: {
     remotePatterns: [

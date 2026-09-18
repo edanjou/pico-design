@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { ALLOWED_VISUAL_TYPES, prepareUploadedFile } from "@/lib/visualUpload";
 
-const ALLOWED_TYPES = ["image/svg+xml", "image/png", "image/jpeg"];
+export const runtime = "nodejs"; // la rasterisation PDF a besoin du runtime Node, pas Edge.
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
@@ -30,20 +31,26 @@ export async function POST(request: Request) {
   if (typeof name !== "string" || !(file instanceof File)) {
     return NextResponse.json({ error: "Paramètres manquants (name, file)." }, { status: 400 });
   }
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (!ALLOWED_VISUAL_TYPES.includes(file.type)) {
     return NextResponse.json(
-      { error: "Format non supporté (SVG, PNG ou JPG uniquement)." },
+      { error: "Format non supporté (SVG, PNG, JPG ou PDF uniquement)." },
       { status: 400 }
     );
   }
 
   const visualId = randomUUID();
-  const filePath = `${visualId}/${file.name}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let prepared;
+  try {
+    prepared = await prepareUploadedFile(file);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors du traitement du fichier.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+  const filePath = `${visualId}/${prepared.filename}`;
 
   const { error: uploadError } = await supabase.storage
     .from("visuals")
-    .upload(filePath, buffer, { contentType: file.type, upsert: true });
+    .upload(filePath, prepared.buffer, { contentType: prepared.contentType, upsert: true });
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
@@ -54,7 +61,7 @@ export async function POST(request: Request) {
       id: visualId,
       name,
       file_path: filePath,
-      mime_type: file.type,
+      mime_type: prepared.contentType,
       collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
       created_by: user.id,
     })

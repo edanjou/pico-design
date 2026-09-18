@@ -541,7 +541,7 @@ export default function ProductForm({
                 onClick={() => setLogoColor(c.hex)}
                 title={c.name}
                 aria-label={c.name}
-                className={`h-7 w-7 rounded-full border ${
+                className={`h-7 w-7 rounded-full border outline-none transition-transform duration-150 hover:scale-110 focus-visible:ring-2 focus-visible:ring-pico-black focus-visible:ring-offset-2 ${
                   logoColor === c.hex
                     ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
                     : "border-neutral-300"
@@ -570,7 +570,7 @@ export default function ProductForm({
                     onClick={() => setLogoSecondaryColor(c.hex)}
                     title={c.name}
                     aria-label={c.name}
-                    className={`h-7 w-7 rounded-full border ${
+                    className={`h-7 w-7 rounded-full border outline-none transition-transform duration-150 hover:scale-110 focus-visible:ring-2 focus-visible:ring-pico-black focus-visible:ring-offset-2 ${
                       logoSecondaryColor === c.hex
                         ? "border-pico-black ring-2 ring-pico-black ring-offset-2"
                         : "border-neutral-300"

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
-import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon } from "@/components/icons";
+import { RocketIcon, SquareDashedKanbanIcon, SwatchBookIcon, TagIcon } from "@/components/icons";
 
 const links = [
   {
@@ -24,6 +24,13 @@ const links = [
     gradient: "from-pink-400 to-rose-500",
     icon: RocketIcon,
   },
+  {
+    href: "/skus",
+    title: "SKU",
+    description: "Référentiel des codes produit et de leurs groupes.",
+    gradient: "from-sky-400 to-blue-600",
+    icon: TagIcon,
+  },
 ];
 
 export default async function DashboardPage() {
@@ -42,17 +49,19 @@ export default async function DashboardPage() {
   return (
     <div>
       <div
-        className="-mt-8 rounded-b-2xl px-6 py-10 sm:px-10"
+        className="full-bleed -mt-8"
         style={{
-          background:
-            "radial-gradient(ellipse at top left, #fbe0cc 0%, #f8f1e9 55%, #f8f1e9 100%)",
+          backgroundImage:
+            "radial-gradient(60% 120% at 15% 0%, color-mix(in srgb, var(--pico-orange) 20%, transparent), transparent 60%), radial-gradient(50% 120% at 85% 0%, color-mix(in srgb, var(--pico-violet) 20%, transparent), transparent 55%)",
         }}
       >
-        <p className="text-xs font-semibold tracking-widest text-pico-accent">PICO DESIGN</p>
-        <h1 className="mt-2 font-heading text-3xl font-bold text-pico-black sm:text-4xl">
-          Bonjour, {firstName}.
-        </h1>
-        <p className="mt-2 text-neutral-600">Choisissez une page pour commencer.</p>
+        <div className="mx-auto max-w-6xl px-6 py-10 sm:px-10">
+          <p className="text-xs font-semibold tracking-widest text-pico-accent">PICO DESIGN</p>
+          <h1 className="mt-2 font-heading text-3xl font-bold text-pico-black sm:text-4xl">
+            Bonjour, {firstName}.
+          </h1>
+          <p className="mt-2 text-neutral-600">Choisissez une page pour commencer.</p>
+        </div>
       </div>
 
       <p className="mb-3 mt-8 text-xs font-semibold tracking-widest text-neutral-500">PAGES</p>

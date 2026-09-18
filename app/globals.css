@@ -2,15 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tokens portés de PICO OS (plateforme sœur) — mêmes couleurs de marque et
+   même système sémantique, pour une identité visuelle cohérente. */
+:root {
+  --pico-noir: #000;
+  --pico-blanc: #fff;
+  --pico-beige: #f8f1e9;
+  --pico-bourgogne: #631028;
+  --pico-rose: #f9c;
+  --pico-orange: #f63;
+  --pico-lime: #e9ea93;
+  --pico-peche: #fcc7b0;
+  --pico-violet: #dbbdf3;
+  --pico-violet-pale: #eadcf9;
+  --pico-bleu: #7c9cc4;
+
+  --neutral-0: #fff;
+  --neutral-50: #faf7f2;
+  --neutral-100: #f2ece3;
+  --neutral-200: #e6ddd1;
+  --neutral-300: #d4c8b8;
+  --neutral-400: #a99e8e;
+  --neutral-500: #7d7364;
+  --neutral-600: #5c5347;
+  --neutral-700: #423b32;
+  --neutral-800: #2a251f;
+  --neutral-900: #1a1613;
+
+  --background: var(--neutral-50);
+  --surface: var(--neutral-0);
+  --surface-muted: var(--neutral-100);
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --text: var(--neutral-900);
+  --text-muted: var(--neutral-600);
+  --text-subtle: var(--neutral-500);
+  --text-on-brand: var(--pico-blanc);
+
+  --primary: var(--pico-bourgogne);
+  --primary-hover: #4d0c1f;
+  --primary-subtle: #f6e6ea;
+  --accent: var(--pico-orange);
+  --accent-hover: #e8531f;
+  --accent-subtle: #ffe9e0;
+  --ring: var(--pico-orange);
+
+  --success: #3f8f5b;
+  --success-subtle: #e4f2e8;
+  --warning: #d98a2b;
+  --warning-subtle: #fdefd9;
+  --danger: #c0392b;
+  --danger-subtle: #fae7e4;
+  --info: var(--pico-bleu);
+  --info-subtle: #e7eef6;
+
+  --font-display: var(--font-heading), "Georgia", serif;
+  --font-text: var(--font-body), system-ui, -apple-system, sans-serif;
+  --tracking-display: -0.03em;
+  --tracking-body: -0.01em;
+  --tracking-price: 0.075em;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --shadow-sm: 0 1px 2px rgba(26, 22, 19, 0.06);
+  --shadow: 0 2px 8px rgba(26, 22, 19, 0.08);
+  --shadow-lg: 0 8px 24px rgba(26, 22, 19, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --background: #151210;
+  --surface: #1f1a16;
+  --surface-muted: #282019;
+  --border: #362d25;
+  --border-strong: #4a3e33;
+  --text: #f4efe8;
+  --text-muted: #b6ab9c;
+  --text-subtle: #8c8172;
+  --primary: #b8455f;
+  --primary-hover: #c85570;
+  --primary-subtle: #3a1420;
+  --accent: var(--pico-orange);
+  --accent-hover: #ff7d4f;
+  --accent-subtle: #3d1f12;
+  --success-subtle: #16301f;
+  --warning-subtle: #362613;
+  --danger-subtle: #351815;
+  --info-subtle: #1a2430;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
 body {
-  @apply bg-pico-cream text-neutral-900;
-  font-family: var(--font-body), sans-serif;
+  @apply bg-background text-text;
+  font-family: var(--font-text);
+  letter-spacing: var(--tracking-body);
 }
 
 h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-heading), serif;
-  letter-spacing: 0.02em;
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
+}
+
+/* Casse un conteneur centré (mx-auto max-w-*) pour occuper toute la largeur
+   du viewport — utilisé pour les bandeaux (ex. le dégradé du tableau de
+   bord) qui doivent aller d'un bord à l'autre. */
+.full-bleed {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
 }

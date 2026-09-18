@@ -43,7 +43,7 @@ function SortableTile({ menuKey }: { menuKey: MenuKey }) {
     >
       <Link href={item.href} className="flex flex-1 items-center gap-4 overflow-hidden">
         <span
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white transition-transform duration-200 ease-out group-hover:scale-110 group-hover:rotate-6 ${item.gradient}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white ${item.gradient}`}
         >
           <item.icon className="h-6 w-6" />
         </span>

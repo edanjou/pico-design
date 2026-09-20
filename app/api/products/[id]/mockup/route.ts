@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logoShadowOf } from "@/lib/logoShadowSettings";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generateProductMockupPng } from "@/lib/pdf/mockup";
 import {
@@ -90,7 +91,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       logoBuffer,
       product.image_position_x,
       product.image_position_y,
-      product.logo_shadow ?? false
+      logoShadowOf(product)
     );
     return new NextResponse(new Uint8Array(png), {
       headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
@@ -113,7 +114,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     logoBuffer,
     product.image_position_x,
     product.image_position_y,
-    product.logo_shadow ?? false
+    logoShadowOf(product)
   );
 
   return new NextResponse(new Uint8Array(png), {

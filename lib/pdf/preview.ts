@@ -4,6 +4,7 @@ import { rasterizeLogoToPng, isSvg } from "./logo";
 import { logoOverlay } from "./logoShadow";
 import { coverCropToBuffer } from "./crop";
 import type { Template } from "../types";
+import type { LogoShadowSettings } from "../logoShadowSettings";
 
 const PREVIEW_MAX_DIM_PX = 900;
 
@@ -30,7 +31,7 @@ export async function generateTemplatePreviewPng(
   positionX = 0.5,
   positionY = 0.5,
   transparent = false,
-  logoShadow = false
+  logoShadow: LogoShadowSettings | null = null
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;

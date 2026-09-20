@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DEFAULT_LOGO_SHADOW, LOGO_SHADOW_RANGES, logoShadowSettingsOf, type LogoShadowSettings } from "@/lib/logoShadowSettings";
 import type { Category, LogoShape, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
-import ImageSourcePicker, { type ImageSourceValue } from "@/components/ImageSourcePicker";
-import { formatIn, inToMm } from "@/lib/pdf/units";
+import ImageSourcePicker, { DEFAULT_TILE_SIZE_MM, type ImageSourceValue } from "@/components/ImageSourcePicker";
+import { formatIn } from "@/lib/pdf/units";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
 import { applyOrientation, isLandscape } from "@/lib/pdf/orientation";
 import { SpinnerIcon } from "@/components/icons";
+
+const SHADOW_CONTROLS: { key: keyof LogoShadowSettings; label: string; unit: string }[] = [
+  { key: "blur", label: "Flou", unit: "%" },
+  { key: "distance", label: "Distance", unit: "%" },
+  { key: "angle", label: "Angle", unit: "°" },
+  { key: "opacity", label: "Opacité", unit: "%" },
+];
 
 const LOGO_SHAPES: { value: LogoShape; label: string }[] = [
   { value: "logo", label: "Logo" },
@@ -45,7 +53,7 @@ export default function ProductForm({
     sourceMode: product?.visual_mode ?? "upload",
     file: null,
     visualId: product?.visual_id ?? visuals[0]?.id ?? "",
-    tileSizeMm: product?.tile_size_mm ?? inToMm(1),
+    tileSizeMm: product?.tile_size_mm ?? DEFAULT_TILE_SIZE_MM,
     positionX: product?.image_position_x ?? 0.5,
     positionY: product?.image_position_y ?? 0.5,
   });
@@ -53,7 +61,7 @@ export default function ProductForm({
     sourceMode: product?.back_visual_mode ?? "upload",
     file: null,
     visualId: product?.back_visual_id ?? visuals[0]?.id ?? "",
-    tileSizeMm: product?.back_tile_size_mm ?? inToMm(1),
+    tileSizeMm: product?.back_tile_size_mm ?? DEFAULT_TILE_SIZE_MM,
     positionX: product?.back_image_position_x ?? 0.5,
     positionY: product?.back_image_position_y ?? 0.5,
   });
@@ -66,6 +74,9 @@ export default function ProductForm({
     product?.logo_secondary_color ?? "#FFFFFF"
   );
   const [logoShadow, setLogoShadow] = useState(product?.logo_shadow ?? false);
+  const [shadowSettings, setShadowSettings] = useState<LogoShadowSettings>(
+    product ? logoShadowSettingsOf(product) : DEFAULT_LOGO_SHADOW
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
@@ -182,6 +193,10 @@ export default function ProductForm({
     formData.append("logoColor", logoColor);
     formData.append("logoSecondaryColor", logoSecondaryColor);
     formData.append("logoShadow", String(logoShadow));
+    formData.append("logoShadowBlur", String(shadowSettings.blur));
+    formData.append("logoShadowDistance", String(shadowSettings.distance));
+    formData.append("logoShadowAngle", String(shadowSettings.angle));
+    formData.append("logoShadowOpacity", String(shadowSettings.opacity));
     formData.append("positionX", String(front.positionX));
     formData.append("positionY", String(front.positionY));
     if (cId) formData.append("collectionId", cId);
@@ -491,7 +506,7 @@ export default function ProductForm({
           value={front}
           onChange={updateFront}
           currentImageUrl={currentImageUrl}
-          logo={frontLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow } : null}
+          logo={frontLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow ? shadowSettings : null } : null}
           previewUnavailableMessage={
             isMultiTemplate
               ? "Aperçu disponible pour un seul modèle à la fois — décoche pour n'en garder qu'un si tu veux vérifier le rendu avant de créer la collection."
@@ -600,6 +615,41 @@ export default function ProductForm({
             />
             Ombre portée
           </label>
+
+          {logoShadow && (
+            <div className="mt-2 space-y-2 rounded-lg border border-neutral-200 p-3">
+              {SHADOW_CONTROLS.map((c) => (
+                <label key={c.key} className="flex items-center gap-3 text-xs text-neutral-600">
+                  <span className="w-16 shrink-0">{c.label}</span>
+                  <input
+                    type="range"
+                    min={LOGO_SHADOW_RANGES[c.key].min}
+                    max={LOGO_SHADOW_RANGES[c.key].max}
+                    step={LOGO_SHADOW_RANGES[c.key].step}
+                    value={shadowSettings[c.key]}
+                    onChange={(e) => setShadowSettings((s) => ({ ...s, [c.key]: Number(e.target.value) }))}
+                    className="min-w-0 flex-1"
+                  />
+                  <span className="w-12 shrink-0 text-right tabular-nums">
+                    {shadowSettings[c.key]}
+                    {c.unit}
+                  </span>
+                </label>
+              ))}
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-neutral-400">
+                  Flou et distance en % de la largeur du logo. Angle : 0° = droite, 90° = bas.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShadowSettings(DEFAULT_LOGO_SHADOW)}
+                  className="shrink-0 text-xs text-neutral-500 underline hover:text-pico-black"
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            </div>
+          )}
           </>
           )}
         </div>
@@ -634,7 +684,7 @@ export default function ProductForm({
               value={back}
               onChange={updateBack}
               currentImageUrl={currentBackImageUrl}
-              logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow } : null}
+              logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow ? shadowSettings : null } : null}
             />
           )}
         </div>

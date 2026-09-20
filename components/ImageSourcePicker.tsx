@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { LogoShape, Template, VisualMode } from "@/lib/types";
+import type { LogoShadowSettings } from "@/lib/logoShadowSettings";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import VisualPicker from "@/components/VisualPicker";
 import { mmToIn, inToMm } from "@/lib/pdf/units";
@@ -29,6 +30,11 @@ function zoomToTileSizeIn(zoom: number): number {
   const t = (zoom - TILE_ZOOM_MIN_RATIO) / (TILE_ZOOM_MAX_RATIO - TILE_ZOOM_MIN_RATIO);
   return TILE_ZOOM_MIN_IN * Math.pow(TILE_ZOOM_MAX_IN / TILE_ZOOM_MIN_IN, t);
 }
+
+// Zoom proposé par défaut pour une nouvelle mosaïque (l'échelle ci-dessus
+// n'est pas linéaire : 60 correspond à un motif d'environ 2,6 po).
+export const DEFAULT_TILE_ZOOM = 60;
+export const DEFAULT_TILE_SIZE_MM = inToMm(zoomToTileSizeIn(DEFAULT_TILE_ZOOM));
 
 function isPdfFile(file: File | null): boolean {
   return Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name)));
@@ -73,11 +79,19 @@ export default function ImageSourcePicker({
   value: ImageSourceValue;
   onChange: (patch: Partial<ImageSourceValue>) => void;
   currentImageUrl?: string | null;
-  logo: { shape: LogoShape; color: string; secondaryColor: string; shadow: boolean } | null;
+  logo: {
+    shape: LogoShape;
+    color: string;
+    secondaryColor: string;
+    // null = sans ombre portée
+    shadow: LogoShadowSettings | null;
+  } | null;
   previewUnavailableMessage?: string;
 }) {
   const { sourceMode, file, visualId, tileSizeMm, positionX, positionY } = value;
   const [preview, setPreview] = useState<string | null>(null);
+  // Clé stable des réglages d'ombre, pour relancer l'aperçu quand ils changent.
+  const shadowKey = JSON.stringify(logo?.shadow ?? null);
 
   // Le "cadre" (traits de coupe/sécurité, gabarit, logo) est un calque
   // transparent séparé du fond : il ne bouge jamais pendant le glisser.
@@ -141,7 +155,13 @@ export default function ImageSourcePicker({
         formData.append("logoShape", logo.shape);
         formData.append("logoColor", logo.color);
         formData.append("logoSecondaryColor", logo.secondaryColor);
-        formData.append("logoShadow", String(logo.shadow));
+        formData.append("logoShadow", String(logo.shadow !== null));
+        if (logo.shadow) {
+          formData.append("logoShadowBlur", String(logo.shadow.blur));
+          formData.append("logoShadowDistance", String(logo.shadow.distance));
+          formData.append("logoShadowAngle", String(logo.shadow.angle));
+          formData.append("logoShadowOpacity", String(logo.shadow.opacity));
+        }
       }
 
       const res = await fetch("/api/products/preview", { method: "POST", body: formData });
@@ -162,7 +182,7 @@ export default function ImageSourcePicker({
     }, 150);
 
     return () => clearTimeout(timeout);
-  }, [template, side, rotated, logo?.shape, logo?.color, logo?.secondaryColor, logo?.shadow]);
+  }, [template, side, rotated, logo?.shape, logo?.color, logo?.secondaryColor, shadowKey]);
 
   useEffect(() => {
     return () => {

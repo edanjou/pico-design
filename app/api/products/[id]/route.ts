@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { isValidLogoColor } from "@/lib/pdf/logo";
@@ -36,7 +37,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const backPositionY = parsePositionValue(formData.get("backPositionY"));
   const rotated = formData.get("rotated") === "true";
   const showLogo = formData.get("showLogo") !== "false";
-  const logoShadow = formData.get("logoShadow") === "true";
+  const logoShadow = parseLogoShadowForm(formData);
 
   if (typeof name !== "string" || typeof templateId !== "string") {
     return NextResponse.json(
@@ -68,7 +69,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     logo_color: color,
     logo_secondary_color: secondaryColor,
     show_logo: showLogo,
-    logo_shadow: logoShadow,
+    ...logoShadow.columns,
     rotated,
     collection_id: typeof collectionId === "string" && collectionId ? collectionId : null,
     image_position_x: positionX,
@@ -226,7 +227,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         logoColor: color,
         logoSecondaryColor: secondaryColor,
         showLogo,
-        logoShadow,
+        logoShadow: logoShadow.active,
         rotated,
         positionX,
         positionY,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logoShadowOf } from "@/lib/logoShadowSettings";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       template,
       sourceImage: sourceBuffer,
       logoImage: logoBuffer,
-      logoShadow: product.logo_shadow ?? false,
+      logoShadow: logoShadowOf(product),
     });
 
     const { error: uploadError } = await admin.storage

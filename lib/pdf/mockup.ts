@@ -3,6 +3,7 @@ import { mmToPx } from "./units";
 import { coverCropToBuffer } from "./crop";
 import { rasterizeLogoToPng } from "./logo";
 import { logoOverlay } from "./logoShadow";
+import type { LogoShadowSettings } from "../logoShadowSettings";
 import type { Template } from "../types";
 
 const MOCKUP_MAX_DIM_PX = 1400;
@@ -23,7 +24,7 @@ export async function generateProductMockupPng(
   logoImage: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
-  logoShadow = false
+  logoShadow: LogoShadowSettings | null = null
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;

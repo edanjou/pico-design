@@ -3,6 +3,7 @@ import { XMLParser } from "fast-xml-parser";
 import { coverCropToBuffer } from "./crop";
 import { rasterizeLogoToPng } from "./logo";
 import { logoOverlay } from "./logoShadow";
+import type { LogoShadowSettings } from "../logoShadowSettings";
 import type { Template } from "../types";
 
 /**
@@ -187,7 +188,7 @@ async function buildDesignForZone(
   effectiveDpi: number,
   positionX: number,
   positionY: number,
-  logoShadow: boolean
+  logoShadow: LogoShadowSettings | null
 ): Promise<Buffer> {
   const covered = await coverCropToBuffer(sourceImage, zoneWidthPx, zoneHeightPx, positionX, positionY);
 
@@ -240,7 +241,7 @@ export async function generateBeautyShotMockupPng(
   logoImage: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
-  logoShadow = false
+  logoShadow: LogoShadowSettings | null = null
 ): Promise<Buffer> {
   const canvasWidth = Math.max(1, config.width);
   const canvasHeight = Math.max(1, config.height);

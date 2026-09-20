@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   const positionY = formData.get("positionY");
   const rotated = formData.get("rotated") === "true";
   const logoEnabled = formData.get("showLogo") !== "false";
-  const logoShadow = formData.get("logoShadow") === "true";
+  const logoShadow = parseLogoShadowForm(formData).active;
   // "frame" : cadre seul (traits + gabarit + logo), fond transparent, sans
   //   image ni visuel — calque fixe pendant le repositionnement.
   // "background" : image/visuel déjà recadré/mosaïqué, sans traits ni logo

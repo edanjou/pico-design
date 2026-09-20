@@ -97,6 +97,10 @@ export interface Product {
   logo_secondary_color: string;
   show_logo: boolean;
   logo_shadow: boolean;
+  logo_shadow_blur: number;
+  logo_shadow_distance: number;
+  logo_shadow_angle: number;
+  logo_shadow_opacity: number;
   rotated: boolean;
   collection_id: string | null;
   pdf_path: string | null;

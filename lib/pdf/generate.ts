@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { mmToPt, mmToPx } from "./units";
 import { rasterizeLogoToPng } from "./logo";
 import { addDropShadow } from "./logoShadow";
+import type { LogoShadowSettings } from "../logoShadowSettings";
 import { coverCropToBuffer } from "./crop";
 import type { LogoHAlign, LogoVAlign, Template } from "../types";
 
@@ -22,8 +23,8 @@ export interface GeneratePdfInput {
   // propre forme/couleur mais utilise le même fichier ici (voir
   // lib/pdf/productPdf.ts, qui décide quel côté reçoit `logoImage`).
   backLogoImage?: Buffer | null;
-  // Ombre portée derrière le logo (recto et verso).
-  logoShadow?: boolean;
+  // Ombre portée derrière le logo (recto et verso) ; null/absent = sans.
+  logoShadow?: LogoShadowSettings | null;
 }
 
 /**
@@ -43,7 +44,7 @@ export async function generatePrintReadyPdf({
   backPositionX = 0.5,
   backPositionY = 0.5,
   backLogoImage = null,
-  logoShadow = false,
+  logoShadow = null,
 }: GeneratePdfInput): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -91,7 +92,7 @@ async function addImagePage(
   targetPxWidth: number,
   targetPxHeight: number,
   logoImage: Buffer | null,
-  logoShadow: boolean
+  logoShadow: LogoShadowSettings | null
 ): Promise<void> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -163,7 +164,7 @@ async function addImagePage(
     // Le canevas de l'image avec ombre déborde du logo de `pad` pixels de
     // chaque côté : on le décale d'autant pour que le logo reste exactement
     // à sa position.
-    const shadowed = await addDropShadow(logoPng);
+    const shadowed = await addDropShadow(logoPng, logoShadow);
     const embeddedShadowed = await pdfDoc.embedPng(shadowed.png);
     const ptPerPx = logoWidthPt / embeddedLogo.width;
     page.drawImage(embeddedShadowed, {

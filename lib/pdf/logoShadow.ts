@@ -1,12 +1,9 @@
 import sharp from "sharp";
+import { DEFAULT_LOGO_SHADOW, type LogoShadowSettings } from "../logoShadowSettings";
 
-// Ombre portée du logo / de la pastille. Tous les réglages sont
-// proportionnels à la largeur du logo, pour que l'ombre ait la même allure
-// quelle que soit la taille du logo sur le produit.
-const SHADOW_BLUR_RATIO = 0.025; // écart-type du flou
-const SHADOW_OFFSET_X_RATIO = 0.012;
-const SHADOW_OFFSET_Y_RATIO = 0.03;
-const SHADOW_OPACITY = 0.4;
+// Les réglages de l'ombre (flou, distance, angle, opacité) viennent du produit,
+// voir lib/logoShadowSettings.ts ; flou et distance sont proportionnels à la
+// largeur du logo pour que l'ombre ait la même allure à toutes les tailles.
 
 export interface ShadowedLogo {
   // Le logo sur son ombre, sur un canevas agrandi de `pad` pixels de chaque côté.
@@ -15,26 +12,33 @@ export interface ShadowedLogo {
 }
 
 /**
- * Ajoute une ombre portée douce (noire, décalée vers le bas et légèrement à
- * droite) à un logo PNG à fond transparent. Le logo lui-même n'est ni déplacé
+ * Ajoute une ombre portée (noire, floue, décalée selon `settings`) à un logo
+ * PNG à fond transparent. Le logo lui-même n'est ni déplacé
  * ni redimensionné : seule la marge `pad` est ajoutée autour pour que l'ombre
  * ne soit pas coupée — l'appelant doit décaler la position de `pad` pixels
  * vers le haut/la gauche pour que le logo reste exactement à sa place.
  */
-export async function addDropShadow(logoPng: Buffer): Promise<ShadowedLogo> {
+export async function addDropShadow(
+  logoPng: Buffer,
+  settings: LogoShadowSettings = DEFAULT_LOGO_SHADOW
+): Promise<ShadowedLogo> {
   const { width = 1, height = 1 } = await sharp(logoPng).metadata();
-  const sigma = Math.max(0.5, width * SHADOW_BLUR_RATIO);
-  const dx = Math.round(width * SHADOW_OFFSET_X_RATIO);
-  const dy = Math.round(width * SHADOW_OFFSET_Y_RATIO);
-  // Le flou s'étend sur ~3 écarts-types, en plus du décalage.
-  const pad = Math.ceil(sigma * 3 + Math.max(dx, dy)) + 1;
+  // sharp n'accepte pas un flou sous 0,3 : en dessous, l'ombre est nette.
+  const sigma = (width * settings.blur) / 100;
+  const blurred = sigma >= 0.3;
+  const distancePx = (width * settings.distance) / 100;
+  const radians = (settings.angle * Math.PI) / 180;
+  const dx = Math.round(distancePx * Math.cos(radians));
+  const dy = Math.round(distancePx * Math.sin(radians));
+  // Le flou s'étend sur ~3 écarts-types, en plus du décalage (dans les deux sens).
+  const pad = Math.ceil((blurred ? sigma * 3 : 0) + Math.max(Math.abs(dx), Math.abs(dy))) + 1;
   const canvasWidth = width + pad * 2;
   const canvasHeight = height + pad * 2;
 
   // Silhouette noire du logo, à l'opacité voulue (on ne touche qu'au canal alpha).
   const silhouette = await sharp(logoPng)
     .ensureAlpha()
-    .linear([0, 0, 0, SHADOW_OPACITY], [0, 0, 0, 0])
+    .linear([0, 0, 0, settings.opacity / 100], [0, 0, 0, 0])
     .png()
     .toBuffer();
 
@@ -47,9 +51,9 @@ export async function addDropShadow(logoPng: Buffer): Promise<ShadowedLogo> {
 
   // Le flou est appliqué dans une étape séparée : sharp exécute `composite`
   // après ses autres opérations, un `blur` chaîné ne flouterait pas la silhouette.
-  const blurred = await sharp(offsetSilhouette).blur(sigma).png().toBuffer();
+  const softShadow = blurred ? await sharp(offsetSilhouette).blur(sigma).png().toBuffer() : offsetSilhouette;
 
-  const png = await sharp(blurred)
+  const png = await sharp(softShadow)
     .composite([{ input: logoPng, left: pad, top: pad }])
     .png()
     .toBuffer();
@@ -57,7 +61,8 @@ export async function addDropShadow(logoPng: Buffer): Promise<ShadowedLogo> {
 }
 
 /**
- * Prépare le calque « logo » d'un `composite` sharp, avec ou sans ombre.
+ * Prépare le calque « logo » d'un `composite` sharp, avec ou sans ombre
+ * (`shadow` null = sans).
  * `left`/`top` sont la position du logo lui-même sur le canevas de taille
  * `canvasWidth × canvasHeight` ; avec l'ombre, l'image est agrandie de sa
  * marge puis rognée à ce qui reste dans le canevas (sharp refuse un calque
@@ -65,7 +70,7 @@ export async function addDropShadow(logoPng: Buffer): Promise<ShadowedLogo> {
  */
 export async function logoOverlay(
   logoPng: Buffer,
-  shadow: boolean,
+  shadow: LogoShadowSettings | null,
   left: number,
   top: number,
   canvasWidth: number,
@@ -73,7 +78,7 @@ export async function logoOverlay(
 ): Promise<sharp.OverlayOptions> {
   if (!shadow) return { input: logoPng, left, top };
 
-  const { png, pad } = await addDropShadow(logoPng);
+  const { png, pad } = await addDropShadow(logoPng, shadow);
   const { width = 1, height = 1 } = await sharp(png).metadata();
   const x = left - pad;
   const y = top - pad;

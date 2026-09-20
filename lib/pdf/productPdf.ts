@@ -3,6 +3,7 @@ import { generatePrintReadyPdf } from "./generate";
 import { loadLogoImage } from "./logo";
 import { applyOrientation } from "./orientation";
 import type { LogoShape, Template } from "../types";
+import type { LogoShadowSettings } from "../logoShadowSettings";
 
 export interface GenerateProductPdfInput {
   productId: string;
@@ -12,7 +13,7 @@ export interface GenerateProductPdfInput {
   logoColor: string;
   logoSecondaryColor: string;
   showLogo?: boolean;
-  logoShadow?: boolean;
+  logoShadow?: LogoShadowSettings | null;
   rotated?: boolean;
   positionX?: number;
   positionY?: number;
@@ -60,7 +61,7 @@ export async function generateAndStoreProductPdf(
     backPositionX: input.backPositionX,
     backPositionY: input.backPositionY,
     backLogoImage: showLogo && template.two_sided && template.logo_on_back ? logoBuffer : null,
-    logoShadow: input.logoShadow ?? false,
+    logoShadow: input.logoShadow ?? null,
   });
 
   const pdfPath = `products/${input.productId}/output.pdf`;

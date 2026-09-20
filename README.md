@@ -20,6 +20,10 @@ données, stockage de fichiers) + déploiement Vercel.
 5. **Modèles** permet d'ajouter de nouveaux formats de produits sans toucher
    au code (dimensions, fond perdu, position/taille du logo).
 6. **Historique** liste les générations passées (succès/erreurs).
+7. **Imposition** place des PDF d'impression (produits Pico ou PDF téléversés)
+   sur une feuille (ex. 12×18 po) selon le format choisi, avec les réglages
+   de la découpeuse (marges, espacement, calibration, fichier de marques).
+   Nécessite la migration `supabase/migrations/0035_imposition.sql`.
 
 ## Mise en route (première fois)
 

@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { parseSheetBody } from "@/lib/imposition/presets";
+
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+
+  const fields = parseSheetBody(await request.json().catch(() => null));
+  if (!fields) {
+    return NextResponse.json({ error: "La largeur et la hauteur sont requises." }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("imposition_sheets")
+    .update(fields)
+    .eq("id", params.id)
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ sheet: data });
+}
+
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+
+  const { data, error } = await supabase.from("imposition_sheets").delete().eq("id", params.id).select();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data || data.length === 0) {
+    return NextResponse.json({ error: "Feuille introuvable ou suppression non autorisée." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}

@@ -1,9 +1,9 @@
-import { ImageIcon, PencilRulerIcon, RocketIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { ImageIcon, LayoutGridIcon, PencilRulerIcon, RocketIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
 // utilisent les mêmes icônes/couleurs.
-export type MenuKey = "templates" | "visuals" | "products" | "skus" | "users";
+export type MenuKey = "templates" | "visuals" | "products" | "skus" | "imposition" | "users";
 
 export const MENU_ITEMS: Record<
   MenuKey,
@@ -33,6 +33,12 @@ export const MENU_ITEMS: Record<
     icon: TagIcon,
     gradient: "from-sky-400 to-blue-600",
   },
+  imposition: {
+    href: "/imposition",
+    title: "Imposition",
+    icon: LayoutGridIcon,
+    gradient: "from-orange-400 to-red-500",
+  },
   users: {
     href: "/users",
     title: "Utilisateurs",
@@ -42,7 +48,7 @@ export const MENU_ITEMS: Record<
 };
 
 // Ordre par défaut quand l'utilisateur n'a encore rien personnalisé.
-export const DEFAULT_MENU_ORDER: MenuKey[] = ["templates", "visuals", "products", "skus", "users"];
+export const DEFAULT_MENU_ORDER: MenuKey[] = ["templates", "visuals", "products", "skus", "imposition", "users"];
 
 function isMenuKey(value: string): value is MenuKey {
   return Object.prototype.hasOwnProperty.call(MENU_ITEMS, value);

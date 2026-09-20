@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { copyBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
 import type { Template } from "@/lib/types";
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
@@ -37,10 +38,12 @@ export async function POST(_request: Request, { params }: { params: { id: string
   let overlayPath: string | null;
   let maskPath: string | null;
   let shadingPath: string | null;
+  let beautyShotXmlPath: string | null;
   try {
     overlayPath = await copyOptionalFile(source.overlay_path, "overlay");
     maskPath = await copyOptionalFile(source.mask_path, "mask");
     shadingPath = await copyOptionalFile(source.shading_path, "shading");
+    beautyShotXmlPath = await copyBeautyShotBundle(supabase.storage, source.beauty_shot_xml_path, newId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors de la copie d'un fichier.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -73,6 +76,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
       overlay_path: overlayPath,
       mask_path: maskPath,
       shading_path: shadingPath,
+      beauty_shot_xml_path: beautyShotXmlPath,
       created_by: user.id,
     })
     .select()

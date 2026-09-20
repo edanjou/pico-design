@@ -15,7 +15,9 @@ export default async function ProductsPage() {
   ] = await Promise.all([
     supabase
       .from("products")
-      .select("*, template:templates(name, category_id, width_mm, height_mm, mask_path, shading_path)")
+      .select(
+        "*, template:templates(name, category_id, width_mm, height_mm, mask_path, shading_path, beauty_shot_xml_path)"
+      )
       .order("name", { ascending: true }),
     supabase.from("templates").select("*").order("name", { ascending: true }),
     supabase.from("categories").select("*").order("sort_order", { ascending: true }),

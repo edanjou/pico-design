@@ -65,6 +65,7 @@ export default function ProductForm({
   const [logoSecondaryColor, setLogoSecondaryColor] = useState(
     product?.logo_secondary_color ?? "#FFFFFF"
   );
+  const [logoShadow, setLogoShadow] = useState(product?.logo_shadow ?? false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createProgress, setCreateProgress] = useState<{ done: number; total: number } | null>(
@@ -180,6 +181,7 @@ export default function ProductForm({
     formData.append("logoShape", logoShape);
     formData.append("logoColor", logoColor);
     formData.append("logoSecondaryColor", logoSecondaryColor);
+    formData.append("logoShadow", String(logoShadow));
     formData.append("positionX", String(front.positionX));
     formData.append("positionY", String(front.positionY));
     if (cId) formData.append("collectionId", cId);
@@ -489,7 +491,7 @@ export default function ProductForm({
           value={front}
           onChange={updateFront}
           currentImageUrl={currentImageUrl}
-          logo={frontLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
+          logo={frontLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow } : null}
           previewUnavailableMessage={
             isMultiTemplate
               ? "Aperçu disponible pour un seul modèle à la fois — décoche pour n'en garder qu'un si tu veux vérifier le rendu avant de créer la collection."
@@ -589,6 +591,15 @@ export default function ProductForm({
               </div>
             </>
           )}
+
+          <label className="mt-3 flex items-center gap-2 text-sm text-pico-black">
+            <input
+              type="checkbox"
+              checked={logoShadow}
+              onChange={(e) => setLogoShadow(e.target.checked)}
+            />
+            Ombre portée
+          </label>
           </>
           )}
         </div>
@@ -623,7 +634,7 @@ export default function ProductForm({
               value={back}
               onChange={updateBack}
               currentImageUrl={currentBackImageUrl}
-              logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor } : null}
+              logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow } : null}
             />
           )}
         </div>

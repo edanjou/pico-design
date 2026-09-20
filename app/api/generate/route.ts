@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       template,
       sourceImage: sourceBuffer,
       logoImage: logoBuffer,
+      logoShadow: product.logo_shadow ?? false,
     });
 
     const { error: uploadError } = await admin.storage

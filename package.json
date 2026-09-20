@@ -15,6 +15,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "fast-xml-parser": "^5.11.1",
     "next": "14.2.35",
     "pdf-lib": "^1.17.1",
     "pdf-to-png-converter": "^4.2.1",

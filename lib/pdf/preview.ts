@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { mmToPx } from "./units";
 import { rasterizeLogoToPng, isSvg } from "./logo";
+import { logoOverlay } from "./logoShadow";
 import { coverCropToBuffer } from "./crop";
 import type { Template } from "../types";
 
@@ -28,7 +29,8 @@ export async function generateTemplatePreviewPng(
   overlayImage?: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
-  transparent = false
+  transparent = false,
+  logoShadow = false
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -160,11 +162,16 @@ export async function generateTemplatePreviewPng(
     const top =
       template.logo_v_align === "top" ? marginYPx : pageHeightPx - marginYPx - logoHeightPx;
 
-    composites.push({
-      input: logoPng,
-      left: Math.round(Math.min(Math.max(left, 0), Math.max(pageWidthPx - logoWidthPx, 0))),
-      top: Math.round(Math.min(Math.max(top, 0), Math.max(pageHeightPx - logoHeightPx, 0))),
-    });
+    composites.push(
+      await logoOverlay(
+        logoPng,
+        logoShadow,
+        Math.round(Math.min(Math.max(left, 0), Math.max(pageWidthPx - logoWidthPx, 0))),
+        Math.round(Math.min(Math.max(top, 0), Math.max(pageHeightPx - logoHeightPx, 0))),
+        pageWidthPx,
+        pageHeightPx
+      )
+    );
   }
 
   return sharp(base).composite(composites).png().toBuffer();

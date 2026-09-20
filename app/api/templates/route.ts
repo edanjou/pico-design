@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { uploadBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
 const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
@@ -78,10 +79,12 @@ export async function POST(request: Request) {
   let overlayPath: string | null;
   let maskPath: string | null;
   let shadingPath: string | null;
+  let beautyShotXmlPath: string | null;
   try {
     overlayPath = await uploadOptionalFile("overlay");
     maskPath = await uploadOptionalFile("mask");
     shadingPath = await uploadOptionalFile("shading");
+    beautyShotXmlPath = await uploadBeautyShotBundle(supabase.storage, formData, templateId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors de l'envoi d'un fichier.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -95,6 +98,7 @@ export async function POST(request: Request) {
       overlay_path: overlayPath,
       mask_path: maskPath,
       shading_path: shadingPath,
+      beauty_shot_xml_path: beautyShotXmlPath,
       created_by: user.id,
     })
     .select()

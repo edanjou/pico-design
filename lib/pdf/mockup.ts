@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { mmToPx } from "./units";
 import { coverCropToBuffer } from "./crop";
 import { rasterizeLogoToPng } from "./logo";
+import { logoOverlay } from "./logoShadow";
 import type { Template } from "../types";
 
 const MOCKUP_MAX_DIM_PX = 1400;
@@ -21,7 +22,8 @@ export async function generateProductMockupPng(
   shadingImage: Buffer,
   logoImage: Buffer | null,
   positionX = 0.5,
-  positionY = 0.5
+  positionY = 0.5,
+  logoShadow = false
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -58,11 +60,16 @@ export async function generateProductMockupPng(
         : (pageWidthPx - logoWidthPx) / 2;
     const top = template.logo_v_align === "top" ? marginYPx : pageHeightPx - marginYPx - logoHeightPx;
 
-    composites.push({
-      input: logoPng,
-      left: Math.round(Math.min(Math.max(left, 0), Math.max(pageWidthPx - logoWidthPx, 0))),
-      top: Math.round(Math.min(Math.max(top, 0), Math.max(pageHeightPx - logoHeightPx, 0))),
-    });
+    composites.push(
+      await logoOverlay(
+        logoPng,
+        logoShadow,
+        Math.round(Math.min(Math.max(left, 0), Math.max(pageWidthPx - logoWidthPx, 0))),
+        Math.round(Math.min(Math.max(top, 0), Math.max(pageHeightPx - logoHeightPx, 0))),
+        pageWidthPx,
+        pageHeightPx
+      )
+    );
   }
 
   const flatPage = await sharp(covered)

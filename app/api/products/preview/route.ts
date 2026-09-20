@@ -29,6 +29,7 @@ export async function POST(request: Request) {
   const positionY = formData.get("positionY");
   const rotated = formData.get("rotated") === "true";
   const logoEnabled = formData.get("showLogo") !== "false";
+  const logoShadow = formData.get("logoShadow") === "true";
   // "frame" : cadre seul (traits + gabarit + logo), fond transparent, sans
   //   image ni visuel — calque fixe pendant le repositionnement.
   // "background" : image/visuel déjà recadré/mosaïqué, sans traits ni logo
@@ -74,7 +75,16 @@ export async function POST(request: Request) {
       overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
     }
 
-    const png = await generateTemplatePreviewPng(template, logoBuffer, null, overlayBuffer, 0.5, 0.5, true);
+    const png = await generateTemplatePreviewPng(
+      template,
+      logoBuffer,
+      null,
+      overlayBuffer,
+      0.5,
+      0.5,
+      true,
+      logoShadow
+    );
     return new NextResponse(new Uint8Array(png), {
       headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
     });
@@ -126,7 +136,9 @@ export async function POST(request: Request) {
     resolved.buffer,
     overlayBuffer,
     clampedPositionX,
-    clampedPositionY
+    clampedPositionY,
+    false,
+    logoShadow
   );
 
   return new NextResponse(new Uint8Array(png), {

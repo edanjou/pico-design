@@ -73,7 +73,7 @@ export default function ImageSourcePicker({
   value: ImageSourceValue;
   onChange: (patch: Partial<ImageSourceValue>) => void;
   currentImageUrl?: string | null;
-  logo: { shape: LogoShape; color: string; secondaryColor: string } | null;
+  logo: { shape: LogoShape; color: string; secondaryColor: string; shadow: boolean } | null;
   previewUnavailableMessage?: string;
 }) {
   const { sourceMode, file, visualId, tileSizeMm, positionX, positionY } = value;
@@ -141,6 +141,7 @@ export default function ImageSourcePicker({
         formData.append("logoShape", logo.shape);
         formData.append("logoColor", logo.color);
         formData.append("logoSecondaryColor", logo.secondaryColor);
+        formData.append("logoShadow", String(logo.shadow));
       }
 
       const res = await fetch("/api/products/preview", { method: "POST", body: formData });
@@ -161,7 +162,7 @@ export default function ImageSourcePicker({
     }, 150);
 
     return () => clearTimeout(timeout);
-  }, [template, side, rotated, logo?.shape, logo?.color, logo?.secondaryColor]);
+  }, [template, side, rotated, logo?.shape, logo?.color, logo?.secondaryColor, logo?.shadow]);
 
   useEffect(() => {
     return () => {

@@ -12,6 +12,7 @@ export interface GenerateProductPdfInput {
   logoColor: string;
   logoSecondaryColor: string;
   showLogo?: boolean;
+  logoShadow?: boolean;
   rotated?: boolean;
   positionX?: number;
   positionY?: number;
@@ -59,6 +60,7 @@ export async function generateAndStoreProductPdf(
     backPositionX: input.backPositionX,
     backPositionY: input.backPositionY,
     backLogoImage: showLogo && template.two_sided && template.logo_on_back ? logoBuffer : null,
+    logoShadow: input.logoShadow ?? false,
   });
 
   const pdfPath = `products/${input.productId}/output.pdf`;

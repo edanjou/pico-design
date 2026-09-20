@@ -46,6 +46,7 @@ export interface Template {
   overlay_path: string | null;
   mask_path: string | null;
   shading_path: string | null;
+  beauty_shot_xml_path: string | null;
   two_sided: boolean;
   logo_on_front: boolean;
   logo_on_back: boolean;
@@ -95,6 +96,7 @@ export interface Product {
   logo_color: string;
   logo_secondary_color: string;
   show_logo: boolean;
+  logo_shadow: boolean;
   rotated: boolean;
   collection_id: string | null;
   pdf_path: string | null;
@@ -106,6 +108,32 @@ export interface Product {
   back_tile_size_mm: number | null;
   back_image_position_x: number;
   back_image_position_y: number;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface ImpositionSheet {
+  id: string;
+  name: string;
+  width_mm: number;
+  height_mm: number;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface ImpositionCutter {
+  id: string;
+  name: string;
+  margin_top_mm: number;
+  margin_right_mm: number;
+  margin_bottom_mm: number;
+  margin_left_mm: number;
+  gutter_x_mm: number;
+  gutter_y_mm: number;
+  offset_x_mm: number;
+  offset_y_mm: number;
+  center_grid: boolean;
+  marks_path: string | null;
   created_at: string;
   created_by: string | null;
 }

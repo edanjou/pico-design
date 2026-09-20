@@ -24,8 +24,8 @@ export default function TemplateForm({
   categories,
   skus,
   currentOverlayUrl,
-  currentMaskUrl,
-  currentShadingUrl,
+  currentBeautyShotXmlUrl,
+  currentBeautyShotAssetNames,
   onSuccess,
   onBusyChange,
 }: {
@@ -33,8 +33,8 @@ export default function TemplateForm({
   categories: Category[];
   skus: Sku[];
   currentOverlayUrl?: string | null;
-  currentMaskUrl?: string | null;
-  currentShadingUrl?: string | null;
+  currentBeautyShotXmlUrl?: string | null;
+  currentBeautyShotAssetNames?: string[];
   onSuccess: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -72,12 +72,10 @@ export default function TemplateForm({
   const [overlayFile, setOverlayFile] = useState<File | null>(null);
   const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
   const [removeOverlay, setRemoveOverlay] = useState(false);
-  const [maskFile, setMaskFile] = useState<File | null>(null);
-  const [maskPreview, setMaskPreview] = useState<string | null>(null);
-  const [removeMask, setRemoveMask] = useState(false);
-  const [shadingFile, setShadingFile] = useState<File | null>(null);
-  const [shadingPreview, setShadingPreview] = useState<string | null>(null);
-  const [removeShading, setRemoveShading] = useState(false);
+  const [beautyShotXmlFile, setBeautyShotXmlFile] = useState<File | null>(null);
+  const [beautyShotImageFiles, setBeautyShotImageFiles] = useState<File[]>([]);
+  const [removeBeautyShot, setRemoveBeautyShot] = useState(false);
+  const [beautyShotAssetNames, setBeautyShotAssetNames] = useState<string[] | null>(null);
 
   function handleOverlayChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -86,18 +84,26 @@ export default function TemplateForm({
     if (f) setRemoveOverlay(false);
   }
 
-  function handleMaskChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleBeautyShotXmlChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
-    setMaskFile(f);
-    setMaskPreview(f ? URL.createObjectURL(f) : null);
-    if (f) setRemoveMask(false);
+    setBeautyShotXmlFile(f);
+    if (f) {
+      setRemoveBeautyShot(false);
+      try {
+        const text = await f.text();
+        const names = Array.from(text.matchAll(/<asset\s+name="([^"]+)"/g)).map((m) => m[1]);
+        setBeautyShotAssetNames(names);
+      } catch {
+        setBeautyShotAssetNames(null);
+      }
+    } else {
+      setBeautyShotAssetNames(null);
+    }
   }
 
-  function handleShadingChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setShadingFile(f);
-    setShadingPreview(f ? URL.createObjectURL(f) : null);
-    if (f) setRemoveShading(false);
+  function handleBeautyShotImagesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setBeautyShotImageFiles(Array.from(e.target.files ?? []));
+    if (e.target.files && e.target.files.length > 0) setRemoveBeautyShot(false);
   }
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -139,10 +145,9 @@ export default function TemplateForm({
     }
     if (overlayFile) formData.append("overlay", overlayFile);
     if (removeOverlay) formData.append("removeOverlay", "true");
-    if (maskFile) formData.append("mask", maskFile);
-    if (removeMask) formData.append("removeMask", "true");
-    if (shadingFile) formData.append("shading", shadingFile);
-    if (removeShading) formData.append("removeShading", "true");
+    if (beautyShotXmlFile) formData.append("beautyShotXml", beautyShotXmlFile);
+    for (const f of beautyShotImageFiles) formData.append("beautyShotImages", f);
+    if (removeBeautyShot) formData.append("removeBeautyShot", "true");
 
     const res = await fetch(isEditing ? `/api/templates/${template!.id}` : "/api/templates", {
       method: isEditing ? "PATCH" : "POST",
@@ -503,59 +508,60 @@ export default function TemplateForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Masque (PNG) — optionnel</label>
+        <label className="block text-sm font-medium">Mockup (bundle XML + images) — optionnel</label>
         <p className="mt-1 text-xs text-neutral-500">
-          Pour la création de mockups — pas encore utilisé dans l&apos;aperçu ni le PDF.
+          Fichier XML (format beauty shot : fond, masque, zone du visuel, surcouches) accompagné des
+          images qu&apos;il référence. Chaque image doit porter le même nom que son asset dans le XML
+          (ex. <code>background-bs1.png</code> pour <code>&lt;asset name=&quot;background-bs1&quot;&gt;</code>).
         </p>
+        <label className="mt-2 block text-xs text-neutral-500">Fichier XML</label>
         <input
           type="file"
-          accept="image/png"
-          onChange={handleMaskChange}
-          className="mt-2 w-full text-sm"
+          accept=".xml,application/xml,text/xml"
+          onChange={handleBeautyShotXmlChange}
+          className="mt-1 w-full text-sm"
         />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {maskPreview ? (
-          <img src={maskPreview} alt="Aperçu du masque" className="mt-3 max-h-48 rounded border" />
-        ) : !removeMask && currentMaskUrl ? (
-          <div className="mt-3">
-            <img src={currentMaskUrl} alt="Masque actuel" className="max-h-48 rounded border" />
-            <button
-              type="button"
-              onClick={() => setRemoveMask(true)}
-              className="mt-2 text-sm text-red-600 hover:underline"
-            >
-              Retirer le masque
-            </button>
-          </div>
-        ) : null}
-      </div>
+        <label className="mt-3 block text-xs text-neutral-500">Images référencées par le XML</label>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+          onChange={handleBeautyShotImagesChange}
+          className="mt-1 w-full text-sm"
+        />
 
-      <div>
-        <label className="block text-sm font-medium">Ombrage (PNG) — optionnel</label>
-        <p className="mt-1 text-xs text-neutral-500">
-          Pour la création de mockups — pas encore utilisé dans l&apos;aperçu ni le PDF.
-        </p>
-        <input
-          type="file"
-          accept="image/png"
-          onChange={handleShadingChange}
-          className="mt-2 w-full text-sm"
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {shadingPreview ? (
-          <img src={shadingPreview} alt="Aperçu de l'ombrage" className="mt-3 max-h-48 rounded border" />
-        ) : !removeShading && currentShadingUrl ? (
-          <div className="mt-3">
-            <img src={currentShadingUrl} alt="Ombrage actuel" className="max-h-48 rounded border" />
+        {beautyShotAssetNames && (
+          <p className="mt-2 text-xs text-neutral-500">
+            Assets attendus : {beautyShotAssetNames.join(", ") || "aucun trouvé dans ce XML"}
+          </p>
+        )}
+        {beautyShotImageFiles.length > 0 && (
+          <p className="mt-1 text-xs text-neutral-500">
+            Images sélectionnées : {beautyShotImageFiles.map((f) => f.name).join(", ")}
+          </p>
+        )}
+
+        {!beautyShotXmlFile && !removeBeautyShot && currentBeautyShotXmlUrl && (
+          <div className="mt-3 text-sm text-pico-black">
+            <p>
+              Bundle actuel configuré
+              {currentBeautyShotAssetNames && currentBeautyShotAssetNames.length > 0
+                ? ` (${currentBeautyShotAssetNames.join(", ")})`
+                : ""}
+              {" — "}
+              <a href={currentBeautyShotXmlUrl} target="_blank" rel="noreferrer" className="underline">
+                voir le XML
+              </a>
+            </p>
             <button
               type="button"
-              onClick={() => setRemoveShading(true)}
+              onClick={() => setRemoveBeautyShot(true)}
               className="mt-2 text-sm text-red-600 hover:underline"
             >
-              Retirer l&apos;ombrage
+              Retirer le bundle mockup
             </button>
           </div>
-        ) : null}
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -23,6 +23,7 @@ export type ProductWithTemplate = Product & {
     height_mm: number;
     mask_path: string | null;
     shading_path: string | null;
+    beauty_shot_xml_path: string | null;
   } | null;
 };
 
@@ -250,7 +251,9 @@ export default function ProductsTable({
                   categoryLabel={categoryName(p.template?.category_id)}
                   collectionLabel={collectionName(p.collection_id)}
                   imageUrl={p.imageUrl}
-                  hasMockup={Boolean(p.template?.mask_path && p.template?.shading_path)}
+                  hasMockup={Boolean(
+                    p.template?.beauty_shot_xml_path || (p.template?.mask_path && p.template?.shading_path)
+                  )}
                   selected={selection.selected.has(p.id)}
                   onToggleSelect={() => selection.toggle(p.id)}
                   onEdit={(prod) => setModal({ mode: "edit", product: prod as ProductWithTemplate })}

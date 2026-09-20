@@ -13,8 +13,8 @@ import type { Category, Sku, Template } from "@/lib/types";
 
 export type TemplateWithOverlayUrl = Template & {
   overlayUrl: string | null;
-  maskUrl: string | null;
-  shadingUrl: string | null;
+  beautyShotXmlUrl: string | null;
+  beautyShotAssetNames: string[];
 };
 
 function SortIcon() {
@@ -261,8 +261,8 @@ export default function TemplatesTable({
             categories={categories}
             skus={skus}
             currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
-            currentMaskUrl={modal.mode === "edit" ? modal.template.maskUrl : null}
-            currentShadingUrl={modal.mode === "edit" ? modal.template.shadingUrl : null}
+            currentBeautyShotXmlUrl={modal.mode === "edit" ? modal.template.beautyShotXmlUrl : null}
+            currentBeautyShotAssetNames={modal.mode === "edit" ? modal.template.beautyShotAssetNames : []}
             onSuccess={handleSuccess}
             onBusyChange={setFormBusy}
           />

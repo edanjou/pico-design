@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { uploadBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
 const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
@@ -69,6 +70,23 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     await handleOptionalFile("overlay", "overlay_path");
     await handleOptionalFile("mask", "mask_path");
     await handleOptionalFile("shading", "shading_path");
+
+    if (formData.get("removeBeautyShot") === "true") {
+      update.beauty_shot_xml_path = null;
+    } else if (formData.get("beautyShotXml") || formData.getAll("beautyShotImages").length > 0) {
+      const { data: existing } = await supabase
+        .from("templates")
+        .select("beauty_shot_xml_path")
+        .eq("id", params.id)
+        .single();
+      const beautyShotXmlPath = await uploadBeautyShotBundle(
+        supabase.storage,
+        formData,
+        params.id,
+        existing?.beauty_shot_xml_path ?? null
+      );
+      if (beautyShotXmlPath) update.beauty_shot_xml_path = beautyShotXmlPath;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors de l'envoi d'un fichier.";
     return NextResponse.json({ error: message }, { status: 500 });

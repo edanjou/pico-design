@@ -177,7 +177,7 @@ export default function VisualsGrid({
           Aucun visuel ne correspond.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {filtered.map((v) => (
             <div
               key={v.id}

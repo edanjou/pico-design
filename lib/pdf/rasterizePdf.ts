@@ -19,7 +19,9 @@ export async function rasterizePdfFirstPage(buffer: Buffer): Promise<Buffer> {
   const pages = await pdfToPng(buffer, {
     pagesToProcess: [1],
     viewportScale: PRINT_DPI / PDF_POINTS_DPI,
-    disableFontFace: false,
+    // Ne pas mettre `disableFontFace: false` : hors navigateur, pdf.js ne sait
+    // pas charger les polices TrueType intégrées et les remplace par des cases
+    // barrées. Le réglage par défaut (true) dessine les glyphes en vectoriel.
   });
   const [page] = pages;
   if (!page?.content) {

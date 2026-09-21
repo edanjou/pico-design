@@ -6,6 +6,15 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import { DownloadIcon, EyeIcon, FilePenIcon, SendIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
+// « 21 septembre 2026 à 17:39 »
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric" });
+  const time = date.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit", hour12: false });
+  // fr-CA écrit « 17 h 39 » : on veut « 17:39 ».
+  return `${day} à ${time.replace(/\s*h\s*/, ":")}`;
+}
+
 export interface ImpositionRow {
   id: string;
   name: string;
@@ -59,7 +68,7 @@ export default function ImpositionsTable({ rows }: { rows: ImpositionRow[] }) {
               <tr key={row.id} className="border-t border-neutral-100 hover:bg-neutral-50">
                 <td className="p-4 font-semibold text-pico-black">{row.name}</td>
                 <td className="whitespace-nowrap p-4 text-neutral-500">
-                  {new Date(row.updated_at).toLocaleString("fr-CA")}
+                  {formatDateTime(row.updated_at)}
                 </td>
                 <td className="p-4">
                   <div className="flex items-center justify-end gap-1">

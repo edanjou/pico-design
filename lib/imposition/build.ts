@@ -10,6 +10,7 @@ import {
   type ImpositionSource,
 } from "@/lib/imposition/render";
 import { barcodePath } from "@/lib/imposition/barcodes";
+import { productDisplayName } from "@/lib/imposition/productLabel";
 import { DUPLO_MARKS } from "@/lib/imposition/duplo";
 import { MACHINE_LABELS, isMachine } from "@/lib/imposition/machines";
 import { STORED_SOURCE_PATH, sourcesDir } from "@/lib/imposition/saved";
@@ -133,17 +134,21 @@ export async function buildImposition(
     } else if (spec.kind === "product") {
       const { data: product } = await supabase
         .from("products")
-        .select("name, pdf_path")
+        .select("name, pdf_path, image_path, visual_id")
         .eq("id", spec.productId)
-        .single<{ name: string; pdf_path: string | null }>();
+        .single<{ name: string; pdf_path: string | null; image_path: string | null; visual_id: string | null }>();
       if (!product) throw new ImpositionError("Produit introuvable.", 404);
       if (!product.pdf_path) {
         throw new ImpositionError(`Le PDF de « ${product.name} » n'a pas encore été généré.`);
       }
       const { data: file, error } = await admin.storage.from("outputs").download(product.pdf_path);
       if (error || !file) throw new ImpositionError(`PDF introuvable pour « ${product.name} ».`, 404);
-      sources.push({ name: product.name, pdf: new Uint8Array(await file.arrayBuffer()), copies: spec.copies });
-      built.push({ spec, name: product.name, bytes: null });
+      const { data: visual } = product.visual_id
+        ? await supabase.from("visuals").select("name").eq("id", product.visual_id).single<{ name: string }>()
+        : { data: null };
+      const label = productDisplayName(product, new Map(visual && product.visual_id ? [[product.visual_id, visual.name]] : []));
+      sources.push({ name: label, pdf: new Uint8Array(await file.arrayBuffer()), copies: spec.copies });
+      built.push({ spec, name: label, bytes: null });
     } else {
       throw new ImpositionError("Type de fichier inconnu.");
     }

@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { FormatOption, ProductOption } from "@/components/ImpositionTool";
 import { templateLabel } from "@/lib/templateLabel";
+import { productDisplayName } from "@/lib/imposition/productLabel";
 import { BARCODE_DIR, jobNosFromStoredNames } from "@/lib/imposition/barcodes";
 import type { Category, ImpositionDuploJob, ImpositionSheet, Template } from "@/lib/types";
 
@@ -9,6 +10,8 @@ interface ProductRow {
   name: string;
   template_id: string;
   rotated: boolean;
+  image_path: string | null;
+  visual_id: string | null;
 }
 
 // Données dont l'écran d'imposition a besoin (feuilles, jobs Duplo, formats, produits).
@@ -20,6 +23,7 @@ export async function loadImpositionToolData() {
     { data: templates },
     { data: categories },
     { data: products },
+    { data: visuals },
   ] =
     await Promise.all([
       supabase
@@ -33,10 +37,12 @@ export async function loadImpositionToolData() {
       // Seuls les produits dont le PDF a déjà été généré peuvent être imposés.
       supabase
         .from("products")
-        .select("id, name, template_id, rotated")
+        .select("id, name, template_id, rotated, image_path, visual_id")
         .not("pdf_path", "is", null)
         .order("name", { ascending: true }),
+      supabase.from("visuals").select("id, name"),
     ]);
+  const visualNames = new Map(((visuals as { id: string; name: string }[]) ?? []).map((v) => [v.id, v.name]));
 
   // Numéros de job qui ont un code-barres importé (une page de 1 000 fichiers suffit : 250 jobs).
   const { data: barcodeFiles } = await supabase.storage.from("imposition").list(BARCODE_DIR, { limit: 1000 });
@@ -70,7 +76,7 @@ export async function loadImpositionToolData() {
   const productOptions: ProductOption[] = ((products as ProductRow[]) ?? []).flatMap((p) => {
     const template = templateById.get(p.template_id);
     if (!template) return [];
-    return [{ id: p.id, name: p.name, templateId: p.template_id, ...pageSize(template, p.rotated) }];
+    return [{ id: p.id, name: productDisplayName(p, visualNames), templateId: p.template_id, ...pageSize(template, p.rotated) }];
   });
 
   return {

@@ -117,3 +117,14 @@ h4 {
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
 }
+
+/* Toute icône qui déclenche une action (bouton, lien) joue la secousse « jello »
+   au survol, comme celles du menu. Le bouton désactivé et l'icône de chargement
+   (animate-spin) restent immobiles ; `motion-safe` respecte le réglage « réduire
+   les animations » du système. */
+@layer components {
+  button:not(:disabled):hover svg:not(.animate-spin),
+  a[href]:hover svg:not(.animate-spin) {
+    @apply motion-safe:animate-jello;
+  }
+}

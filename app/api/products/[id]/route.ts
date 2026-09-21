@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
-import { resolveProductImage } from "@/lib/pdf/productSource";
+import { planUploadedPdf, resolveProductImage } from "@/lib/pdf/productSource";
 import { isValidLogoColor } from "@/lib/pdf/logo";
 import { generateAndStoreProductPdf } from "@/lib/pdf/productPdf";
 import { parsePositionValue } from "@/lib/pdf/crop";
@@ -78,11 +78,19 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const hasNewSource = file instanceof File && file.size > 0
     ? true
     : typeof visualId === "string" && typeof visualMode === "string";
-  const hasNewBackSource =
+  const hasOwnBack =
     template.two_sided &&
     (backFile instanceof File && backFile.size > 0
       ? true
       : typeof backVisualId === "string" && typeof backVisualMode === "string");
+  // Un PDF de deux pages fournit le recto (page 1) et, pour un modèle
+  // recto-verso sans autre verso, le verso (page 2). Sinon, les pages en trop
+  // sont ignorées et on le signale.
+  const frontFile = file instanceof File && file.size > 0 ? file : null;
+  const pdfPlan = await planUploadedPdf(frontFile, template.two_sided, hasOwnBack);
+  const backFromPdf = pdfPlan?.backPage ?? null;
+  const hasNewBackSource = hasOwnBack || backFromPdf !== null;
+  const warnings = pdfPlan?.warning ? [pdfPlan.warning] : [];
 
   const admin = createAdminSupabaseClient();
   let sourceBufferForPdf: Buffer | null = null;
@@ -161,7 +169,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     try {
       resolvedBack = await resolveProductImage(supabase, {
         templateId,
-        file: backFile instanceof File && backFile.size > 0 ? backFile : null,
+        file: backFromPdf ? frontFile : backFile instanceof File && backFile.size > 0 ? backFile : null,
+        pdfPage: backFromPdf ?? 1,
         visualId: typeof backVisualId === "string" ? backVisualId : null,
         visualMode: typeof backVisualMode === "string" ? (backVisualMode as VisualMode) : null,
         tileSizeMm: typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
@@ -185,12 +194,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: backUploadError.message }, { status: 500 });
     }
     update.back_image_path = backImagePath;
-    update.back_visual_id =
-      backFile instanceof File && backFile.size > 0 ? null : (backVisualId as string);
-    update.back_visual_mode =
-      backFile instanceof File && backFile.size > 0 ? null : (backVisualMode as string);
+    const backIsFile = backFromPdf !== null || (backFile instanceof File && backFile.size > 0);
+    update.back_visual_id = backIsFile ? null : (backVisualId as string);
+    update.back_visual_mode = backIsFile ? null : (backVisualMode as string);
     update.back_tile_size_mm =
-      backFile instanceof File && backFile.size > 0
+      backIsFile
         ? null
         : typeof backTileSizeMm === "string"
         ? parseFloat(backTileSizeMm)
@@ -248,7 +256,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ product: data, pdfError });
+  return NextResponse.json({ product: data, pdfError, warnings });
 }
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {

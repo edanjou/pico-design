@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
-import { resolveProductImage } from "@/lib/pdf/productSource";
+import { planUploadedPdf, resolveProductImage } from "@/lib/pdf/productSource";
 import { isValidLogoColor } from "@/lib/pdf/logo";
 import { generateAndStoreProductPdf } from "@/lib/pdf/productPdf";
 import { parsePositionValue } from "@/lib/pdf/crop";
@@ -67,11 +67,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Modèle introuvable." }, { status: 404 });
   }
 
+  const frontFile = file instanceof File ? file : null;
+  const hasOwnBack =
+    template.two_sided &&
+    (backFile instanceof File && backFile.size > 0
+      ? true
+      : typeof backVisualId === "string" && typeof backVisualMode === "string");
+  // Un PDF de deux pages fournit le recto (page 1) et, pour un modèle
+  // recto-verso sans autre verso, le verso (page 2). Sinon, les pages en trop
+  // sont ignorées et on le signale.
+  const pdfPlan = await planUploadedPdf(frontFile, template.two_sided, hasOwnBack);
+  const backFromPdf = pdfPlan?.backPage ?? null;
+  const warnings = pdfPlan?.warning ? [pdfPlan.warning] : [];
+
   let resolved;
   try {
     resolved = await resolveProductImage(supabase, {
       templateId,
-      file: file instanceof File ? file : null,
+      file: frontFile,
       visualId: typeof visualId === "string" ? visualId : null,
       visualMode: typeof visualMode === "string" ? (visualMode as VisualMode) : null,
       tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
@@ -84,18 +97,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const hasBackSource =
-    template.two_sided &&
-    (backFile instanceof File && backFile.size > 0
-      ? true
-      : typeof backVisualId === "string" && typeof backVisualMode === "string");
-
   let resolvedBack: Awaited<ReturnType<typeof resolveProductImage>> | null = null;
-  if (hasBackSource) {
+  if (hasOwnBack || backFromPdf) {
     try {
       resolvedBack = await resolveProductImage(supabase, {
         templateId,
-        file: backFile instanceof File && backFile.size > 0 ? backFile : null,
+        file: backFromPdf ? frontFile : backFile instanceof File && backFile.size > 0 ? backFile : null,
+        pdfPage: backFromPdf ?? 1,
         visualId: typeof backVisualId === "string" ? backVisualId : null,
         visualMode: typeof backVisualMode === "string" ? (backVisualMode as VisualMode) : null,
         tileSizeMm: typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
@@ -188,10 +196,11 @@ export async function POST(request: Request) {
       image_position_x: positionX,
       image_position_y: positionY,
       back_image_path: backImagePath,
-      back_visual_id: resolvedBack && typeof backVisualId === "string" ? backVisualId : null,
-      back_visual_mode: resolvedBack && typeof backVisualMode === "string" ? backVisualMode : null,
+      back_visual_id: !backFromPdf && resolvedBack && typeof backVisualId === "string" ? backVisualId : null,
+      back_visual_mode:
+        !backFromPdf && resolvedBack && typeof backVisualMode === "string" ? backVisualMode : null,
       back_tile_size_mm:
-        resolvedBack && typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
+        !backFromPdf && resolvedBack && typeof backTileSizeMm === "string" ? parseFloat(backTileSizeMm) : null,
       back_image_position_x: backPositionX,
       back_image_position_y: backPositionY,
       created_by: user.id,
@@ -200,5 +209,5 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ product: data, pdfError });
+  return NextResponse.json({ product: data, pdfError, warnings });
 }

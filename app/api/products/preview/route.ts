@@ -20,6 +20,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const templateId = formData.get("templateId");
   const file = formData.get("image");
+  // Page à afficher quand l'image est un PDF (le verso d'un PDF de deux pages est la page 2).
+  const pdfPage = Math.max(1, Math.floor(Number(formData.get("pdfPage"))) || 1);
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
     resolved = await resolveProductImage(supabase, {
       templateId,
       file: file instanceof File && file.size > 0 ? file : null,
+      pdfPage,
       visualId: typeof visualId === "string" ? visualId : null,
       visualMode: typeof visualMode === "string" ? (visualMode as VisualMode) : null,
       tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,

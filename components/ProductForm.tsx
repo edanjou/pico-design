@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { DEFAULT_LOGO_SHADOW, LOGO_SHADOW_RANGES, logoShadowSettingsOf, type LogoShadowSettings } from "@/lib/logoShadowSettings";
 import type { Category, LogoShape, Product, ProductCollection, Template } from "@/lib/types";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
-import ImageSourcePicker, { DEFAULT_TILE_SIZE_MM, type ImageSourceValue } from "@/components/ImageSourcePicker";
+import ImageSourcePicker, { DEFAULT_TILE_SIZE_MM, isPdfFile, type ImageSourceValue } from "@/components/ImageSourcePicker";
 import { formatIn } from "@/lib/pdf/units";
+import { pdfPageCount, planPdfPages } from "@/lib/pdf/pdfPages";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
 import { applyOrientation, isLandscape } from "@/lib/pdf/orientation";
 import { SpinnerIcon } from "@/components/icons";
@@ -116,6 +117,39 @@ export default function ProductForm({
     }
   }, [previewTemplateId]);
   const showBackSection = !isMultiTemplate && Boolean(previewTemplate?.two_sided);
+
+  // Un PDF de deux pages importé pour le recto fournit aussi le verso d'un
+  // modèle recto-verso (page 2). Le serveur applique la même règle
+  // (planPdfPages) ; ici elle sert à l'avis, à la validation et à l'aperçu.
+  const [frontPdfPages, setFrontPdfPages] = useState(1);
+  const frontPdf = front.sourceMode === "upload" && isPdfFile(front.file) ? front.file : null;
+  useEffect(() => {
+    if (!frontPdf) {
+      setFrontPdfPages(1);
+      return;
+    }
+    let cancelled = false;
+    frontPdf
+      .arrayBuffer()
+      .then(pdfPageCount)
+      .then((n) => {
+        if (!cancelled) setFrontPdfPages(n);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [frontPdf]);
+  const hasOwnBack =
+    back.sourceMode === "upload" ? Boolean(back.file) : Boolean(back.visualId);
+  const pdfPlan =
+    frontPdf && previewTemplate
+      ? planPdfPages({
+          pageCount: frontPdfPages,
+          twoSided: previewTemplate.two_sided,
+          hasOwnBack: showBackSection && hasOwnBack,
+        })
+      : null;
+  const backFromPdf = showBackSection && pdfPlan?.backPage ? { file: frontPdf!, page: pdfPlan.backPage } : null;
   const someSelectedAreTwoSided =
     !isEditing && selectedTemplateIds.some((id) => templates.find((t) => t.id === id)?.two_sided);
   // Sans modèle unique connu (aucun choisi, ou plusieurs sélectionnés), on
@@ -238,7 +272,7 @@ export default function ProductForm({
     }
     if (showBackSection) {
       const hasExistingBack = isEditing && Boolean(currentBackImageUrl);
-      if (back.sourceMode === "upload" && !back.file && !hasExistingBack) {
+      if (back.sourceMode === "upload" && !back.file && !hasExistingBack && !backFromPdf) {
         setError("Une image de verso est requise (modèle recto-verso).");
         return;
       }
@@ -298,6 +332,8 @@ export default function ProductForm({
     setCreateProgress({ done: 0, total });
     const failures: string[] = [];
     const pdfWarnings: string[] = [];
+    // Pages d'un PDF non utilisées, signalées par modèle (sans doublon).
+    const pageWarnings: string[] = [];
     for (const tId of selectedTemplateIds) {
       const templateName = templates.find((t) => t.id === tId)?.name ?? "";
       const productName = name.trim() ? `${name.trim()} — ${templateName}` : templateName;
@@ -306,8 +342,9 @@ export default function ProductForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         failures.push(`${templateName} : ${data.error ?? "erreur inconnue"}`);
-      } else if (data.pdfError) {
-        pdfWarnings.push(`${templateName} : ${data.pdfError}`);
+      } else {
+        if (data.pdfError) pdfWarnings.push(`${templateName} : ${data.pdfError}`);
+        for (const w of (data.warnings ?? []) as string[]) pageWarnings.push(`${templateName} : ${w}`);
       }
       setCreateProgress((p) => (p ? { done: p.done + 1, total: p.total } : { done: 1, total }));
     }
@@ -323,6 +360,9 @@ export default function ProductForm({
           "\n"
         )}`
       );
+    }
+    if (pageWarnings.length > 0) {
+      alert(`Les produits ont été créés.\n${pageWarnings.join("\n")}`);
     }
     onSuccess();
   }
@@ -513,6 +553,11 @@ export default function ProductForm({
               : undefined
           }
         />
+        {pdfPlan?.warning && (
+          <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            ⚠ {pdfPlan.warning}
+          </p>
+        )}
       </div>
 
       {showLogoSection && (
@@ -684,6 +729,7 @@ export default function ProductForm({
               value={back}
               onChange={updateBack}
               currentImageUrl={currentBackImageUrl}
+              pairedPdf={backFromPdf}
               logo={backLogoEnabled && showLogo ? { shape: logoShape, color: logoColor, secondaryColor: logoSecondaryColor, shadow: logoShadow ? shadowSettings : null } : null}
             />
           )}

@@ -36,7 +36,7 @@ function zoomToTileSizeIn(zoom: number): number {
 export const DEFAULT_TILE_ZOOM = 60;
 export const DEFAULT_TILE_SIZE_MM = inToMm(zoomToTileSizeIn(DEFAULT_TILE_ZOOM));
 
-function isPdfFile(file: File | null): boolean {
+export function isPdfFile(file: File | null): boolean {
   return Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name)));
 }
 
@@ -71,6 +71,7 @@ export default function ImageSourcePicker({
   currentImageUrl,
   logo,
   previewUnavailableMessage,
+  pairedPdf,
 }: {
   side: "front" | "back";
   template: Template | null;
@@ -87,8 +88,13 @@ export default function ImageSourcePicker({
     shadow: LogoShadowSettings | null;
   } | null;
   previewUnavailableMessage?: string;
+  // Verso tiré du PDF du recto (page `page`) tant qu'aucun fichier n'est choisi ici.
+  pairedPdf?: { file: File; page: number } | null;
 }) {
-  const { sourceMode, file, visualId, tileSizeMm, positionX, positionY } = value;
+  const { sourceMode, visualId, tileSizeMm, positionX, positionY } = value;
+  // Fichier réellement utilisé : celui choisi ici, sinon le PDF du recto.
+  const file = value.file ?? (sourceMode === "upload" ? pairedPdf?.file ?? null : null);
+  const pdfPage = value.file ? 1 : pairedPdf?.page ?? 1;
   const [preview, setPreview] = useState<string | null>(null);
   // Clé stable des réglages d'ombre, pour relancer l'aperçu quand ils changent.
   const shadowKey = JSON.stringify(logo?.shadow ?? null);
@@ -215,6 +221,7 @@ export default function ImageSourcePicker({
       formData.append("templateId", template.id);
       if (isPdfUpload && file) {
         formData.append("image", file);
+        formData.append("pdfPage", String(pdfPage));
       } else {
         formData.append("visualId", visualId);
         formData.append("visualMode", "tile");
@@ -243,7 +250,7 @@ export default function ImageSourcePicker({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [sourceMode, isPdfUpload, file, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
+  }, [sourceMode, isPdfUpload, file, pdfPage, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
 
   useEffect(() => {
     return () => {
@@ -346,7 +353,9 @@ export default function ImageSourcePicker({
           />
           {isPdfUpload ? (
             <p className="mt-2 text-sm text-neutral-600">
-              📄 {file?.name} — sera converti en image ; aperçu ci-dessous.
+              📄 {file?.name}
+              {pdfPage > 1 ? ` (page ${pdfPage}, PDF du recto)` : ""} — sera converti en image ; aperçu
+              ci-dessous.
             </p>
           ) : /* eslint-disable-next-line @next/next/no-img-element */
           preview ? (

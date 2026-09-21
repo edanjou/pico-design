@@ -3,11 +3,15 @@ import { mmToPx } from "./units";
 import { composeFullCoverImage, composeTiledImage } from "./visual";
 import { applyOrientation } from "./orientation";
 import { prepareUploadedFile } from "../visualUpload";
+import { isPdfBuffer } from "./rasterizePdf";
+import { pdfPageCount, planPdfPages, type PdfPagePlan } from "./pdfPages";
 import type { Template, Visual, VisualMode } from "../types";
 
 export interface ResolveProductImageInput {
   templateId: string;
   file: File | null;
+  // Page à rasteriser quand `file` est un PDF (1 = première page).
+  pdfPage?: number;
   visualId: string | null;
   visualMode: VisualMode | null;
   tileSizeMm: number | null;
@@ -23,6 +27,22 @@ export interface ResolvedProductImage {
 }
 
 /**
+ * Pages à tirer d'un PDF importé comme image du recto (voir planPdfPages) :
+ * un PDF de deux pages fournit aussi le verso d'un modèle recto-verso.
+ * Retourne null si le fichier n'est pas un PDF.
+ */
+export async function planUploadedPdf(
+  file: File | null,
+  twoSided: boolean,
+  hasOwnBack: boolean
+): Promise<PdfPagePlan | null> {
+  if (!file) return null;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (file.type !== "application/pdf" && !isPdfBuffer(bytes)) return null;
+  return planPdfPages({ pageCount: await pdfPageCount(bytes), twoSided, hasOwnBack });
+}
+
+/**
  * Détermine l'image source d'un produit : soit le fichier uploadé tel
  * quel, soit un visuel de la banque composé (plein format ou mosaïque)
  * à la taille exacte de la page du modèle choisi.
@@ -34,10 +54,10 @@ export async function resolveProductImage(
 ): Promise<ResolvedProductImage> {
   if (input.file) {
     // Un PDF uploadé directement (plutôt qu'un visuel de la banque) est
-    // converti en PNG (première page, 300 dpi) — le reste du pipeline
+    // converti en PNG (page demandée, 300 dpi) — le reste du pipeline
     // (recadrage "cover", génération du PDF final) ne traite que des
     // images matricielles.
-    const prepared = await prepareUploadedFile(input.file);
+    const prepared = await prepareUploadedFile(input.file, input.pdfPage);
     return {
       buffer: prepared.buffer,
       contentType: prepared.contentType || "image/jpeg",

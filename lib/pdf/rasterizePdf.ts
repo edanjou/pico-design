@@ -10,22 +10,22 @@ export function isPdfBuffer(buffer: Buffer): boolean {
 }
 
 /**
- * Rasterise la première page d'un PDF en PNG haute résolution (300 dpi),
- * pour permettre d'utiliser un PDF partout où l'app attend une image
- * matricielle (visuel de la banque, image de produit uploadée...). Les
- * pages suivantes d'un PDF multi-page sont ignorées.
+ * Rasterise une page d'un PDF (la première par défaut) en PNG haute
+ * résolution (300 dpi), pour permettre d'utiliser un PDF partout où l'app
+ * attend une image matricielle (visuel de la banque, image de produit
+ * uploadée...). Les autres pages sont ignorées.
  */
-export async function rasterizePdfFirstPage(buffer: Buffer): Promise<Buffer> {
+export async function rasterizePdfPage(buffer: Buffer, page = 1): Promise<Buffer> {
   const pages = await pdfToPng(buffer, {
-    pagesToProcess: [1],
+    pagesToProcess: [page],
     viewportScale: PRINT_DPI / PDF_POINTS_DPI,
     // Ne pas mettre `disableFontFace: false` : hors navigateur, pdf.js ne sait
     // pas charger les polices TrueType intégrées et les remplace par des cases
     // barrées. Le réglage par défaut (true) dessine les glyphes en vectoriel.
   });
-  const [page] = pages;
-  if (!page?.content) {
+  const [rendered] = pages;
+  if (!rendered?.content) {
     throw new Error("Impossible de convertir le PDF en image.");
   }
-  return page.content;
+  return rendered.content;
 }

@@ -1,7 +1,8 @@
 import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import ImpositionTool, { type FormatOption, type ProductOption } from "@/components/ImpositionTool";
 import { templateLabel } from "@/lib/templateLabel";
-import type { Category, ImpositionCutter, ImpositionSheet, Template } from "@/lib/types";
+import { BARCODE_DIR, jobNosFromStoredNames } from "@/lib/imposition/barcodes";
+import type { Category, ImpositionDuploJob, ImpositionSheet, Template } from "@/lib/types";
 
 interface ProductRow {
   id: string;
@@ -13,14 +14,20 @@ interface ProductRow {
 export default async function ImpositionPage() {
   await requireUser();
   const supabase = createServerSupabaseClient();
-  const [{ data: sheets }, { data: cutters }, { data: templates }, { data: categories }, { data: products }] =
+  const [
+    { data: sheets },
+    { data: duploJobs },
+    { data: templates },
+    { data: categories },
+    { data: products },
+  ] =
     await Promise.all([
       supabase
         .from("imposition_sheets")
         .select("*")
         .order("width_mm", { ascending: true })
         .order("height_mm", { ascending: true }),
-      supabase.from("imposition_cutters").select("*").order("name", { ascending: true }),
+      supabase.from("imposition_duplo_jobs").select("*").order("job_no", { ascending: true }),
       supabase.from("templates").select("*").order("name", { ascending: true }),
       supabase.from("categories").select("*").order("sort_order", { ascending: true }),
       // Seuls les produits dont le PDF a déjà été généré peuvent être imposés.
@@ -30,6 +37,10 @@ export default async function ImpositionPage() {
         .not("pdf_path", "is", null)
         .order("name", { ascending: true }),
     ]);
+
+  // Numéros de job qui ont un code-barres importé (une page de 1 000 fichiers suffit : 250 jobs).
+  const { data: barcodeFiles } = await supabase.storage.from("imposition").list(BARCODE_DIR, { limit: 1000 });
+  const barcodeJobNos = jobNosFromStoredNames((barcodeFiles ?? []).map((f) => f.name));
 
   const templateRows = (templates as Template[]) ?? [];
   const pageSize = (t: Template, rotated: boolean) => {
@@ -65,7 +76,8 @@ export default async function ImpositionPage() {
   return (
     <ImpositionTool
       sheets={(sheets as ImpositionSheet[]) ?? []}
-      cutters={(cutters as ImpositionCutter[]) ?? []}
+      duploJobs={(duploJobs as ImpositionDuploJob[]) ?? []}
+      barcodeJobNos={barcodeJobNos}
       formats={formats}
       products={productOptions}
     />

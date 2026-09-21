@@ -9,14 +9,3 @@ export function detectMarksKind(bytes: Uint8Array): MarksKind | null {
   if (startsWith(0xff, 0xd8, 0xff)) return "jpg";
   return null;
 }
-
-export const MARKS_CONTENT_TYPES: Record<MarksKind, string> = {
-  pdf: "application/pdf",
-  png: "image/png",
-  jpg: "image/jpeg",
-};
-
-// Nom de fichier sûr pour une clé Supabase Storage (pas d'accents/espaces).
-export function safeStorageName(name: string): string {
-  return name.replace(/[^A-Za-z0-9._-]+/g, "_");
-}

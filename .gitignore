@@ -11,3 +11,6 @@ next-env.d.ts
 .vercel
 .env*
 .claude/
+
+# Codes-barres Duplo (250 PDF, importés dans l'application, pas dans le dépôt)
+/codes/

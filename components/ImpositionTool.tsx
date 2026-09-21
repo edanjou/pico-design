@@ -4,19 +4,23 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import MeasureField, { UnitToggle, type Unit } from "@/components/MeasureField";
-import { CuttersManager, SheetsManager } from "@/components/ImpositionPresets";
-import CutterSettingsFields, { cutterSettingsOf, type CutterSettings } from "@/components/CutterSettingsFields";
+import { SheetsManager } from "@/components/ImpositionPresets";
+import DuploJobsManager from "@/components/DuploJobsManager";
 import { DownloadIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import UpdatingBadge from "@/components/UpdatingBadge";
 import {
   assignCells,
-  computeLayout,
+  cutLines,
   type FlipEdge,
+  type Layout,
   type PieceOrientation,
 } from "@/lib/imposition/layout";
+import { DUPLO_MARKS, computeDuploLayout } from "@/lib/imposition/duplo";
+import { regMarkRects, type MmRect } from "@/lib/imposition/regmark";
 import { formatInches, sheetLabel } from "@/lib/imposition/presets";
 import { MM_TO_PT, formatIn } from "@/lib/pdf/units";
-import type { ImpositionCutter, ImpositionSheet } from "@/lib/types";
+import { MACHINES, MACHINE_LABELS, type CutterMachine } from "@/lib/imposition/machines";
+import type { ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
 
 // Taille de page (fond perdu inclus) d'un format du catalogue.
 export interface FormatOption {
@@ -82,16 +86,23 @@ async function readPdfPageSizeMm(file: File): Promise<{ widthMm: number; heightM
   }
 }
 
-type ModalState = { mode: "sheets" } | { mode: "cutters" } | { mode: "result"; url: string } | null;
+type ModalState =
+  | { mode: "sheets" }
+  | { mode: "duplo-jobs" }
+  | { mode: "result"; url: string }
+  | null;
 
 export default function ImpositionTool({
   sheets,
-  cutters,
+  duploJobs,
+  barcodeJobNos,
   formats,
   products,
 }: {
   sheets: ImpositionSheet[];
-  cutters: ImpositionCutter[];
+  duploJobs: ImpositionDuploJob[];
+  // Numéros de job dont le code-barres (PDF) est importé.
+  barcodeJobNos: number[];
   formats: FormatOption[];
   products: ProductOption[];
 }) {
@@ -104,14 +115,11 @@ export default function ImpositionTool({
   const [customHeight, setCustomHeight] = useState(57.15);
   const [customBleed, setCustomBleed] = useState(DEFAULT_BLEED_MM);
   const [showCuts, setShowCuts] = useState(true);
-  // Réglages de la découpeuse ajustés à l'écran, pas encore enregistrés. Liés à
-  // un profil précis : changer de profil repart des réglages enregistrés.
-  const [draft, setDraft] = useState<{ cutterId: string; settings: CutterSettings } | null>(null);
-  const [resetNonce, setResetNonce] = useState(0);
-  const [savingCutter, setSavingCutter] = useState(false);
-  const [cutterSaveError, setCutterSaveError] = useState<string | null>(null);
   const [sheetId, setSheetId] = useState(sheets[0]?.id ?? "");
-  const [cutterId, setCutterId] = useState(cutters[0]?.id ?? "");
+  // Deux machines, sans profils : l'outil ne les règle pas, il utilise ce
+  // qu'elles fournissent (pour la Duplo, son catalogue de jobs).
+  const [machine, setMachine] = useState<CutterMachine>("duplo");
+  const [duploJobId, setDuploJobId] = useState("");
   const [orientation, setOrientation] = useState<PieceOrientation>("auto");
   const [flip, setFlip] = useState<FlipEdge>("long");
   const [items, setItems] = useState<SourceItem[]>([]);
@@ -127,9 +135,6 @@ export default function ImpositionTool({
   useEffect(() => {
     if (!sheets.some((s) => s.id === sheetId)) setSheetId(sheets[0]?.id ?? "");
   }, [sheets, sheetId]);
-  useEffect(() => {
-    if (!cutters.some((c) => c.id === cutterId)) setCutterId(cutters[0]?.id ?? "");
-  }, [cutters, cutterId]);
 
   // Libère le PDF généré quand la modale de résultat se ferme.
   useEffect(() => {
@@ -139,43 +144,38 @@ export default function ImpositionTool({
   }, [modal]);
 
   const sheet = sheets.find((s) => s.id === sheetId) ?? null;
-  const cutter = cutters.find((c) => c.id === cutterId) ?? null;
-  const savedSettings = cutter ? cutterSettingsOf(cutter) : null;
-  const savedKey = JSON.stringify(savedSettings);
-  const settings = draft && draft.cutterId === cutterId ? draft.settings : savedSettings;
-  const cutterDirty = JSON.stringify(settings) !== savedKey;
-  // Le brouillon est abandonné quand le profil enregistré change (enregistrement,
-  // ou édition via « Gérer ») : les réglages affichés repartent de la base.
-  useEffect(() => {
-    setDraft(null);
-  }, [savedKey]);
   const format = formats.find((f) => f.id === formatId) ?? null;
   const piece =
     formatId === CUSTOM || !format
       ? { widthMm: customWidth, heightMm: customHeight, bleedMm: customBleed }
       : { widthMm: format.widthMm, heightMm: format.heightMm, bleedMm: format.bleedMm };
 
-  const layout = useMemo(() => {
-    if (!sheet || !settings || !(piece.widthMm > 0) || !(piece.heightMm > 0)) return null;
-    return computeLayout({
-      sheetWidth: sheet.width_mm,
-      sheetHeight: sheet.height_mm,
-      margins: {
-        top: settings.margin_top_mm,
-        right: settings.margin_right_mm,
-        bottom: settings.margin_bottom_mm,
-        left: settings.margin_left_mm,
-      },
-      gutterX: settings.gutter_x_mm,
-      gutterY: settings.gutter_y_mm,
-      offsetX: settings.offset_x_mm,
-      offsetY: settings.offset_y_mm,
-      centerGrid: settings.center_grid,
-      pieceWidth: piece.widthMm,
-      pieceHeight: piece.heightMm,
-      orientation,
-    });
-  }, [sheet, savedKey, draft, cutterId, piece.widthMm, piece.heightMm, orientation]);
+  // Jobs de la Duplo qui conviennent à la feuille et au format choisis (avec la
+  // grille qu'ils donnent), les plus remplis d'abord.
+  const isDuplo = machine === "duplo";
+  const duploCandidates = useMemo(() => {
+    if (!sheet || !isDuplo) return [];
+    return duploJobs
+      .flatMap((job) => {
+        const jobLayout = computeDuploLayout({
+          job: { widthMm: job.width_mm, lengthMm: job.length_mm, slits: job.slits, cuts: job.cuts },
+          sheetWidth: sheet.width_mm,
+          sheetHeight: sheet.height_mm,
+          pieceWidth: piece.widthMm,
+          pieceHeight: piece.heightMm,
+          bleedMm: piece.bleedMm,
+          orientation,
+          offsetX: 0,
+          offsetY: 0,
+        });
+        return jobLayout ? [{ job, layout: jobLayout }] : [];
+      })
+      .sort((a, b) => b.layout.cells.length - a.layout.cells.length || a.job.job_no - b.job.job_no);
+  }, [duploJobs, isDuplo, sheet, piece.widthMm, piece.heightMm, piece.bleedMm, orientation]);
+  // Un job qui ne convient plus (autre feuille, autre format) est simplement ignoré.
+  const activeDuplo = duploCandidates.find((c) => c.job.id === duploJobId) ?? null;
+  // La grille vient uniquement du job choisi (l'outil ne règle pas la Duplo).
+  const layout = activeDuplo?.layout ?? null;
 
   const cellCount = layout?.cells.length ?? 0;
   const { assignment, overflow } = useMemo(
@@ -193,24 +193,6 @@ export default function ImpositionTool({
   }, []);
 
   const availableProducts = products.filter((p) => formatId === CUSTOM || p.templateId === formatId);
-
-  async function handleSaveCutter() {
-    if (!cutter || !settings) return;
-    setSavingCutter(true);
-    setCutterSaveError(null);
-    const body = new FormData();
-    body.append("name", cutter.name);
-    for (const [key, value] of Object.entries(settings)) body.append(key, String(value));
-    // Sans champ « marks », la route conserve le fichier de marques existant.
-    const res = await fetch(`/api/imposition/cutters/${cutter.id}`, { method: "PATCH", body });
-    setSavingCutter(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setCutterSaveError(data.error ?? "Erreur lors de l'enregistrement.");
-      return;
-    }
-    refreshPresets();
-  }
 
   function refreshPresets() {
     startTransition(() => router.refresh());
@@ -268,9 +250,15 @@ export default function ImpositionTool({
   const mismatched = items.filter((i) => !matchesPiece(i, piece.widthMm, piece.heightMm));
   const problem = !sheet
     ? "Créez une feuille pour commencer."
-    : !cutter
-      ? "Créez un profil de découpeuse pour commencer."
-      : !layout || cellCount === 0
+    : !isDuplo
+      ? `${MACHINE_LABELS[machine]} : paramètres à venir.`
+      : !activeDuplo
+        ? duploJobs.length === 0
+          ? "Importez le catalogue de jobs de la Duplo (Job Duplo > Gérer)."
+          : duploCandidates.length === 0
+            ? "Aucun job Duplo ne convient à cette feuille et à ce format : créez-le sur la Duplo, puis réimportez l'AllJobs."
+            : "Choisissez un job Duplo."
+        : !layout || cellCount === 0
         ? "Ce format ne rentre pas dans la zone utile de la feuille."
         : items.length === 0
           ? "Ajoutez au moins un fichier."
@@ -281,18 +269,19 @@ export default function ImpositionTool({
               : null;
 
   async function handleGenerate() {
-    if (!sheet || !cutter || problem) return;
+    if (!sheet || !activeDuplo || problem) return;
     setGenerating(true);
     setError(null);
 
     const body = new FormData();
     body.append("sheetId", sheet.id);
-    body.append("cutterId", cutter.id);
+    body.append("machine", machine);
+    body.append("duploJobId", activeDuplo.job.id);
     body.append("pieceWidthMm", String(piece.widthMm));
     body.append("pieceHeightMm", String(piece.heightMm));
     body.append("orientation", orientation);
     body.append("flip", flip);
-    if (settings) body.append("cutterSettings", JSON.stringify(settings));
+    body.append("pieceBleedMm", String(piece.bleedMm));
     const specs = items.map((item, index) => {
       if (item.kind === "upload" && item.file) {
         body.append(`file${index}`, item.file);
@@ -404,67 +393,69 @@ export default function ImpositionTool({
             </div>
 
             <div>
-              <div className="flex items-center justify-between">
-                <label className={labelClass}>Découpeuse</label>
-                <button
-                  type="button"
-                  onClick={() => setModal({ mode: "cutters" })}
-                  className="text-xs text-neutral-500 underline hover:text-pico-black"
-                >
-                  Gérer
-                </button>
-              </div>
-              <select value={cutterId} onChange={(e) => setCutterId(e.target.value)} className={selectClass}>
-                {cutters.length === 0 && <option value="">— Aucun profil —</option>}
-                {cutters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+              <label className={labelClass}>Découpeuse</label>
+              <select
+                value={machine}
+                onChange={(e) => setMachine(e.target.value as CutterMachine)}
+                className={selectClass}
+              >
+                {MACHINES.map((m) => (
+                  <option key={m} value={m}>
+                    {MACHINE_LABELS[m]}
                   </option>
                 ))}
               </select>
-              {cutter && settings && (
-                <details className="mt-2 rounded-lg border border-neutral-200 px-3 py-2">
-                  <summary className="cursor-pointer text-xs font-medium text-neutral-600">
-                    Ajuster les réglages
-                    {cutterDirty && <span className="ml-2 font-normal text-orange-600">· modifié, non enregistré</span>}
-                  </summary>
-                  <div className="mt-3 space-y-4">
-                    <CutterSettingsFields
-                      key={`${cutter.id}-${resetNonce}-${savedKey}`}
-                      value={settings}
-                      onChange={(next) => setDraft({ cutterId: cutter.id, settings: next })}
-                    />
-                    <p className="text-xs text-neutral-500">
-                      Les ajustements s&apos;appliquent tout de suite à l&apos;aperçu et au PDF généré.
-                      « Enregistrer » les garde dans le profil.
-                    </p>
-                    {cutterSaveError && <p className="text-sm text-red-600">{cutterSaveError}</p>}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSaveCutter}
-                        disabled={!cutterDirty || savingCutter}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-pico-maroon px-3 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-40"
-                      >
-                        {savingCutter && <SpinnerIcon className="h-4 w-4" />}
-                        Enregistrer dans « {cutter.name} »
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraft(null);
-                          setResetNonce((n) => n + 1);
-                        }}
-                        disabled={!cutterDirty || savingCutter}
-                        className="rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
-                      >
-                        Rétablir
-                      </button>
-                    </div>
-                  </div>
-                </details>
+              {!isDuplo && (
+                <p className="mt-1 text-xs text-neutral-500">
+                  Les paramètres de la {MACHINE_LABELS[machine]} seront ajoutés plus tard.
+                </p>
               )}
             </div>
+
+            {isDuplo && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Job Duplo</label>
+                  <button
+                    type="button"
+                    onClick={() => setModal({ mode: "duplo-jobs" })}
+                    className="text-xs text-neutral-500 underline hover:text-pico-black"
+                  >
+                    Gérer
+                  </button>
+                </div>
+                <select
+                  value={activeDuplo?.job.id ?? ""}
+                  onChange={(e) => setDuploJobId(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">
+                    {duploJobs.length === 0
+                      ? "— Aucun job importé —"
+                      : duploCandidates.length === 0
+                        ? "— Aucun job pour cette feuille et ce format —"
+                        : "— Choisir un job —"}
+                  </option>
+                  {duploCandidates.map(({ job, layout: jobLayout }) => (
+                    <option key={job.id} value={job.id}>
+                      N° {job.job_no} — {job.name} · {jobLayout.cells.length} pièces ({jobLayout.cols} × {jobLayout.rows})
+                    </option>
+                  ))}
+                </select>
+                {activeDuplo && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Les pièces suivent les traits du job : marges, espacement et centrage du profil sont ignorés
+                    (le décalage de calibration reste appliqué).
+                    {barcodeJobNos.includes(activeDuplo.job.job_no)
+                      ? " Le code-barres du job est posé au recto, à la position lue par la Duplo."
+                      : ""}
+                    {activeDuplo.job.reg_mark
+                      ? ` Repère REG à ${Math.round(activeDuplo.job.side_mark_mm * 10) / 10} mm du bord latéral et ${Math.round(activeDuplo.job.lead_mark_mm * 10) / 10} mm du bord d'attaque, dans le même coin.`
+                      : ""}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -611,11 +602,28 @@ export default function ImpositionTool({
                 layout={layout}
                 assignment={assignment}
                 multiColor={items.length > 1}
-                hasMarks={Boolean(cutter?.marks_path)}
+                hasBarcode={Boolean(activeDuplo && barcodeJobNos.includes(activeDuplo.job.job_no))}
+                regRects={
+                  activeDuplo?.job.reg_mark
+                    ? regMarkRects(
+                        DUPLO_MARKS.corner,
+                        activeDuplo.job.side_mark_mm,
+                        activeDuplo.job.lead_mark_mm,
+                        sheet.width_mm,
+                        sheet.height_mm
+                      )
+                    : null
+                }
                 bleedMm={showCuts ? piece.bleedMm : null}
               />
             ) : (
-              <p className="text-sm text-neutral-500">Choisissez une feuille et une découpeuse.</p>
+              <p className="text-sm text-neutral-500">
+                {!sheet
+                  ? "Choisissez une feuille."
+                  : isDuplo
+                    ? "Choisissez un job Duplo pour voir la grille."
+                    : `${MACHINE_LABELS[machine]} : paramètres à venir.`}
+              </p>
             )}
             <p className="mt-3 text-xs text-neutral-500">
               L&apos;aperçu montre la grille ; les marques de la découpeuse et le verso apparaissent dans le PDF
@@ -647,9 +655,9 @@ export default function ImpositionTool({
           <SheetsManager sheets={sheets} onChanged={refreshPresets} />
         </Modal>
       )}
-      {modal?.mode === "cutters" && (
-        <Modal title="Gérer les profils de découpeuse" onClose={() => setModal(null)} wide>
-          <CuttersManager cutters={cutters} onChanged={refreshPresets} />
+      {modal?.mode === "duplo-jobs" && (
+        <Modal title="Jobs de la Duplo" onClose={() => setModal(null)} wide>
+          <DuploJobsManager jobs={duploJobs} barcodeJobNos={barcodeJobNos} onChanged={refreshPresets} />
         </Modal>
       )}
       {modal?.mode === "result" && (
@@ -669,39 +677,29 @@ export default function ImpositionTool({
   );
 }
 
-// Positions distinctes triées (les erreurs d'arrondi flottant sont absorbées).
-function uniquePositions(values: number[]): number[] {
-  return [...new Set(values.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
-}
-
 function SheetPreview({
   sheet,
   layout,
   assignment,
   multiColor,
-  hasMarks,
+  hasBarcode,
+  regRects,
   bleedMm,
 }: {
   sheet: ImpositionSheet;
-  layout: NonNullable<ReturnType<typeof computeLayout>>;
+  layout: Layout;
   assignment: (number | null)[];
   multiColor: boolean;
-  hasMarks: boolean;
+  hasBarcode: boolean;
+  // Traits du repère REG du job Duplo (mm), ou null.
+  regRects: MmRect[] | null;
   // Fond perdu par côté ; null = lignes de coupe masquées.
   bleedMm: number | null;
 }) {
   const { usable } = layout;
-  // Jamais plus que la moitié de la plus petite dimension, pour ne pas inverser le rectangle.
-  const bleed =
-    bleedMm === null ? null : Math.max(0, Math.min(bleedMm, Math.min(layout.cellWidth, layout.cellHeight) / 2));
   const stroke = sheet.width_mm / 500;
   const fontSize = Math.min(layout.cellWidth, layout.cellHeight) * 0.4;
-  // La machine coupe de bord à bord : une coupe par bord de pièce finie (à
-  // `bleed` du bord de la cellule), sur toute la hauteur ou toute la largeur
-  // de la feuille. Deux cartes qui se touchent donnent donc deux traits
-  // rapprochés (la bande de fond perdu entre elles est du rebut).
-  const cutXs = bleed === null ? [] : uniquePositions(layout.cells.flatMap((c) => [c.x + bleed, c.x + c.width - bleed]));
-  const cutYs = bleed === null ? [] : uniquePositions(layout.cells.flatMap((c) => [c.y + bleed, c.y + c.height - bleed]));
+  const { xs: cutXs, ys: cutYs } = bleedMm === null ? { xs: [], ys: [] } : cutLines(layout, bleedMm);
   return (
     <svg
       viewBox={`0 0 ${sheet.width_mm} ${sheet.height_mm}`}
@@ -758,9 +756,14 @@ function SheetPreview({
       {cutYs.map((y) => (
         <line key={`cy-${y}`} x1={0} y1={y} x2={sheet.width_mm} y2={y} stroke={CUT_COLOR} strokeWidth={stroke * 1.2} />
       ))}
-      {hasMarks && (
+      {regRects?.map((r, i) => (
+        <rect key={`reg-${i}`} x={r.x} y={r.y} width={r.width} height={r.height} fill="#1a1613" />
+      ))}
+      {(hasBarcode || regRects) && (
         <text x={sheet.width_mm / 2} y={sheet.height_mm - 2} fontSize={sheet.width_mm / 45} textAnchor="middle" fill="#7d7364">
-          + marques de la découpeuse
+          + {[hasBarcode && "code-barres du job", regRects && "repère REG"]
+            .filter(Boolean)
+            .join(" + ")}
         </text>
       )}
     </svg>

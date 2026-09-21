@@ -125,19 +125,18 @@ export interface ImpositionSheet {
   created_by: string | null;
 }
 
-export interface ImpositionCutter {
+export interface ImpositionDuploJob {
   id: string;
+  job_no: number;
   name: string;
-  margin_top_mm: number;
-  margin_right_mm: number;
-  margin_bottom_mm: number;
-  margin_left_mm: number;
-  gutter_x_mm: number;
-  gutter_y_mm: number;
-  offset_x_mm: number;
-  offset_y_mm: number;
-  center_grid: boolean;
-  marks_path: string | null;
+  width_mm: number;
+  length_mm: number;
+  slits: number[];
+  cuts: number[];
+  // Repère REG lu par la machine, et sa distance (mm) aux bords de la feuille.
+  reg_mark: boolean;
+  side_mark_mm: number;
+  lead_mark_mm: number;
   created_at: string;
   created_by: string | null;
 }

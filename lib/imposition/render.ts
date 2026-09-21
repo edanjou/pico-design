@@ -1,4 +1,4 @@
-import { PDFDocument, degrees, type PDFEmbeddedPage } from "pdf-lib";
+import { PDFDocument, cmyk, degrees, type PDFEmbeddedPage } from "pdf-lib";
 import { MM_TO_PT, mmToPt } from "../pdf/units";
 import {
   assignCells,
@@ -10,6 +10,8 @@ import {
   type Layout,
   type LayoutInput,
 } from "./layout";
+import { computeDuploLayout, type DuploJobGeometry } from "./duplo";
+import { regMarkFits, regMarkRects, type RegCorner } from "./regmark";
 
 export interface ImpositionSource {
   name: string;
@@ -24,10 +26,36 @@ export interface ImpositionMarks {
   kind: MarksKind;
 }
 
+// Code-barres du job Duplo, posé au recto. Il est ancré au coin `corner` de la
+// feuille : `xMm` est la distance entre le bord (gauche ou droit) de ce coin et
+// le côté du code-barres qui lui fait face, `yMm` celle du bord haut ou bas.
+// `rotation` en degrés antihoraires.
+export interface ImpositionBarcode {
+  pdf: Uint8Array;
+  corner: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  xMm: number;
+  yMm: number;
+  rotation: Rotation;
+}
+
+// Repère REG du job Duplo : L noir posé au recto, dans le coin `corner`.
+export interface ImpositionRegMark {
+  corner: RegCorner;
+  sideMm: number;
+  leadMm: number;
+}
+
 export interface ImposeInput extends LayoutInput {
   sources: ImpositionSource[];
   marks: ImpositionMarks | null;
   flip: FlipEdge;
+  // Job de la Duplo : si fourni, la grille en est tirée (marges, espacement et
+  // centrage du profil sont alors ignorés ; le décalage de calibration reste).
+  duploJob?: DuploJobGeometry | null;
+  // Fond perdu par côté, pour retrouver la taille finie des pièces d'un job.
+  pieceBleedMm?: number;
+  barcode?: ImpositionBarcode | null;
+  regMark?: ImpositionRegMark | null;
 }
 
 export interface ImposeResult {
@@ -42,7 +70,7 @@ export interface ImposeResult {
 // laisser passer une pièce qui déborderait sur sa voisine.
 const PAGE_SIZE_TOLERANCE_MM = 0.1;
 
-type Rotation = 0 | 90 | 180 | 270;
+export type Rotation = 0 | 90 | 180 | 270;
 
 interface PreparedSource {
   name: string;
@@ -143,6 +171,89 @@ function toPdfRect(cell: Cell, sheetHeight: number) {
   };
 }
 
+// Marge blanche (mm) autour du code-barres : zone de silence exigée par le
+// code 39 et fond qui l'isole des pièces, comme sur les feuilles de Fiery
+// (fond blanc de 3 à 4 mm autour des barres).
+const BARCODE_QUIET_ZONE_MM = 3.5;
+
+// Pose la 1re page du PDF du code-barres à sa taille réelle, dans le coin
+// d'ancrage, sur un fond blanc, la boîte obtenue APRÈS rotation devant tenir
+// sur la feuille.
+async function drawBarcode(
+  out: PDFDocument,
+  sheetPage: ReturnType<PDFDocument["addPage"]>,
+  barcode: ImpositionBarcode,
+  sheetWidth: number,
+  sheetHeight: number
+) {
+  let embedded: PDFEmbeddedPage;
+  try {
+    [embedded] = await out.embedPdf(await PDFDocument.load(barcode.pdf), [0]);
+  } catch {
+    throw new Error("Le PDF du code-barres de ce job est illisible.");
+  }
+  const turned = barcode.rotation % 180 !== 0;
+  const width = mm(turned ? embedded.height : embedded.width);
+  const height = mm(turned ? embedded.width : embedded.height);
+  const x = barcode.corner.endsWith("right") ? sheetWidth - barcode.xMm - width : barcode.xMm;
+  const y = barcode.corner.startsWith("bottom") ? sheetHeight - barcode.yMm - height : barcode.yMm;
+  if (
+    x < -PAGE_SIZE_TOLERANCE_MM ||
+    y < -PAGE_SIZE_TOLERANCE_MM ||
+    x + width > sheetWidth + PAGE_SIZE_TOLERANCE_MM ||
+    y + height > sheetHeight + PAGE_SIZE_TOLERANCE_MM
+  ) {
+    throw new Error(
+      `Le code-barres (${fmtMm(width)} × ${fmtMm(height)}) déborde de la feuille à cette position : ` +
+        "ajustez sa position dans le profil de découpeuse."
+    );
+  }
+  // Fond blanc (borné à la feuille), puis le code-barres par-dessus.
+  const q = BARCODE_QUIET_ZONE_MM;
+  const left = Math.max(0, x - q);
+  const top = Math.max(0, y - q);
+  const backdrop = toPdfRect(
+    {
+      col: 0,
+      row: 0,
+      x: left,
+      y: top,
+      width: Math.min(sheetWidth, x + width + q) - left,
+      height: Math.min(sheetHeight, y + height + q) - top,
+    },
+    sheetHeight
+  );
+  sheetPage.drawRectangle({ ...backdrop, color: cmyk(0, 0, 0, 0), borderWidth: 0 });
+  drawInCell(
+    sheetPage,
+    embedded,
+    toPdfRect({ col: 0, row: 0, x, y, width, height }, sheetHeight),
+    barcode.rotation
+  );
+}
+
+// Repère REG : deux traits noirs (K seul) formant un L.
+function drawRegMark(
+  sheetPage: ReturnType<PDFDocument["addPage"]>,
+  reg: ImpositionRegMark,
+  sheetWidth: number,
+  sheetHeight: number
+) {
+  const rects = regMarkRects(reg.corner, reg.sideMm, reg.leadMm, sheetWidth, sheetHeight);
+  if (!regMarkFits(rects, sheetWidth, sheetHeight)) {
+    throw new Error(
+      `Le repère REG de ce job (à ${fmtMm(reg.sideMm)} × ${fmtMm(reg.leadMm)} du bord) déborde de la feuille.`
+    );
+  }
+  for (const r of rects) {
+    sheetPage.drawRectangle({
+      ...toPdfRect({ col: 0, row: 0, ...r }, sheetHeight),
+      color: cmyk(0, 0, 0, 1),
+      borderWidth: 0,
+    });
+  }
+}
+
 async function drawMarks(
   out: PDFDocument,
   sheetPage: ReturnType<PDFDocument["addPage"]>,
@@ -169,7 +280,23 @@ async function drawMarks(
 }
 
 export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
-  const layout = computeLayout(input);
+  let layout: Layout | null;
+  if (input.duploJob) {
+    layout = computeDuploLayout({
+      job: input.duploJob,
+      sheetWidth: input.sheetWidth,
+      sheetHeight: input.sheetHeight,
+      pieceWidth: input.pieceWidth,
+      pieceHeight: input.pieceHeight,
+      bleedMm: input.pieceBleedMm ?? 0,
+      orientation: input.orientation,
+      offsetX: input.offsetX,
+      offsetY: input.offsetY,
+    });
+    if (!layout) throw new Error("Ce job Duplo ne convient pas à cette feuille ou à ce format de pièce.");
+  } else {
+    layout = computeLayout(input);
+  }
   if (layout.cells.length === 0) {
     throw new Error(
       `Le format (${fmtMm(input.pieceWidth)} × ${fmtMm(
@@ -211,6 +338,8 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   });
   // Marques par-dessus : elles vivent dans les marges, hors des pièces.
   if (input.marks) await drawMarks(out, front, input.marks, sheetWidthPt, sheetHeightPt);
+  if (input.barcode) await drawBarcode(out, front, input.barcode, input.sheetWidth, input.sheetHeight);
+  if (input.regMark) drawRegMark(front, input.regMark, input.sheetWidth, input.sheetHeight);
 
   // Verso : seulement pour les sources qui ont une 2e page, aux positions
   // miroir du recto, sans marques (la découpeuse lit le recto).

@@ -113,6 +113,26 @@ export function computeLayout(input: LayoutInput): Layout {
   return { cols, rows, rotated, cellWidth, cellHeight, cells, usable };
 }
 
+// Positions distinctes triées (les erreurs d'arrondi flottant sont absorbées).
+function uniquePositions(values: number[]): number[] {
+  return [...new Set(values.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
+}
+
+// Traits de coupe de la découpeuse : elle coupe de bord à bord, une coupe par
+// bord de pièce finie (à `bleedMm` du bord de la cellule), sur toute la hauteur
+// (`xs`, positions horizontales) ou toute la largeur (`ys`, positions
+// verticales) de la feuille. Deux cartes qui se touchent donnent donc deux
+// traits rapprochés (la bande de fond perdu entre elles est du rebut).
+// Partagé entre l'aperçu (traits orange) et l'export Duplo.
+export function cutLines(layout: Layout, bleedMm: number): { xs: number[]; ys: number[] } {
+  // Jamais plus que la moitié de la plus petite dimension, pour ne pas inverser le rectangle.
+  const bleed = Math.max(0, Math.min(bleedMm, Math.min(layout.cellWidth, layout.cellHeight) / 2));
+  return {
+    xs: uniquePositions(layout.cells.flatMap((c) => [c.x + bleed, c.x + c.width - bleed])),
+    ys: uniquePositions(layout.cells.flatMap((c) => [c.y + bleed, c.y + c.height - bleed])),
+  };
+}
+
 export interface SourceCopies {
   copies: number;
 }

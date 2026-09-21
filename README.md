@@ -21,9 +21,20 @@ données, stockage de fichiers) + déploiement Vercel.
    au code (dimensions, fond perdu, position/taille du logo).
 6. **Historique** liste les générations passées (succès/erreurs).
 7. **Imposition** place des PDF d'impression (produits Pico ou PDF téléversés)
-   sur une feuille (ex. 12×18 po) selon le format choisi, avec les réglages
-   de la découpeuse (marges, espacement, calibration, fichier de marques).
-   Nécessite la migration `supabase/migrations/0035_imposition.sql`.
+   sur une feuille (ex. 12×18 po) selon le format choisi. Deux découpeuses :
+   la **Duplo DC-618** et la **Graphtec CE8000-40** (ses paramètres seront
+   ajoutés plus tard). L'outil ne règle pas les machines, il utilise ce
+   qu'elles fournissent. Pour la Duplo : le catalogue de jobs s'importe depuis
+   le fichier AllJobs de la machine (Imposition > Job Duplo > Gérer) et choisir
+   un job place les pièces pile entre ses traits de refente et de coupe. Le
+   code-barres PDF de chaque job (un fichier par numéro, importé au même
+   endroit) est posé au recto à la position fixe mesurée sur les feuilles
+   Fiery de la Duplo, et si le job a un repère REG (colonnes REG mark / Side
+   mark / Lead mark de l'AllJobs), un L noir est posé dans le même coin, aux
+   distances du job. Nécessite les migrations
+   `supabase/migrations/0035_imposition.sql`, `0038_imposition_duplo_jobs.sql` et
+   `0041_imposition_duplo_reg_mark.sql` (les autres migrations d'imposition,
+   0039 à 0042, concernaient des profils de découpeuse abandonnés).
 
 ## Mise en route (première fois)
 

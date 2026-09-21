@@ -59,13 +59,26 @@ const config: Config = {
         body: "var(--tracking-body)",
         price: "var(--tracking-price)",
       },
+      // Secousse élastique « jello » (Animate.css) : un biais qui s'amortit et
+      // revient à zéro. Utilisée sur les icônes des tuiles du tableau de bord au survol.
       keyframes: {
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
+        jello: {
+          "0%, 11.1%, 100%": { transform: "translate3d(0, 0, 0)" },
+          "22.2%": { transform: "scale(1.08) skewX(-14deg) skewY(-14deg)" },
+          "33.3%": { transform: "scale(1.05) skewX(7deg) skewY(7deg)" },
+          "44.4%": { transform: "scale(1.03) skewX(-3.5deg) skewY(-3.5deg)" },
+          "55.5%": { transform: "scale(1.015) skewX(1.75deg) skewY(1.75deg)" },
+          "66.6%": { transform: "scale(1.007) skewX(-0.875deg) skewY(-0.875deg)" },
+          "77.7%": { transform: "scale(1.003) skewX(0.44deg) skewY(0.44deg)" },
+          "88.8%": { transform: "scale(1.001) skewX(-0.22deg) skewY(-0.22deg)" },
+        },
       },
       animation: {
         shimmer: "shimmer 1.5s infinite",
+        jello: "jello 0.9s both",
       },
     },
   },

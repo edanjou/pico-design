@@ -45,7 +45,9 @@ function SortableTile({ menuKey }: { menuKey: MenuKey }) {
         <span
           className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white ${item.gradient}`}
         >
-          <item.icon className="h-6 w-6" />
+          {/* Même secousse « jello » que les icônes du menu, jouée une fois au survol de la
+              carte (`group`) ; `motion-safe` la coupe pour qui a demandé moins d'animations. */}
+          <item.icon className="h-6 w-6 motion-safe:group-hover:animate-jello" />
         </span>
         <span className="truncate font-heading text-2xl font-semibold text-pico-black transition-transform duration-200 ease-out group-hover:translate-x-0.5">
           {item.title}

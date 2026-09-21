@@ -32,9 +32,16 @@ données, stockage de fichiers) + déploiement Vercel.
    Fiery de la Duplo, et si le job a un repère REG (colonnes REG mark / Side
    mark / Lead mark de l'AllJobs), un L noir est posé dans le même coin, aux
    distances du job. Nécessite les migrations
-   `supabase/migrations/0035_imposition.sql`, `0038_imposition_duplo_jobs.sql` et
-   `0041_imposition_duplo_reg_mark.sql` (les autres migrations d'imposition,
-   0039 à 0042, concernaient des profils de découpeuse abandonnés).
+   `supabase/migrations/0035_imposition.sql`, `0038_imposition_duplo_jobs.sql`,
+   `0041_imposition_duplo_reg_mark.sql` et `0043_impositions.sql` (les autres
+   migrations d'imposition, 0039 à 0042, concernaient des profils de découpeuse
+   abandonnés).
+   Le PDF imposé a des calques : le code-barres et le repère REG sont sur le
+   premier calque (en bas), puis chaque visuel a son calque par-dessus.
+   La page Imposition liste les impositions enregistrées (nom, date, voir le
+   PDF, modifier, supprimer ; l'envoi en commande viendra plus tard) et un
+   bouton « Nouvelle imposition » ouvre l'outil : on la nomme, on l'enregistre
+   (PDF et configuration en base) et on peut la rouvrir pour la modifier.
 
 ## Mise en route (première fois)
 

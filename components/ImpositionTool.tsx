@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import MeasureField, { UnitToggle, type Unit } from "@/components/MeasureField";
@@ -11,6 +12,7 @@ import UpdatingBadge from "@/components/UpdatingBadge";
 import {
   assignCells,
   cutLines,
+  flipAxisIsVertical,
   type FlipEdge,
   type Layout,
   type PieceOrientation,
@@ -20,6 +22,7 @@ import { regMarkRects, type MmRect } from "@/lib/imposition/regmark";
 import { formatInches, sheetLabel } from "@/lib/imposition/presets";
 import { MM_TO_PT, formatIn } from "@/lib/pdf/units";
 import { MACHINES, MACHINE_LABELS, type CutterMachine } from "@/lib/imposition/machines";
+import type { SavedImposition } from "@/lib/imposition/saved";
 import type { ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
 
 // Taille de page (fond perdu inclus) d'un format du catalogue.
@@ -47,6 +50,8 @@ interface SourceItem {
   name: string;
   productId?: string;
   file?: File;
+  // PDF téléversé déjà enregistré avec l'imposition qu'on modifie.
+  storedPath?: string;
   // Taille de la page du PDF (mm), null tant qu'elle n'est pas lue.
   widthMm: number | null;
   heightMm: number | null;
@@ -98,6 +103,7 @@ export default function ImpositionTool({
   barcodeJobNos,
   formats,
   products,
+  saved = null,
 }: {
   sheets: ImpositionSheet[];
   duploJobs: ImpositionDuploJob[];
@@ -105,30 +111,55 @@ export default function ImpositionTool({
   barcodeJobNos: number[];
   formats: FormatOption[];
   products: ProductOption[];
+  // Imposition enregistrée qu'on modifie (null = nouvelle imposition).
+  saved?: SavedImposition | null;
 }) {
   const router = useRouter();
   const [isRefreshing, startTransition] = useTransition();
 
-  const [formatId, setFormatId] = useState<string>(formats[0]?.id ?? CUSTOM);
+  const cfg = saved?.config ?? null;
+  const [name, setName] = useState(saved?.name ?? "");
+  const [formatId, setFormatId] = useState<string>(
+    cfg && (cfg.formatId === CUSTOM || formats.some((f) => f.id === cfg.formatId))
+      ? cfg.formatId
+      : (formats[0]?.id ?? CUSTOM)
+  );
   const [customUnit, setCustomUnit] = useState<Unit>("in");
-  const [customWidth, setCustomWidth] = useState(95.25);
-  const [customHeight, setCustomHeight] = useState(57.15);
-  const [customBleed, setCustomBleed] = useState(DEFAULT_BLEED_MM);
+  const [customWidth, setCustomWidth] = useState(cfg?.custom.widthMm || 95.25);
+  const [customHeight, setCustomHeight] = useState(cfg?.custom.heightMm || 57.15);
+  const [customBleed, setCustomBleed] = useState(cfg?.custom.bleedMm || DEFAULT_BLEED_MM);
   const [showCuts, setShowCuts] = useState(true);
-  const [sheetId, setSheetId] = useState(sheets[0]?.id ?? "");
+  const [sheetId, setSheetId] = useState(
+    cfg && sheets.some((sh) => sh.id === cfg.sheetId) ? cfg.sheetId : (sheets[0]?.id ?? "")
+  );
   // Deux machines, sans profils : l'outil ne les règle pas, il utilise ce
   // qu'elles fournissent (pour la Duplo, son catalogue de jobs).
-  const [machine, setMachine] = useState<CutterMachine>("duplo");
-  const [duploJobId, setDuploJobId] = useState("");
-  const [orientation, setOrientation] = useState<PieceOrientation>("auto");
-  const [flip, setFlip] = useState<FlipEdge>("long");
-  const [items, setItems] = useState<SourceItem[]>([]);
+  const [machine, setMachine] = useState<CutterMachine>(cfg?.machine ?? "duplo");
+  const [duploJobId, setDuploJobId] = useState(cfg?.duploJobId ?? "");
+  const [orientation, setOrientation] = useState<PieceOrientation>(cfg?.orientation ?? "auto");
+  const [flip, setFlip] = useState<FlipEdge>(cfg?.flip ?? "long");
+  const [items, setItems] = useState<SourceItem[]>(() =>
+    (cfg?.sources ?? []).map((src, index) => {
+      const product = src.kind === "product" ? products.find((p) => p.id === src.productId) : undefined;
+      return {
+        key: `item-${index}`,
+        kind: src.kind,
+        name: product?.name ?? src.name,
+        productId: src.productId,
+        storedPath: src.path,
+        widthMm: product?.widthMm ?? src.widthMm,
+        heightMm: product?.heightMm ?? src.heightMm,
+        copies: src.copies,
+      };
+    })
+  );
   const [productToAdd, setProductToAdd] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const nextKey = useRef(0);
+  const nextKey = useRef(cfg?.sources.length ?? 0);
 
   // Si le préréglage sélectionné a été supprimé (ou le premier vient d'être
   // créé), retombe sur un choix valide.
@@ -267,12 +298,11 @@ export default function ImpositionTool({
             : mismatched.length > 0
               ? `La taille de « ${mismatched[0].name} » ne correspond pas au format.`
               : null;
+  const saveProblem = problem ?? (name.trim() ? null : "Donnez un nom à l'imposition pour l'enregistrer.");
 
-  async function handleGenerate() {
-    if (!sheet || !activeDuplo || problem) return;
-    setGenerating(true);
-    setError(null);
-
+  // Requête commune à l'aperçu et à l'enregistrement.
+  function buildBody(): FormData | null {
+    if (!sheet || !activeDuplo) return null;
     const body = new FormData();
     body.append("sheetId", sheet.id);
     body.append("machine", machine);
@@ -282,15 +312,39 @@ export default function ImpositionTool({
     body.append("orientation", orientation);
     body.append("flip", flip);
     body.append("pieceBleedMm", String(piece.bleedMm));
+    if (saved) body.append("impositionId", saved.id);
+    body.append(
+      "config",
+      JSON.stringify({
+        version: 1,
+        sheetId: sheet.id,
+        machine,
+        duploJobId: activeDuplo.job.id,
+        formatId,
+        custom: { widthMm: customWidth, heightMm: customHeight, bleedMm: customBleed },
+        orientation,
+        flip,
+      })
+    );
     const specs = items.map((item, index) => {
+      const shown = { name: item.name, widthMm: item.widthMm, heightMm: item.heightMm, copies: item.copies };
       if (item.kind === "upload" && item.file) {
         body.append(`file${index}`, item.file);
-        return { kind: "upload", field: `file${index}`, copies: item.copies };
+        return { kind: "upload", field: `file${index}`, ...shown };
       }
-      return { kind: "product", productId: item.productId, copies: item.copies };
+      if (item.kind === "upload" && item.storedPath) return { kind: "stored", path: item.storedPath, ...shown };
+      return { kind: "product", productId: item.productId, ...shown };
     });
     body.append("sources", JSON.stringify(specs));
+    return body;
+  }
 
+  // Aperçu du PDF, sans l'enregistrer.
+  async function handlePreview() {
+    const body = buildBody();
+    if (!body || problem) return;
+    setGenerating(true);
+    setError(null);
     try {
       const res = await fetch("/api/imposition/generate", { method: "POST", body });
       if (!res.ok) {
@@ -307,24 +361,73 @@ export default function ImpositionTool({
     }
   }
 
+  // Enregistre l'imposition (nom, configuration et PDF) puis revient à la liste.
+  async function handleSave() {
+    const body = buildBody();
+    if (!body || saveProblem) return;
+    body.append("name", name.trim());
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(saved ? `/api/impositions/${saved.id}` : "/api/impositions", {
+        method: saved ? "PATCH" : "POST",
+        body,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Erreur lors de l'enregistrement.");
+        setSaving(false);
+        return;
+      }
+      router.push("/imposition");
+      router.refresh();
+    } catch {
+      setError("Impossible de joindre le serveur.");
+      setSaving(false);
+    }
+  }
+
+  // Réglage de l'imprimante (Fiery) qui correspond à chaque bord de retournement :
+  // haut-haut si la feuille se retourne autour de son axe vertical, haut-bas sinon.
+  // Sans feuille choisie, on suppose une feuille en portrait.
+  function flipMode(edge: FlipEdge): string {
+    const vertical = flipAxisIsVertical(sheet?.width_mm ?? 1, sheet?.height_mm ?? 2, edge);
+    return vertical ? "haut-haut" : "haut-bas";
+  }
+
   const selectClass = "mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm";
   const labelClass = "block text-xs font-medium text-neutral-500";
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
-          Imposition
+        <Link href="/imposition" className="text-xs text-neutral-500 underline hover:text-pico-black">
+          ← Toutes les impositions
+        </Link>
+        <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold text-pico-black">
+          {saved ? "Modifier l'imposition" : "Nouvelle imposition"}
           <UpdatingBadge show={isRefreshing} />
         </h1>
         <p className="text-sm text-neutral-500">
-          Placez des PDF d&apos;impression sur une feuille selon le format et les réglages de la découpeuse.
+          Placez des PDF d&apos;impression sur une feuille selon le format et les paramètres de la machine.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_1fr]">
         <div className="space-y-5">
           <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+            <div>
+              <label className={labelClass}>Nom de l&apos;imposition</label>
+              <input
+                type="text"
+                value={name}
+                maxLength={120}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex. Cartes d'affaires — commande 1042"
+                className={selectClass}
+              />
+            </div>
+
             <div>
               <label className={labelClass}>Format (fond perdu inclus)</label>
               <select value={formatId} onChange={(e) => setFormatId(e.target.value)} className={selectClass}>
@@ -473,8 +576,8 @@ export default function ImpositionTool({
               <div>
                 <label className={labelClass}>Retournement du verso</label>
                 <select value={flip} onChange={(e) => setFlip(e.target.value as FlipEdge)} className={selectClass}>
-                  <option value="long">Sur le bord long</option>
-                  <option value="short">Sur le bord court</option>
+                  <option value="long">Sur le bord long ({flipMode("long")})</option>
+                  <option value="short">Sur le bord court ({flipMode("short")})</option>
                 </select>
               </div>
             </div>
@@ -634,17 +737,26 @@ export default function ImpositionTool({
           </div>
 
           <div className="flex flex-col items-stretch gap-2">
-            {(error || problem) && (
-              <p className={`text-sm ${error ? "text-red-600" : "text-neutral-500"}`}>{error ?? problem}</p>
+            {(error || saveProblem) && (
+              <p className={`text-sm ${error ? "text-red-600" : "text-neutral-500"}`}>{error ?? saveProblem}</p>
             )}
             <button
               type="button"
-              onClick={handleGenerate}
-              disabled={generating || Boolean(problem)}
+              onClick={handleSave}
+              disabled={saving || generating || Boolean(saveProblem)}
               className="flex items-center justify-center gap-2 rounded-lg bg-pico-maroon px-4 py-2.5 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-50"
             >
+              {saving && <SpinnerIcon className="h-4 w-4" />}
+              {saving ? "Enregistrement en cours..." : saved ? "Enregistrer les modifications" : "Enregistrer l'imposition"}
+            </button>
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={saving || generating || Boolean(problem)}
+              className="flex items-center justify-center gap-2 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            >
               {generating && <SpinnerIcon className="h-4 w-4" />}
-              {generating ? "Génération en cours..." : "Générer le PDF imposé"}
+              {generating ? "Génération en cours..." : "Aperçu du PDF (sans enregistrer)"}
             </button>
           </div>
         </section>
@@ -661,7 +773,7 @@ export default function ImpositionTool({
         </Modal>
       )}
       {modal?.mode === "result" && (
-        <Modal title="PDF imposé" onClose={() => setModal(null)} wide>
+        <Modal title="Aperçu du PDF imposé" onClose={() => setModal(null)} wide>
           <iframe src={modal.url} title="PDF imposé" className="h-[65vh] w-full rounded border border-neutral-200" />
           <a
             href={modal.url}

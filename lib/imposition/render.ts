@@ -1,4 +1,16 @@
-import { PDFDocument, cmyk, degrees, type PDFEmbeddedPage } from "pdf-lib";
+import {
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFOperator,
+  PDFOperatorNames,
+  cmyk,
+  degrees,
+  type PDFEmbeddedPage,
+  type PDFPage,
+  type PDFRef,
+} from "pdf-lib";
 import { MM_TO_PT, mmToPt } from "../pdf/units";
 import {
   assignCells,
@@ -254,6 +266,57 @@ function drawRegMark(
   }
 }
 
+// Calques du PDF (groupes de contenu optionnel, visibles dans le panneau des
+// calques d'Acrobat ou d'Illustrator). Ils sont créés du plus bas au plus haut :
+// le premier calque est dessiné en premier, les suivants passent par-dessus.
+interface Layer {
+  key: string;
+  ref: PDFRef;
+}
+
+class Layers {
+  private layers: Layer[] = [];
+
+  constructor(private out: PDFDocument) {}
+
+  add(name: string): Layer {
+    const ref = this.out.context.register(
+      this.out.context.obj({ Type: "OCG", Name: PDFHexString.fromText(name.slice(0, 80)) })
+    );
+    const layer = { key: `Calque${this.layers.length + 1}`, ref };
+    this.layers.push(layer);
+    return layer;
+  }
+
+  // Déclare les calques dans le catalogue, tous visibles. Le panneau les liste
+  // du plus haut au plus bas, comme Illustrator : le premier calque est en bas.
+  finish() {
+    if (this.layers.length === 0) return;
+    const refs = this.layers.map((l) => l.ref);
+    this.out.catalog.set(
+      PDFName.of("OCProperties"),
+      this.out.context.obj({ OCGs: refs, D: { BaseState: "ON", Order: [...refs].reverse(), ON: refs } })
+    );
+  }
+}
+
+// Exécute `draw` (dessin sur `page`) à l'intérieur du calque : le contenu est
+// encadré par /OC … BDC … EMC, et le calque est déclaré dans les ressources de la page.
+async function inLayer(page: PDFPage, layer: Layer, draw: () => void | Promise<void>) {
+  const resources = page.node.normalizedEntries().Resources;
+  let properties = resources.lookupMaybe(PDFName.of("Properties"), PDFDict);
+  if (!properties) {
+    properties = page.doc.context.obj({});
+    resources.set(PDFName.of("Properties"), properties);
+  }
+  properties.set(PDFName.of(layer.key), layer.ref);
+  page.pushOperators(
+    PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [PDFName.of("OC"), PDFName.of(layer.key)])
+  );
+  await draw();
+  page.pushOperators(PDFOperator.of(PDFOperatorNames.EndMarkedContent));
+}
+
 async function drawMarks(
   out: PDFDocument,
   sheetPage: ReturnType<PDFDocument["addPage"]>,
@@ -323,6 +386,7 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   const sheetWidthPt = mmToPt(input.sheetWidth);
   const sheetHeightPt = mmToPt(input.sheetHeight);
 
+  const layers = new Layers(out);
   const front = out.addPage([sheetWidthPt, sheetHeightPt]);
   // Un PDF déjà dans le sens de la cellule reste à l'endroit ; sinon (cellule
   // couchée, ou PDF fourni dans l'orientation inverse du format) on le tourne
@@ -330,16 +394,29 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   function frontRotationFor(source: PreparedSource, cell: Cell): Rotation {
     return close(source.pageWidth, cell.width) && close(source.pageHeight, cell.height) ? 0 : 90;
   }
-  layout.cells.forEach((cell, i) => {
-    const sourceIndex = assignment[i];
-    if (sourceIndex === null) return;
-    const source = prepared[sourceIndex];
-    drawInCell(front, source.front, toPdfRect(cell, input.sheetHeight), frontRotationFor(source, cell));
-  });
-  // Marques par-dessus : elles vivent dans les marges, hors des pièces.
-  if (input.marks) await drawMarks(out, front, input.marks, sheetWidthPt, sheetHeightPt);
-  if (input.barcode) await drawBarcode(out, front, input.barcode, input.sheetWidth, input.sheetHeight);
-  if (input.regMark) drawRegMark(front, input.regMark, input.sheetWidth, input.sheetHeight);
+
+  // Premier calque (en bas) : le code-barres et les repères. Les visuels passent
+  // par-dessus, un calque par visuel, aussi bien au recto qu'au verso.
+  if (input.marks || input.barcode || input.regMark) {
+    await inLayer(front, layers.add("Marques (code-barres et repère REG)"), async () => {
+      if (input.marks) await drawMarks(out, front, input.marks, sheetWidthPt, sheetHeightPt);
+      if (input.barcode) await drawBarcode(out, front, input.barcode, input.sheetWidth, input.sheetHeight);
+      if (input.regMark) drawRegMark(front, input.regMark, input.sheetWidth, input.sheetHeight);
+    });
+  }
+  const usedSources = [...new Set(assignment.filter((a): a is number => a !== null))].sort((a, b) => a - b);
+  const visualLayers = new Map<number, Layer>(
+    usedSources.map((index) => [index, layers.add(`Visuel ${index + 1} — ${prepared[index].name}`)])
+  );
+  for (const index of usedSources) {
+    await inLayer(front, visualLayers.get(index)!, () => {
+      layout.cells.forEach((cell, i) => {
+        if (assignment[i] !== index) return;
+        const source = prepared[index];
+        drawInCell(front, source.front, toPdfRect(cell, input.sheetHeight), frontRotationFor(source, cell));
+      });
+    });
+  }
 
   // Verso : seulement pour les sources qui ont une 2e page, aux positions
   // miroir du recto, sans marques (la découpeuse lit le recto).
@@ -347,22 +424,27 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   if (hasBack) {
     const verticalAxis = flipAxisIsVertical(input.sheetWidth, input.sheetHeight, input.flip);
     const back = out.addPage([sheetWidthPt, sheetHeightPt]);
-    layout.cells.forEach((cell, i) => {
-      const sourceIndex = assignment[i];
-      if (sourceIndex === null) return;
-      const source = prepared[sourceIndex];
-      if (!source.back) return;
-      const frontTotal = frontRotationFor(source, cell);
-      // Le verso se tourne comme un feuillet : si l'axe de retournement de la
-      // feuille n'est pas celui de la pièce (pièce couchée sur la feuille), le
-      // verso doit être tourné de 180° de plus pour rester à l'endroit.
-      const cardAxisVertical = frontTotal % 180 === 0;
-      const backRotation = ((frontTotal + (cardAxisVertical === verticalAxis ? 0 : 180)) %
-        360) as Rotation;
-      const mirrored = mirrorCell(cell, input.sheetWidth, input.sheetHeight, verticalAxis);
-      drawInCell(back, source.back, toPdfRect(mirrored, input.sheetHeight), backRotation);
-    });
+    for (const index of usedSources) {
+      const source = prepared[index];
+      if (!source.back) continue;
+      const sourceBack = source.back;
+      await inLayer(back, visualLayers.get(index)!, () => {
+        layout.cells.forEach((cell, i) => {
+          if (assignment[i] !== index) return;
+          const frontTotal = frontRotationFor(source, cell);
+          // Le verso se tourne comme un feuillet : si l'axe de retournement de la
+          // feuille n'est pas celui de la pièce (pièce couchée sur la feuille), le
+          // verso doit être tourné de 180° de plus pour rester à l'endroit.
+          const cardAxisVertical = frontTotal % 180 === 0;
+          const backRotation = ((frontTotal + (cardAxisVertical === verticalAxis ? 0 : 180)) %
+            360) as Rotation;
+          const mirrored = mirrorCell(cell, input.sheetWidth, input.sheetHeight, verticalAxis);
+          drawInCell(back, sourceBack, toPdfRect(mirrored, input.sheetHeight), backRotation);
+        });
+      });
+    }
   }
 
+  layers.finish();
   return { pdf: Buffer.from(await out.save()), layout, placed, hasBack };
 }

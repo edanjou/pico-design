@@ -24,7 +24,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   }
 
   const admin = createAdminSupabaseClient();
-  const logoBuffer = await loadLogoImage(admin, "logo", "#000000");
+  // L'aperçu montre le recto : le logo n'y figure que si le modèle le prévoit
+  // sur le recto (case « Logo Pico > Sur le recto »).
+  const logoBuffer = template.logo_on_front ? await loadLogoImage(admin, "logo", "#000000") : null;
 
   let overlayBuffer: Buffer | null = null;
   if (template.overlay_path) {

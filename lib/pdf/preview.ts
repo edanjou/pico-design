@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { mmToPx } from "./units";
 import { rasterizeLogoToPng, isSvg } from "./logo";
 import { logoOverlay } from "./logoShadow";
+import { EXAMPLE_LABEL } from "./exampleLabel";
 import { coverCropToBuffer } from "./crop";
 import type { Template } from "../types";
 import type { LogoShadowSettings } from "../logoShadowSettings";
@@ -76,14 +77,6 @@ export async function generateTemplatePreviewPng(
           ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }
-      ${
-        showPlaceholder
-          ? `<text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${Math.max(
-              14,
-              Math.round(pageWidthPx * 0.06)
-            )}" fill="#9ca3af">Exemple</text>`
-          : ""
-      }
     </svg>
   `;
 
@@ -105,6 +98,20 @@ export async function generateTemplatePreviewPng(
     composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
   } else {
     base = await sharp(Buffer.from(linesSvg)).png().toBuffer();
+  }
+
+  if (showPlaceholder) {
+    // « Exemple » au centre, en image (pas de texte SVG : voir exampleLabel.ts).
+    const labelWidthPx = Math.min(
+      pageWidthPx,
+      Math.max(40, Math.round(Math.max(14, pageWidthPx * 0.06) * 3.5))
+    );
+    const labelHeightPx = Math.max(1, Math.round((labelWidthPx * EXAMPLE_LABEL.height) / EXAMPLE_LABEL.width));
+    composites.push({
+      input: await sharp(EXAMPLE_LABEL.png).resize(labelWidthPx, labelHeightPx).png().toBuffer(),
+      left: Math.max(0, Math.round((pageWidthPx - labelWidthPx) / 2)),
+      top: Math.max(0, Math.round((pageHeightPx - labelHeightPx) / 2)),
+    });
   }
 
   if (overlayImage && trimW > 0 && trimH > 0) {

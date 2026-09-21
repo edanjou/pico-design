@@ -151,6 +151,9 @@ export default function ImageSourcePicker({
       formData.append("mode", "frame");
       formData.append("side", side);
       formData.append("rotated", String(rotated));
+      // Sans ce drapeau, le serveur suppose que le logo est affiché : décocher
+      // « Afficher le logo » ne le retirait pas de l'aperçu.
+      formData.append("showLogo", String(logo !== null));
       if (logo) {
         formData.append("logoShape", logo.shape);
         formData.append("logoColor", logo.color);

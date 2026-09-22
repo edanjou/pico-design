@@ -10,11 +10,13 @@ import BulkActionsBar from "@/components/BulkActionsBar";
 import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import type { Category, Sku, Template } from "@/lib/types";
+import type { BeautyShotOverlay } from "@/lib/pdf/beautyShot";
 
 export type TemplateWithOverlayUrl = Template & {
   overlayUrl: string | null;
   beautyShotXmlUrl: string | null;
   beautyShotAssetNames: string[];
+  beautyShotOverlays: BeautyShotOverlay[];
 };
 
 function SortIcon() {
@@ -263,6 +265,7 @@ export default function TemplatesTable({
             currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
             currentBeautyShotXmlUrl={modal.mode === "edit" ? modal.template.beautyShotXmlUrl : null}
             currentBeautyShotAssetNames={modal.mode === "edit" ? modal.template.beautyShotAssetNames : []}
+            currentBeautyShotOverlays={modal.mode === "edit" ? modal.template.beautyShotOverlays : []}
             onSuccess={handleSuccess}
             onBusyChange={setFormBusy}
           />

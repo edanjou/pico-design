@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { uploadBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
+import { parseOverlayOpacitiesField } from "@/lib/pdf/beautyShot";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
 const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
       mask_path: maskPath,
       shading_path: shadingPath,
       beauty_shot_xml_path: beautyShotXmlPath,
+      beauty_shot_overlay_opacities: parseOverlayOpacitiesField(formData.get("beautyShotOverlayOpacities")),
       created_by: user.id,
     })
     .select()

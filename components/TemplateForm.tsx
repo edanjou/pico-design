@@ -5,6 +5,7 @@ import type { Category, LogoHAlign, LogoVAlign, Sku, Template } from "@/lib/type
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
 import SkuPicker from "@/components/SkuPicker";
+import type { BeautyShotOverlay } from "@/lib/pdf/beautyShot";
 
 type Unit = "mm" | "in";
 
@@ -26,6 +27,7 @@ export default function TemplateForm({
   currentOverlayUrl,
   currentBeautyShotXmlUrl,
   currentBeautyShotAssetNames,
+  currentBeautyShotOverlays,
   onSuccess,
   onBusyChange,
 }: {
@@ -35,6 +37,9 @@ export default function TemplateForm({
   currentOverlayUrl?: string | null;
   currentBeautyShotXmlUrl?: string | null;
   currentBeautyShotAssetNames?: string[];
+  // Surcouches (nom d'asset + mode de fusion) du bundle mockup déjà
+  // enregistré — sert à afficher un curseur d'intensité par couche.
+  currentBeautyShotOverlays?: BeautyShotOverlay[];
   onSuccess: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -76,6 +81,12 @@ export default function TemplateForm({
   const [beautyShotImageFiles, setBeautyShotImageFiles] = useState<File[]>([]);
   const [removeBeautyShot, setRemoveBeautyShot] = useState(false);
   const [beautyShotAssetNames, setBeautyShotAssetNames] = useState<string[] | null>(null);
+  const overlays = currentBeautyShotOverlays ?? [];
+  // Une valeur (0-100) par surcouche, dans le même ordre que le XML. 100 par
+  // défaut (comportement d'origine) pour toute surcouche sans valeur enregistrée.
+  const [overlayOpacities, setOverlayOpacities] = useState<number[]>(() =>
+    overlays.map((_, i) => template?.beauty_shot_overlay_opacities?.[i] ?? 100)
+  );
 
   function handleOverlayChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -148,6 +159,9 @@ export default function TemplateForm({
     if (beautyShotXmlFile) formData.append("beautyShotXml", beautyShotXmlFile);
     for (const f of beautyShotImageFiles) formData.append("beautyShotImages", f);
     if (removeBeautyShot) formData.append("removeBeautyShot", "true");
+    if (overlays.length > 0) {
+      formData.append("beautyShotOverlayOpacities", JSON.stringify(overlayOpacities));
+    }
 
     const res = await fetch(isEditing ? `/api/templates/${template!.id}` : "/api/templates", {
       method: isEditing ? "PATCH" : "POST",
@@ -560,6 +574,39 @@ export default function TemplateForm({
             >
               Retirer le bundle mockup
             </button>
+          </div>
+        )}
+
+        {!beautyShotXmlFile && !removeBeautyShot && overlays.length > 0 && (
+          <div className="mt-4 space-y-3 rounded-lg border border-neutral-200 p-3">
+            <p className="text-xs font-medium text-neutral-600">
+              Intensité des surcouches — le XML ne fixe qu&apos;un mode de fusion (pas d&apos;opacité) ;
+              un mockup trop sombre vient souvent de la surcouche d&apos;ombre appliquée à 100 %.
+            </p>
+            {overlays.map((overlay, i) => (
+              <div key={`${overlay.assetName}-${i}`}>
+                <div className="flex items-center justify-between text-xs text-neutral-500">
+                  <span>
+                    {overlay.assetName} <span className="text-neutral-400">— mode {overlay.blendMode}</span>
+                  </span>
+                  <span className="tabular-nums">{overlayOpacities[i] ?? 100}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={overlayOpacities[i] ?? 100}
+                  onChange={(e) =>
+                    setOverlayOpacities((prev) => {
+                      const next = [...prev];
+                      next[i] = Number(e.target.value);
+                      return next;
+                    })
+                  }
+                  className="mt-1 w-full"
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>

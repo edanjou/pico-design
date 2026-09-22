@@ -179,6 +179,23 @@ export function mimeTypeForAsset(config: BeautyShotConfig, assetName: string): s
   return config.assets.find((a) => a.name === assetName)?.mimeType ?? "image/png";
 }
 
+// Lit le champ "beautyShotOverlayOpacities" envoyé par TemplateForm (un
+// tableau de nombres 0-100, JSON, un par surcouche du XML). Retourne null
+// (= 100 % partout) si absent ou invalide — jamais d'erreur bloquante pour
+// ce réglage facultatif.
+export function parseOverlayOpacitiesField(raw: FormDataEntryValue | null): number[] | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const values = parsed.map((v) => Number(v));
+    if (values.some((n) => !Number.isFinite(n) || n < 0 || n > 100)) return null;
+    return values;
+  } catch {
+    return null;
+  }
+}
+
 async function buildDesignForZone(
   template: Template,
   sourceImage: Buffer,
@@ -241,7 +258,12 @@ export async function generateBeautyShotMockupPng(
   logoImage: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
-  logoShadow: LogoShadowSettings | null = null
+  logoShadow: LogoShadowSettings | null = null,
+  // Intensité (0-100) de chaque surcouche, dans l'ordre de config.overlays —
+  // le XML ne décrit qu'un mode de fusion, jamais d'opacité ; c'est ce qui
+  // rendait les mockups tout ou rien (souvent trop sombres avec "multiply").
+  // null/manquant/hors de 0-100 = 100 (comportement d'origine, inchangé).
+  overlayOpacities: (number | null | undefined)[] | null = null
 ): Promise<Buffer> {
   const canvasWidth = Math.max(1, config.width);
   const canvasHeight = Math.max(1, config.height);
@@ -294,13 +316,25 @@ export async function generateBeautyShotMockupPng(
     .png()
     .toBuffer();
 
-  for (const overlay of config.overlays) {
+  for (let index = 0; index < config.overlays.length; index++) {
+    const overlay = config.overlays[index];
     const overlayBuffer = assets.get(overlay.assetName);
     if (!overlayBuffer) continue;
-    const overlayResized = await sharp(overlayBuffer)
+    const rawOpacity = overlayOpacities?.[index];
+    const opacity = typeof rawOpacity === "number" && rawOpacity >= 0 && rawOpacity <= 100 ? rawOpacity : 100;
+    let overlayResized = await sharp(overlayBuffer)
       .resize(canvasWidth, canvasHeight, { fit: "fill" })
+      .ensureAlpha()
       .png()
       .toBuffer();
+    if (opacity < 100) {
+      // Ne touche qu'au canal alpha (RGB inchangés) : réduit la présence de
+      // la couche sans en délaver les teintes.
+      overlayResized = await sharp(overlayResized)
+        .linear([1, 1, 1, opacity / 100], [0, 0, 0, 0])
+        .png()
+        .toBuffer();
+    }
     composed = await sharp(composed)
       .composite([{ input: overlayResized, blend: overlay.blendMode as sharp.Blend }])
       .png()

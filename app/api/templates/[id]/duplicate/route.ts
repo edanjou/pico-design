@@ -77,6 +77,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
       mask_path: maskPath,
       shading_path: shadingPath,
       beauty_shot_xml_path: beautyShotXmlPath,
+      beauty_shot_overlay_opacities: source.beauty_shot_overlay_opacities,
       created_by: user.id,
     })
     .select()

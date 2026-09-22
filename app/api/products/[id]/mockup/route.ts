@@ -91,7 +91,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       logoBuffer,
       product.image_position_x,
       product.image_position_y,
-      logoShadowOf(product)
+      logoShadowOf(product),
+      rawTemplate.beauty_shot_overlay_opacities
     );
     return new NextResponse(new Uint8Array(png), {
       headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },

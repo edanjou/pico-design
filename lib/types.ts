@@ -47,6 +47,9 @@ export interface Template {
   mask_path: string | null;
   shading_path: string | null;
   beauty_shot_xml_path: string | null;
+  // Intensité (0-100) de chaque surcouche du bundle mockup, dans l'ordre des
+  // <gifting:overlay> du XML. null ou case manquante = 100 (inchangé).
+  beauty_shot_overlay_opacities: number[] | null;
   two_sided: boolean;
   logo_on_front: boolean;
   logo_on_back: boolean;

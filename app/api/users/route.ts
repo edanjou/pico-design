@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient, getAuthorizedAdmin } from "@/lib/supabase/server";
+import { validatePassword } from "@/lib/passwordPolicy";
 
 export const runtime = "nodejs";
 
@@ -18,12 +19,8 @@ export async function POST(request: Request) {
   if (!email || !password) {
     return NextResponse.json({ error: "Courriel et mot de passe requis." }, { status: 400 });
   }
-  if (password.length < 8) {
-    return NextResponse.json(
-      { error: "Le mot de passe doit contenir au moins 8 caractères." },
-      { status: 400 }
-    );
-  }
+  const passwordError = validatePassword(password);
+  if (passwordError) return NextResponse.json({ error: passwordError }, { status: 400 });
 
   const admin = createAdminSupabaseClient();
   const { data, error } = await admin.auth.admin.createUser({

@@ -3,13 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Profile } from "@/lib/types";
 import { CopyIcon, SpinnerIcon } from "@/components/icons";
-
-function generatePassword() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let out = "";
-  for (let i = 0; i < 14; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
+import { PASSWORD_MIN_LENGTH, generateSecurePassword, validatePassword } from "@/lib/passwordPolicy";
 
 export default function UserForm({
   user,
@@ -27,11 +21,12 @@ export default function UserForm({
   const [fullName, setFullName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<"admin" | "designer" | "gestionnaire">(user?.role ?? "designer");
-  const [password, setPassword] = useState(isEditing ? "" : generatePassword());
+  const [password, setPassword] = useState(isEditing ? "" : generateSecurePassword());
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const passwordError = password ? validatePassword(password) : null;
 
   useEffect(() => {
     onBusyChange?.(saving);
@@ -130,7 +125,7 @@ export default function UserForm({
           </button>
           <button
             type="button"
-            onClick={() => setPassword(generatePassword())}
+            onClick={() => setPassword(generateSecurePassword())}
             className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-600 hover:bg-neutral-50"
           >
             Générer
@@ -148,16 +143,20 @@ export default function UserForm({
           )}
         </div>
         {copied && <p className="mt-1 text-xs text-green-600">Copié.</p>}
-        {!isEditing && (
+        {password && passwordError ? (
+          <p className="mt-1 text-xs text-red-600">{passwordError}</p>
+        ) : (
           <p className="mt-1 text-xs text-neutral-500">
-            Communiquez ce mot de passe à l&apos;employé — il ne sera plus affiché après la création.
+            {!isEditing
+              ? "Communiquez ce mot de passe à l'employé — il ne sera plus affiché après la création."
+              : `Au moins ${PASSWORD_MIN_LENGTH} caractères, avec une majuscule, une minuscule et un chiffre.`}
           </p>
         )}
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         type="submit"
-        disabled={saving}
+        disabled={saving || Boolean(password && passwordError)}
         className="inline-flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-50"
       >
         {saving && <SpinnerIcon className="h-4 w-4" />}

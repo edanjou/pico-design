@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient, getAuthorizedAdmin } from "@/lib/supabase/server";
+import { validatePassword } from "@/lib/passwordPolicy";
 
 export const runtime = "nodejs";
 
@@ -21,11 +22,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (role && role !== "admin" && params.id === user.id) {
     return NextResponse.json({ error: "Impossible de retirer votre propre rôle admin." }, { status: 400 });
   }
-  if (password && password.length < 8) {
-    return NextResponse.json(
-      { error: "Le mot de passe doit contenir au moins 8 caractères." },
-      { status: 400 }
-    );
+  if (password) {
+    const passwordError = validatePassword(password);
+    if (passwordError) return NextResponse.json({ error: passwordError }, { status: 400 });
   }
 
   const admin = createAdminSupabaseClient();

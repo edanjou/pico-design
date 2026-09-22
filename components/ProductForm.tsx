@@ -10,6 +10,7 @@ import { pdfPageCount, planPdfPages } from "@/lib/pdf/pdfPages";
 import { LOGO_COLOR_PALETTE } from "@/lib/logoColors";
 import { applyOrientation, isLandscape } from "@/lib/pdf/orientation";
 import { SpinnerIcon } from "@/components/icons";
+import ColorPickerButton from "@/components/ColorPickerButton";
 
 const SHADOW_CONTROLS: { key: keyof LogoShadowSettings; label: string; unit: string }[] = [
   { key: "blur", label: "Flou", unit: "%" },
@@ -611,14 +612,8 @@ export default function ProductForm({
                 style={{ backgroundColor: c.hex }}
               />
             ))}
-            <input
-              type="color"
-              value={logoColor}
-              onChange={(e) => setLogoColor(e.target.value)}
-              title="Couleur personnalisée"
-              aria-label="Couleur personnalisée"
-              className="h-7 w-7 cursor-pointer rounded-full border border-neutral-300 bg-transparent p-0.5"
-            />
+            <span className="mx-1 h-6 w-px shrink-0 bg-neutral-200" aria-hidden="true" />
+            <ColorPickerButton value={logoColor} onChange={setLogoColor} label="Couleur personnalisée" />
           </div>
 
           {logoShape === "pastille" && (
@@ -640,13 +635,11 @@ export default function ProductForm({
                     style={{ backgroundColor: c.hex }}
                   />
                 ))}
-                <input
-                  type="color"
+                <span className="mx-1 h-6 w-px shrink-0 bg-neutral-200" aria-hidden="true" />
+                <ColorPickerButton
                   value={logoSecondaryColor}
-                  onChange={(e) => setLogoSecondaryColor(e.target.value)}
-                  title="Couleur personnalisée"
-                  aria-label="Couleur personnalisée"
-                  className="h-7 w-7 cursor-pointer rounded-full border border-neutral-300 bg-transparent p-0.5"
+                  onChange={setLogoSecondaryColor}
+                  label="Couleur personnalisée"
                 />
               </div>
             </>

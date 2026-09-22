@@ -161,6 +161,32 @@ export default function ImpositionTool({
   const fileInput = useRef<HTMLInputElement>(null);
   const nextKey = useRef(cfg?.sources.length ?? 0);
 
+  // Miniature du recto de chaque fichier (adresse d'objet, par clé de fichier), pour
+  // montrer le visuel dans l'aperçu de la feuille. Une miniature qui n'a pas pu être
+  // produite reste absente : la pièce garde alors sa couleur.
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const thumbsRequested = useRef(new Set<string>());
+  const thumbsRef = useRef(thumbs);
+  thumbsRef.current = thumbs;
+  useEffect(() => {
+    for (const item of items) {
+      if (thumbsRequested.current.has(item.key)) continue;
+      const body = new FormData();
+      if (item.kind === "product" && item.productId) body.append("productId", item.productId);
+      else if (item.file) body.append("file", item.file);
+      else if (item.storedPath) body.append("path", item.storedPath);
+      else continue;
+      thumbsRequested.current.add(item.key);
+      fetch("/api/imposition/thumbnail", { method: "POST", body })
+        .then((res) => (res.ok ? res.blob() : null))
+        .then((blob) => {
+          if (blob) setThumbs((current) => ({ ...current, [item.key]: URL.createObjectURL(blob) }));
+        })
+        .catch(() => {});
+    }
+  }, [items]);
+  useEffect(() => () => Object.values(thumbsRef.current).forEach((url) => URL.revokeObjectURL(url)), []);
+
   // Si le préréglage sélectionné a été supprimé (ou le premier vient d'être
   // créé), retombe sur un choix valide.
   useEffect(() => {
@@ -704,6 +730,11 @@ export default function ImpositionTool({
                 sheet={sheet}
                 layout={layout}
                 assignment={assignment}
+                images={items.map((item) =>
+                  thumbs[item.key]
+                    ? { url: thumbs[item.key], widthMm: item.widthMm, heightMm: item.heightMm }
+                    : null
+                )}
                 multiColor={items.length > 1}
                 hasBarcode={Boolean(activeDuplo && barcodeJobNos.includes(activeDuplo.job.job_no))}
                 regRects={
@@ -793,6 +824,7 @@ function SheetPreview({
   sheet,
   layout,
   assignment,
+  images,
   multiColor,
   hasBarcode,
   regRects,
@@ -801,6 +833,8 @@ function SheetPreview({
   sheet: ImpositionSheet;
   layout: Layout;
   assignment: (number | null)[];
+  // Miniature du recto de chaque fichier (null tant qu'elle n'est pas prête) et taille de sa page.
+  images: ({ url: string; widthMm: number | null; heightMm: number | null } | null)[];
   multiColor: boolean;
   hasBarcode: boolean;
   // Traits du repère REG du job Duplo (mm), ou null.
@@ -833,20 +867,51 @@ function SheetPreview({
       {layout.cells.map((cell, i) => {
         const source = assignment[i];
         const color = source === null ? null : multiColor ? COLORS[source % COLORS.length] : COLORS[0];
+        const image = source === null ? null : images[source] ?? null;
+        // Comme dans le PDF : la page est posée à plat si elle a la taille de la
+        // pièce, sinon tournée d'un quart de tour (sens antihoraire).
+        const sideways =
+          image !== null &&
+          image.widthMm !== null &&
+          image.heightMm !== null &&
+          !(Math.abs(image.widthMm - cell.width) <= 0.5 && Math.abs(image.heightMm - cell.height) <= 0.5);
+        const cx = cell.x + cell.width / 2;
+        const cy = cell.y + cell.height / 2;
         return (
           <g key={`${cell.row}-${cell.col}`}>
+            {image &&
+              (sideways ? (
+                <image
+                  href={image.url}
+                  x={cx - cell.height / 2}
+                  y={cy - cell.width / 2}
+                  width={cell.height}
+                  height={cell.width}
+                  preserveAspectRatio="none"
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                />
+              ) : (
+                <image
+                  href={image.url}
+                  x={cell.x}
+                  y={cell.y}
+                  width={cell.width}
+                  height={cell.height}
+                  preserveAspectRatio="none"
+                />
+              ))}
             <rect
               x={cell.x}
               y={cell.y}
               width={cell.width}
               height={cell.height}
-              fill={color ?? "none"}
+              fill={image ? "none" : color ?? "none"}
               fillOpacity={0.35}
               stroke={color ?? "#a99e8e"}
               strokeWidth={stroke}
               strokeDasharray={color ? undefined : `${stroke * 3} ${stroke * 3}`}
             />
-            {multiColor && source !== null && (
+            {multiColor && source !== null && !image && (
               <text
                 x={cell.x + cell.width / 2}
                 y={cell.y + cell.height / 2}

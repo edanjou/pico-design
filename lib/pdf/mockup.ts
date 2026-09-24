@@ -3,6 +3,7 @@ import { mmToPx } from "./units";
 import { coverCropToBuffer } from "./crop";
 import { rasterizeLogoToPng } from "./logo";
 import { logoOverlay } from "./logoShadow";
+import { compositeLayers, type ResolvedLayer } from "./layers";
 import type { LogoShadowSettings } from "../logoShadowSettings";
 import type { Template } from "../types";
 
@@ -18,13 +19,21 @@ const MOCKUP_MAX_DIM_PX = 1400;
  */
 export async function generateProductMockupPng(
   template: Template,
-  sourceImage: Buffer,
+  // null = pas de visuel de fond choisi (voir coverCropToBuffer) — un
+  // montage fait seulement de calques reste possible.
+  sourceImage: Buffer | null,
   maskImage: Buffer,
   shadingImage: Buffer,
   logoImage: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
-  logoShadow: LogoShadowSettings | null = null
+  logoShadow: LogoShadowSettings | null = null,
+  // Zoom (recadrage) au-delà du minimum "cover" — voir coverCropToBuffer.
+  // 1 = comportement d'origine (aucun appelant existant n'en envoie).
+  zoom = 1,
+  // Rotation du visuel lui-même (0/90/180/270) — voir coverCropToBuffer.
+  imageRotation = 0,
+  layers: ResolvedLayer[] = []
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -39,7 +48,15 @@ export async function generateProductMockupPng(
   const trimWidthPx = Math.max(1, pageWidthPx - bleedPx * 2);
   const trimHeightPx = Math.max(1, pageHeightPx - bleedPx * 2);
 
-  const covered = await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY);
+  const covered = await coverCropToBuffer(
+    sourceImage,
+    pageWidthPx,
+    pageHeightPx,
+    positionX,
+    positionY,
+    zoom,
+    imageRotation
+  );
 
   const composites: sharp.OverlayOptions[] = [];
   if (logoImage && template.logo_width_mm > 0) {
@@ -73,7 +90,8 @@ export async function generateProductMockupPng(
     );
   }
 
-  const flatPage = await sharp(covered)
+  const withLayers = await compositeLayers(covered, layers, pageWidthPx, pageHeightPx, dpi);
+  const flatPage = await sharp(withLayers)
     .flatten({ background: "#ffffff" })
     .composite(composites)
     .png()

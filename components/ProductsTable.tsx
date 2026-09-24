@@ -118,7 +118,7 @@ export default function ProductsTable({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-pico-black">
+          <h1 className="flex items-center gap-2 text-page-title font-semibold text-pico-black">
             Produits
             <UpdatingBadge show={isPending} />
           </h1>

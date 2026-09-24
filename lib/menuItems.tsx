@@ -1,9 +1,9 @@
-import { ImageIcon, LayoutGridIcon, PencilRulerIcon, RocketIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { ImageIcon, LayoutGridIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
 // utilisent les mêmes icônes/couleurs.
-export type MenuKey = "templates" | "visuals" | "products" | "skus" | "imposition" | "users";
+export type MenuKey = "templates" | "visuals" | "products" | "design" | "skus" | "imposition" | "users";
 
 export const MENU_ITEMS: Record<
   MenuKey,
@@ -27,6 +27,14 @@ export const MENU_ITEMS: Record<
     icon: RocketIcon,
     gradient: "from-pink-400 to-rose-500",
   },
+  design: {
+    href: "/design",
+    title: "Outil Shopify",
+    icon: ShopifyIcon,
+    // Vert de la marque Shopify (#95BF47), plutôt qu'une paire Tailwind
+    // générique — seule tuile de ce dégradé, pour bien l'associer à Shopify.
+    gradient: "from-[#95BF47] to-[#5E8E3E]",
+  },
   skus: {
     href: "/skus",
     title: "SKU",
@@ -48,7 +56,15 @@ export const MENU_ITEMS: Record<
 };
 
 // Ordre par défaut quand l'utilisateur n'a encore rien personnalisé.
-export const DEFAULT_MENU_ORDER: MenuKey[] = ["templates", "visuals", "products", "skus", "imposition", "users"];
+export const DEFAULT_MENU_ORDER: MenuKey[] = [
+  "templates",
+  "visuals",
+  "products",
+  "design",
+  "skus",
+  "imposition",
+  "users",
+];
 
 function isMenuKey(value: string): value is MenuKey {
   return Object.prototype.hasOwnProperty.call(MENU_ITEMS, value);

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { apercu, gelica } from "@/lib/fonts";
 import "./globals.css";
-import Nav from "@/components/Nav";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Pico Design",
@@ -12,8 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={`${apercu.variable} ${gelica.variable}`}>
       <body>
-        <Nav />
-        <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

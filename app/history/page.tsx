@@ -22,7 +22,7 @@ export default async function HistoryPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-pico-black">Historique</h1>
+        <h1 className="text-page-title font-semibold text-pico-black">Historique</h1>
         <p className="text-sm text-neutral-500">
           {rows.length} génération{rows.length > 1 ? "s" : ""}.
         </p>

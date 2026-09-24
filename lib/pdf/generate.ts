@@ -5,19 +5,35 @@ import { rasterizeLogoToPng } from "./logo";
 import { addDropShadow } from "./logoShadow";
 import type { LogoShadowSettings } from "../logoShadowSettings";
 import { coverCropToBuffer } from "./crop";
+import { compositeLayers, type ResolvedLayer } from "./layers";
 import type { LogoHAlign, LogoVAlign, Template } from "../types";
 
 export interface GeneratePdfInput {
   template: Template;
-  sourceImage: Buffer;
+  // null = pas de visuel de fond choisi (voir coverCropToBuffer) — un
+  // montage fait seulement de calques reste possible.
+  sourceImage: Buffer | null;
   logoImage: Buffer | null;
   positionX?: number;
   positionY?: number;
+  // Zoom (recadrage) au-delà du minimum "cover" — voir coverCropToBuffer.
+  // 1 = comportement d'origine (aucun appelant existant n'en envoie).
+  zoom?: number;
+  // Rotation du visuel lui-même (0/90/180/270) — voir coverCropToBuffer.
+  // 0 = comportement d'origine.
+  imageRotation?: number;
   // Image de verso (optionnelle) : ajoutée comme deuxième page du PDF.
   // Uniquement pertinent pour les modèles recto-verso.
   backImage?: Buffer | null;
   backPositionX?: number;
   backPositionY?: number;
+  backZoom?: number;
+  backImageRotation?: number;
+  // Calques additionnels (texte/image), dans l'ordre d'empilement — voir
+  // lib/design/layers.ts et lib/pdf/layers.ts. Absent/vide = comportement
+  // d'origine (aucun calque).
+  layers?: ResolvedLayer[];
+  backLayers?: ResolvedLayer[];
   // Logo à afficher sur le verso, si le modèle est configuré pour ça
   // (`logo_on_back`) — indépendant du logo du recto, qui peut avoir sa
   // propre forme/couleur mais utilise le même fichier ici (voir
@@ -40,9 +56,15 @@ export async function generatePrintReadyPdf({
   logoImage,
   positionX = 0.5,
   positionY = 0.5,
+  zoom = 1,
+  imageRotation = 0,
   backImage = null,
   backPositionX = 0.5,
   backPositionY = 0.5,
+  backZoom = 1,
+  backImageRotation = 0,
+  layers = [],
+  backLayers = [],
   backLogoImage = null,
   logoShadow = null,
 }: GeneratePdfInput): Promise<Buffer> {
@@ -62,7 +84,10 @@ export async function generatePrintReadyPdf({
     targetPxWidth,
     targetPxHeight,
     logoImage,
-    logoShadow
+    logoShadow,
+    zoom,
+    imageRotation,
+    layers
   );
 
   if (backImage) {
@@ -75,7 +100,10 @@ export async function generatePrintReadyPdf({
       targetPxWidth,
       targetPxHeight,
       backLogoImage,
-      logoShadow
+      logoShadow,
+      backZoom,
+      backImageRotation,
+      backLayers
     );
   }
 
@@ -86,13 +114,16 @@ export async function generatePrintReadyPdf({
 async function addImagePage(
   pdfDoc: PDFDocument,
   template: Template,
-  sourceImage: Buffer,
+  sourceImage: Buffer | null,
   positionX: number,
   positionY: number,
   targetPxWidth: number,
   targetPxHeight: number,
   logoImage: Buffer | null,
-  logoShadow: LogoShadowSettings | null
+  logoShadow: LogoShadowSettings | null,
+  zoom = 1,
+  imageRotation = 0,
+  layers: ResolvedLayer[] = []
 ): Promise<void> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -101,9 +132,20 @@ async function addImagePage(
 
   // Recadrer/redimensionner l'image source pour couvrir exactement la page
   // (fond perdu compris) à la résolution d'impression, au point focal
-  // choisi par l'utilisateur.
-  const cropped = await coverCropToBuffer(sourceImage, targetPxWidth, targetPxHeight, positionX, positionY);
-  const fittedImage = await sharp(cropped)
+  // choisi par l'utilisateur, puis les calques additionnels (texte/image)
+  // par-dessus, avant d'aplatir (l'image finale n'a plus besoin de canal
+  // alpha une fois les calques posés).
+  const cropped = await coverCropToBuffer(
+    sourceImage,
+    targetPxWidth,
+    targetPxHeight,
+    positionX,
+    positionY,
+    zoom,
+    imageRotation
+  );
+  const withLayers = await compositeLayers(cropped, layers, targetPxWidth, targetPxHeight, template.dpi);
+  const fittedImage = await sharp(withLayers)
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: 92 })
     .toBuffer();

@@ -430,7 +430,7 @@ export default function ImpositionTool({
         <Link href="/imposition" className="text-xs text-neutral-500 underline hover:text-pico-black">
           ← Toutes les impositions
         </Link>
-        <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold text-pico-black">
+        <h1 className="mt-1 flex items-center gap-2 text-page-title font-semibold text-pico-black">
           {saved ? "Modifier l'imposition" : "Nouvelle imposition"}
           <UpdatingBadge show={isRefreshing} />
         </h1>

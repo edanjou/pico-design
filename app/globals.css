@@ -118,6 +118,42 @@ h4 {
   margin-right: calc(50% - 50vw);
 }
 
+/* Halo dégradé (orange à gauche, violet à droite) en haut de chaque page,
+   sous la barre de navigation — le même fond que celui du tableau de bord.
+   Il ne couvre que le haut de la page (11rem), il ne suit pas le défilement. */
+.page-glow {
+  background-image:
+    radial-gradient(60% 120% at 15% 0%, color-mix(in srgb, var(--pico-orange) 20%, transparent), transparent 60%),
+    radial-gradient(50% 120% at 85% 0%, color-mix(in srgb, var(--pico-violet) 20%, transparent), transparent 55%);
+  background-repeat: no-repeat;
+  background-size: 100% 11rem;
+}
+
+/* Entrée en douceur des éléments de la page de connexion (la carte arrive un
+   instant après le titre). */
+.auth-card-in {
+  animation: auth-in 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.auth-card-in-late {
+  animation: auth-in 0.52s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+@keyframes auth-in {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-card-in,
+  .auth-card-in-late {
+    animation: none;
+  }
+}
+
 /* Toute icône qui déclenche une action (bouton, lien) joue la secousse « jello »
    au survol, comme celles du menu. Le bouton désactivé et l'icône de chargement
    (animate-spin) restent immobiles ; `motion-safe` respecte le réglage « réduire
@@ -127,4 +163,319 @@ h4 {
   a[href]:hover svg:not(.animate-spin) {
     @apply motion-safe:animate-jello;
   }
+}
+
+/* Polices de l'outil de calques (texte) de l'Outil Shopify — voir
+   lib/design/fonts.ts. Chargées ici (plutôt que next/font, réservé aux
+   polices de la marque Pico) pour que l'aperçu à l'écran (ces déclarations)
+   et le rendu final à l'impression (lib/pdf/textLayer.ts, mêmes fichiers
+   .ttf lus directement avec fontkit) utilisent exactement les mêmes
+   fichiers — pas seulement des polices "qui se ressemblent". */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("/fonts/PlayfairDisplay.ttf") format("truetype");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("/fonts/PlayfairDisplay-Italic.ttf") format("truetype");
+  font-weight: 400 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Caveat";
+  src: url("/fonts/Caveat.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Oswald";
+  src: url("/fonts/Oswald.ttf") format("truetype");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("/fonts/Roboto.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("/fonts/Roboto-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans.ttf") format("truetype");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Italic.ttf") format("truetype");
+  font-weight: 300 800;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Montserrat";
+  src: url("/fonts/Montserrat.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Montserrat";
+  src: url("/fonts/Montserrat-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/Nunito.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/Nunito-Italic.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Raleway";
+  src: url("/fonts/Raleway.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Raleway";
+  src: url("/fonts/Raleway-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Work Sans";
+  src: url("/fonts/WorkSans.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Work Sans";
+  src: url("/fonts/WorkSans-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Josefin Sans";
+  src: url("/fonts/JosefinSans.ttf") format("truetype");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Josefin Sans";
+  src: url("/fonts/JosefinSans-Italic.ttf") format("truetype");
+  font-weight: 100 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Quicksand";
+  src: url("/fonts/Quicksand.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/fonts/SpaceGrotesk.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("/fonts/DMSans.ttf") format("truetype");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("/fonts/DMSans-Italic.ttf") format("truetype");
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("/fonts/Lora.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("/fonts/Lora-Italic.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/fonts/CrimsonPro.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/fonts/CrimsonPro-Italic.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bitter";
+  src: url("/fonts/Bitter.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bitter";
+  src: url("/fonts/Bitter-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Dancing Script";
+  src: url("/fonts/DancingScript.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rubik";
+  src: url("/fonts/Rubik.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rubik";
+  src: url("/fonts/Rubik-Italic.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Karla";
+  src: url("/fonts/Karla.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Karla";
+  src: url("/fonts/Karla-Italic.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish-Italic.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/NotoSans.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/NotoSans-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Merriweather";
+  src: url("/fonts/Merriweather.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Merriweather";
+  src: url("/fonts/Merriweather-Italic.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: swap;
 }

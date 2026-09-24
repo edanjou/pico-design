@@ -41,6 +41,13 @@ export async function POST(request: Request) {
   const mode = formData.get("mode");
   // "back" : verso — pas de logo Pico (jamais superposé au verso).
   const side = formData.get("side") === "back" ? "back" : "front";
+  // Aperçu final propre (Design Shopify) : image + logo seuls, sans trait de
+  // coupe ni marge de sécurité — sans effet sur les modes "frame"/"background".
+  const guides = formData.get("guides") !== "false";
+  // Resserre le cadrage de l'image (étape « Aperçu » de Design Shopify) — sans
+  // effet sur les modes "frame"/"background" (voir generateTemplatePreviewPng).
+  const zoomValue = parseFloat(String(formData.get("zoom") ?? ""));
+  const zoom = Number.isFinite(zoomValue) && zoomValue >= 0.1 ? zoomValue : 1;
 
   if (typeof templateId !== "string") {
     return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
@@ -142,7 +149,9 @@ export async function POST(request: Request) {
     clampedPositionX,
     clampedPositionY,
     false,
-    logoShadow
+    logoShadow,
+    guides,
+    zoom
   );
 
   return new NextResponse(new Uint8Array(png), {

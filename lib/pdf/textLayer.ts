@@ -1,0 +1,140 @@
+// Imports nommés plutôt que `import fontkit from "fontkit"` : le module n'a
+// pas d'export par défaut (seulement des exports nommés) — un import par
+// défaut se contente d'une interop TypeScript (esModuleInterop) qui ne
+// tient pas forcément à l'exécution selon le bundler (vérifié : échoue sous
+// Node/ESM strict, malgré un `tsc` propre).
+import { openSync, type Font } from "fontkit";
+import path from "path";
+import { mmToPx } from "./units";
+import { fontOptionById, resolveFontFile, type FontOption } from "../design/fonts";
+import type { TextLayer } from "../design/layers";
+
+// Rendu du texte en contours de glyphes (chemins SVG), via `fontkit` — pas
+// de police "installée" à trouver sur le serveur (fontconfig, dans le sharp
+// bundlé, ne s'est pas montré fiable d'un environnement à l'autre lors des
+// essais) : chaque glyphe est directement transformé en `<path>`, portable
+// partout où Node tourne. Les fichiers (public/fonts/*.ttf) sont les mêmes
+// que ceux chargés côté client (@font-face, voir globals.css) pour un
+// aperçu fidèle à l'impression.
+
+// Polices variables (axe "wght") : une même police ouverte plusieurs fois à
+// des graisses différentes reste bon marché une fois mise en cache — le
+// fichier n'est lu et parsé qu'une fois par process.
+const openFontCache = new Map<string, Font>();
+// Instances (graisse figée) tirées d'une police variable — `getVariation`
+// n'est pas gratuit non plus.
+const variationCache = new Map<string, Font>();
+
+function openFont(publicPath: string): Font {
+  const cached = openFontCache.get(publicPath);
+  if (cached) return cached;
+  const absolute = path.join(process.cwd(), "public", publicPath);
+  const font = openSync(absolute) as Font;
+  openFontCache.set(publicPath, font);
+  return font;
+}
+
+function loadInstance(font: FontOption, italic: boolean, bold: boolean): Font {
+  const filePath = resolveFontFile(font, italic);
+  const weight = bold ? font.weightBold : font.weightRegular;
+  const key = `${filePath}:${weight}`;
+  const cached = variationCache.get(key);
+  if (cached) return cached;
+  const base = openFont(filePath);
+  // `getVariation` sur une police non variable (aucune de nos polices n'est
+  // dans ce cas ici) renvoie simplement la police telle quelle — sans risque.
+  const instance = (typeof base.getVariation === "function" ? base.getVariation({ wght: weight }) : base) as Font;
+  variationCache.set(key, instance);
+  return instance;
+}
+
+interface LaidOutLine {
+  // `<path>` par glyphe, déjà positionnés/mis à l'échelle sur la ligne
+  // (origine locale : (0,0) = point de départ de la ligne sur sa ligne de
+  // base, Y vers le bas — comme le SVG, contrairement à l'espace em de la
+  // police, Y vers le haut, d'où le `scale(.. -..)`).
+  paths: string;
+  widthPx: number;
+}
+
+function layoutLine(font: Font, text: string, fontSizePx: number, letterSpacingPx: number): LaidOutLine {
+  const scale = fontSizePx / font.unitsPerEm;
+  const run = font.layout(text);
+  let x = 0;
+  let paths = "";
+  const glyphCount = run.glyphs.length;
+  run.glyphs.forEach((glyph, i) => {
+    const d = glyph.path.toSVG();
+    if (d) {
+      paths += `<path transform="translate(${x} 0) scale(${scale} ${-scale})" d="${d}"/>`;
+    }
+    x += glyph.advanceWidth * scale;
+    // Pas d'espacement après le dernier glyphe — sinon la ligne mesurerait
+    // (et centrerait/alignerait) un blanc superflu à sa droite, comme le
+    // fait déjà `letter-spacing` en CSS dans les navigateurs récents.
+    if (i < glyphCount - 1) x += letterSpacingPx;
+  });
+  return { paths, widthPx: x };
+}
+
+// Groupe SVG (`<g>`) positionné pour ce calque de texte, prêt à composer
+// (voir lib/pdf/layers.ts) sur un canevas de `targetWidthPx`×`targetHeightPx`
+// (la page, fond perdu compris, à la résolution `dpi` voulue).
+export function textLayerToSvgGroup(
+  layer: TextLayer,
+  targetWidthPx: number,
+  targetHeightPx: number,
+  dpi: number
+): string {
+  const fontOption = fontOptionById(layer.fontId);
+  const instance = loadInstance(fontOption, layer.italic, layer.bold);
+  const fontSizePx = mmToPx(layer.fontSizeMm, dpi);
+  // Interligne courant (1.25×) — les polices n'exposent pas toutes une
+  // valeur d'interligne "recommandée" fiable pour du texte court comme ici.
+  const lineHeightPx = fontSizePx * 1.25;
+  const ascentPx = (instance.ascent / instance.unitsPerEm) * fontSizePx;
+
+  const letterSpacingPx = mmToPx(layer.letterSpacingMm ?? 0, dpi);
+  const rawLines = layer.content.split("\n");
+  const lines = rawLines.map((line) => layoutLine(instance, line, fontSizePx, letterSpacingPx));
+  const maxWidthPx = Math.max(1, ...lines.map((l) => l.widthPx));
+  const totalHeightPx = lineHeightPx * lines.length;
+
+  const centerX = layer.positionX * targetWidthPx;
+  const centerY = layer.positionY * targetHeightPx;
+  const blockLeft = centerX - maxWidthPx / 2;
+  const blockTop = centerY - totalHeightPx / 2;
+
+  // Chaque ligne centrée dans le bloc (plusieurs lignes n'ont pas forcément
+  // la même largeur) — l'alignement gauche/droite réglable a été retiré :
+  // sans effet visible tant que le bloc lui-même reste centré sur son point
+  // d'ancrage, il n'apportait rien pour la quasi-totalité des textes (une
+  // seule ligne).
+  const lineGroups = lines
+    .map((line, i) => {
+      const lineLeft = (maxWidthPx - line.widthPx) / 2;
+      const baselineY = i * lineHeightPx + ascentPx;
+      return `<g transform="translate(${lineLeft} ${baselineY})">${line.paths}</g>`;
+    })
+    .join("");
+
+  // Bordure (contour) : trait autour de chaque glyphe, réglé fill/stroke sur
+  // le groupe (hérité par les <path> enfants, qui n'en précisent pas) —
+  // `paint-order="stroke fill"` peint le trait derrière le fond, sinon un
+  // trait épais mangerait l'intérieur des glyphes. Épaisseur nulle par
+  // défaut : la propriété stroke reste inoffensive (invisible) tant que le
+  // client n'a pas réglé de bordure.
+  const strokeWidthPx = mmToPx(layer.strokeWidthMm ?? 0, dpi);
+  const strokeAttrs =
+    strokeWidthPx > 0
+      ? ` stroke="${layer.strokeColor}" stroke-width="${strokeWidthPx}" stroke-linejoin="round" paint-order="stroke fill"`
+      : "";
+
+  // Rotation autour du centre du bloc — appliquée en dernier (englobe tout),
+  // pour tourner le texte déjà mis en page plutôt que de complexifier la
+  // mise en page elle-même.
+  const rotationDeg = layer.rotationDeg ?? 0;
+  const rotateAttr = rotationDeg ? `rotate(${rotationDeg} ${centerX} ${centerY}) ` : "";
+
+  return `<g transform="${rotateAttr}translate(${blockLeft} ${blockTop})" fill="${layer.color}"${strokeAttrs} opacity="${layer.opacity ?? 1}">${lineGroups}</g>`;
+}

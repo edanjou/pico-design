@@ -23,6 +23,15 @@ const PREVIEW_MAX_DIM_PX = 900;
  * "cadre" (ligne de coupe, marge de sécurité, gabarit, logo) sur fond
  * transparent — utilisé côté client comme calque fixe pendant que l'image
  * de fond est déplacée séparément pour le repositionnement.
+ *
+ * `guides`, si faux, omet la ligne de coupe/marge de sécurité et le gabarit
+ * de guidage (`overlayImage`) quand `sourceImage` est fourni — image + logo
+ * seuls, pour un livrable final (ex. téléchargement dans Design Shopify)
+ * plutôt qu'un aperçu de travail. Sans effet en mode `transparent` (le
+ * "cadre" y est justement le contenu demandé).
+ *
+ * `zoom` (1 = pas de zoom, voir coverCropToBuffer) resserre le cadrage de
+ * `sourceImage` — utilisé par l'étape « Aperçu » de Design Shopify.
  */
 export async function generateTemplatePreviewPng(
   template: Template,
@@ -32,7 +41,9 @@ export async function generateTemplatePreviewPng(
   positionX = 0.5,
   positionY = 0.5,
   transparent = false,
-  logoShadow: LogoShadowSettings | null = null
+  logoShadow: LogoShadowSettings | null = null,
+  guides = true,
+  zoom = 1
 ): Promise<Buffer> {
   const pageWidthMm = template.width_mm + template.bleed_mm * 2;
   const pageHeightMm = template.height_mm + template.bleed_mm * 2;
@@ -91,11 +102,13 @@ export async function generateTemplatePreviewPng(
       .toBuffer();
     composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
   } else if (sourceImage) {
-    base = await sharp(await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY))
+    base = await sharp(await coverCropToBuffer(sourceImage, pageWidthPx, pageHeightPx, positionX, positionY, zoom))
       .flatten({ background: "#ffffff" })
       .png()
       .toBuffer();
-    composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
+    if (guides) {
+      composites.push({ input: await sharp(Buffer.from(linesSvg)).png().toBuffer(), left: 0, top: 0 });
+    }
   } else {
     base = await sharp(Buffer.from(linesSvg)).png().toBuffer();
   }
@@ -114,7 +127,7 @@ export async function generateTemplatePreviewPng(
     });
   }
 
-  if (overlayImage && trimW > 0 && trimH > 0) {
+  if (guides && overlayImage && trimW > 0 && trimH > 0) {
     // Le gabarit garde sa taille réelle : ses pixels natifs sont considérés
     // comme exportés à la résolution du modèle (template.dpi), donc mis à
     // l'échelle uniquement par le même facteur que le reste de l'aperçu

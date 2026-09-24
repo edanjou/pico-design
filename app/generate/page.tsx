@@ -34,7 +34,7 @@ export default async function GeneratePage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold text-pico-black">
+      <h1 className="mb-6 text-page-title font-semibold text-pico-black">
         Générer un PDF prêt pour impression
       </h1>
       <UploadForm products={withUrls} categories={(categories as Category[]) ?? []} />

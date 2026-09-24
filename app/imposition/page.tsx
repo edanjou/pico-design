@@ -17,7 +17,7 @@ export default async function ImpositionsPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-pico-black">Imposition</h1>
+          <h1 className="text-page-title font-semibold text-pico-black">Imposition</h1>
           <p className="text-sm text-neutral-500">
             {rows.length} imposition{rows.length > 1 ? "s" : ""} enregistrée{rows.length > 1 ? "s" : ""}.
           </p>

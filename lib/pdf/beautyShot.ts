@@ -3,6 +3,7 @@ import { XMLParser } from "fast-xml-parser";
 import { coverCropToBuffer } from "./crop";
 import { rasterizeLogoToPng } from "./logo";
 import { logoOverlay } from "./logoShadow";
+import { compositeLayers, type ResolvedLayer } from "./layers";
 import type { LogoShadowSettings } from "../logoShadowSettings";
 import type { Template } from "../types";
 
@@ -198,16 +199,30 @@ export function parseOverlayOpacitiesField(raw: FormDataEntryValue | null): numb
 
 async function buildDesignForZone(
   template: Template,
-  sourceImage: Buffer,
+  // null = pas de visuel de fond choisi (voir coverCropToBuffer) — un
+  // montage fait seulement de calques reste possible.
+  sourceImage: Buffer | null,
   logoImage: Buffer | null,
   zoneWidthPx: number,
   zoneHeightPx: number,
   effectiveDpi: number,
   positionX: number,
   positionY: number,
-  logoShadow: LogoShadowSettings | null
+  logoShadow: LogoShadowSettings | null,
+  zoom = 1,
+  imageRotation = 0,
+  layers: ResolvedLayer[] = []
 ): Promise<Buffer> {
-  const covered = await coverCropToBuffer(sourceImage, zoneWidthPx, zoneHeightPx, positionX, positionY);
+  const covered = await coverCropToBuffer(
+    sourceImage,
+    zoneWidthPx,
+    zoneHeightPx,
+    positionX,
+    positionY,
+    zoom,
+    imageRotation
+  );
+  const withLayers = await compositeLayers(covered, layers, zoneWidthPx, zoneHeightPx, effectiveDpi);
 
   const composites: sharp.OverlayOptions[] = [];
   if (logoImage && template.logo_width_mm > 0) {
@@ -242,7 +257,7 @@ async function buildDesignForZone(
     );
   }
 
-  return sharp(covered)
+  return sharp(withLayers)
     .flatten({ background: "#ffffff" })
     .composite(composites)
     .ensureAlpha()
@@ -254,7 +269,9 @@ export async function generateBeautyShotMockupPng(
   template: Template,
   config: BeautyShotConfig,
   assets: Map<string, Buffer>,
-  sourceImage: Buffer,
+  // null = pas de visuel de fond choisi (voir coverCropToBuffer) — un
+  // montage fait seulement de calques reste possible.
+  sourceImage: Buffer | null,
   logoImage: Buffer | null,
   positionX = 0.5,
   positionY = 0.5,
@@ -263,7 +280,13 @@ export async function generateBeautyShotMockupPng(
   // le XML ne décrit qu'un mode de fusion, jamais d'opacité ; c'est ce qui
   // rendait les mockups tout ou rien (souvent trop sombres avec "multiply").
   // null/manquant/hors de 0-100 = 100 (comportement d'origine, inchangé).
-  overlayOpacities: (number | null | undefined)[] | null = null
+  overlayOpacities: (number | null | undefined)[] | null = null,
+  // Zoom (recadrage) au-delà du minimum "cover" — voir coverCropToBuffer.
+  // 1 = comportement d'origine (aucun appelant existant n'en envoie).
+  zoom = 1,
+  // Rotation du visuel lui-même (0/90/180/270) — voir coverCropToBuffer.
+  imageRotation = 0,
+  layers: ResolvedLayer[] = []
 ): Promise<Buffer> {
   const canvasWidth = Math.max(1, config.width);
   const canvasHeight = Math.max(1, config.height);
@@ -282,7 +305,10 @@ export async function generateBeautyShotMockupPng(
     effectiveDpi,
     positionX,
     positionY,
-    logoShadow
+    logoShadow,
+    zoom,
+    imageRotation,
+    layers
   );
 
   const maskBuffer = config.maskAssetName ? assets.get(config.maskAssetName) : null;

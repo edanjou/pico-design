@@ -21,13 +21,8 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div
-        className="full-bleed -mt-8"
-        style={{
-          backgroundImage:
-            "radial-gradient(60% 120% at 15% 0%, color-mix(in srgb, var(--pico-orange) 20%, transparent), transparent 60%), radial-gradient(50% 120% at 85% 0%, color-mix(in srgb, var(--pico-violet) 20%, transparent), transparent 55%)",
-        }}
-      >
+      {/* Le halo dégradé vient de la mise en page commune (.page-glow). */}
+      <div className="full-bleed -mt-8">
         <div className="mx-auto max-w-6xl px-6 py-10 sm:px-10">
           <p className="text-xs font-semibold tracking-widest text-pico-accent">PICO DESIGN</p>
           <h1 className="mt-2 font-heading text-3xl font-bold text-pico-black sm:text-4xl">

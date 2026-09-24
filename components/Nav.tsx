@@ -104,8 +104,14 @@ export default function Nav() {
             return (
               <Fragment key={key}>
                 {i > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}
-                <Link href={item.href} className="flex items-center gap-1.5 hover:text-primary">
-                  <item.icon className="h-4 w-4" />
+                <Link
+                  href={item.href}
+                  className="group flex items-center gap-1.5 transition-colors duration-200 hover:text-primary"
+                >
+                  {/* Seule l'icône bouge (secousse « jello », jouée une fois au survol) : le
+                      lien, lui, reste en place, donc la zone de survol ne change pas.
+                      `motion-safe` désactive le mouvement pour qui a demandé moins d'animations. */}
+                  <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
                   {item.title}
                 </Link>
               </Fragment>
@@ -162,9 +168,9 @@ export default function Nav() {
               <Link
                 key={key}
                 href={item.href}
-                className="flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm text-text-muted hover:bg-surface-muted hover:text-primary"
+                className="group flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm text-text-muted hover:bg-surface-muted hover:text-primary"
               >
-                <item.icon className="h-4 w-4" />
+                <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
                 {item.title}
               </Link>
             );

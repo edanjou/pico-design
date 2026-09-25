@@ -50,6 +50,12 @@ export interface Template {
   // Intensité (0-100) de chaque surcouche du bundle mockup, dans l'ordre des
   // <gifting:overlay> du XML. null ou case manquante = 100 (inchangé).
   beauty_shot_overlay_opacities: number[] | null;
+  // Marques de pli : distances (mm) depuis le bord de coupe, une par pli —
+  // "vertical" = ligne verticale (divise la largeur), "horizontal" = ligne
+  // horizontale (divise la hauteur). Affichées seulement en aperçu écran,
+  // jamais dans le PDF imprimé (voir lib/pdf/preview.ts). null/vide = aucune.
+  fold_marks_vertical_mm: number[] | null;
+  fold_marks_horizontal_mm: number[] | null;
   two_sided: boolean;
   logo_on_front: boolean;
   logo_on_back: boolean;
@@ -60,6 +66,43 @@ export interface Template {
 
 export type VisualMode = "full" | "tile";
 export type LogoShape = "logo" | "pastille";
+
+// Un emplacement de photo dans un Thème : position (centre) + taille,
+// toutes en ratios 0-1 de la page (fond perdu compris) — même convention que
+// DesignLayer (voir lib/design/layers.ts). La photo du client y est
+// recadrée en "cover" pour remplir exactement ce rectangle, avant que le
+// graphisme du thème (avec ses zones transparentes) ne soit posé par-dessus.
+export interface ThemeSlot {
+  positionX: number;
+  positionY: number;
+  widthRatio: number;
+  heightRatio: number;
+}
+
+// Ajustement (position/zoom) apporté par le CLIENT à la photo d'un
+// emplacement, à l'intérieur de son rectangle (voir ThemeSlot, fixé par
+// l'admin) — même sémantique que positionX/positionY/scale d'ImageSourceValue
+// pour le fond simple, mais un jeu de valeurs par emplacement. 1 = cadrage
+// "cover" minimal (voir coverCropToBuffer).
+export interface ThemeSlotAdjust {
+  positionX: number;
+  positionY: number;
+  scale: number;
+}
+
+// Thème : un graphisme préfait (avec transparence), attribué à UN modèle
+// précis, affiché par-dessus 1 à 3 photos du client (voir ThemeSlot). Voir
+// lib/pdf/theme.ts (composeThemeImage) pour le rendu, et DesignTypePicker
+// pour son usage côté Design Shopify.
+export interface Theme {
+  id: string;
+  template_id: string;
+  name: string;
+  overlay_path: string;
+  slots: ThemeSlot[];
+  created_at: string;
+  created_by: string | null;
+}
 
 export interface VisualCollection {
   id: string;

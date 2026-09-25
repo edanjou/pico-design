@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ImageSourceValue } from "@/components/ImageSourcePicker";
+import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Sku, Template } from "@/lib/types";
 import { SpinnerIcon } from "@/components/icons";
 import { layerImageFieldName, type DesignLayer } from "@/lib/design/layers";
@@ -31,6 +32,37 @@ function appendLayersToForm(body: FormData, side: "front" | "back", layers: Desi
   for (const l of layers) {
     if (l.type === "image" && l.file) body.append(layerImageFieldName(side, l.id), l.file);
   }
+}
+
+// Mosaïque de plusieurs photos (étape « Type de design ») : ajoute la grille
+// et chaque case au formulaire — voir mosaicFromForm côté serveur
+// (app/api/design/pdf, app/api/design/mockup). `backPrefixed` distingue le
+// recto ("mosaicCols"/"mosaicCell{i}") du verso ("backMosaicCols"/...) sur
+// /api/design/pdf (les deux côtés dans un seul appel, comme "backImage") ;
+// toujours `false` côté /api/design/mockup, même pour le verso (un seul
+// côté par appel, distingué par le champ "side", jamais par un préfixe).
+function appendMosaicToForm(
+  body: FormData,
+  value: ImageSourceValue,
+  mosaicGrid: { cols: number; rows: number },
+  backPrefixed: boolean
+) {
+  body.append(backPrefixed ? "backMosaicCols" : "mosaicCols", String(mosaicGrid.cols));
+  body.append(backPrefixed ? "backMosaicRows" : "mosaicRows", String(mosaicGrid.rows));
+  (value.mosaicFiles ?? []).forEach((f, i) => {
+    if (f) body.append(backPrefixed ? `backMosaicCell${i}` : `mosaicCell${i}`, f);
+  });
+}
+
+// Thème (étape « Type de design », recto seulement — voir DesignTool) :
+// ajoute son id et ses emplacements au formulaire — voir themeIdFromForm/
+// themeSlotFilesFromForm côté serveur (app/api/design/pdf, app/api/design/mockup).
+function appendThemeToForm(body: FormData, value: ImageSourceValue, themeId: string) {
+  body.append("themeId", themeId);
+  (value.themeSlotFiles ?? []).forEach((f, i) => {
+    if (f) body.append(`themeSlot${i}`, f);
+  });
+  if (value.themeSlotAdjust) body.append("themeSlotAdjust", JSON.stringify(value.themeSlotAdjust));
 }
 
 interface GeneratedPdf {
@@ -75,6 +107,8 @@ export default function DesignSummary({
   frontLayers,
   backLayers,
   backFromPdf,
+  mosaicGrid,
+  selectedTheme,
   onBack,
   onRestart,
 }: {
@@ -90,6 +124,13 @@ export default function DesignSummary({
   frontLayers: DesignLayer[];
   backLayers: DesignLayer[];
   backFromPdf: { file: File; page: number } | null;
+  // Grille de la mosaïque (étape « Type de design ») — pertinent seulement
+  // si front/back.sourceMode === "mosaic" (voir appendMosaicToForm).
+  mosaicGrid: { cols: number; rows: number };
+  // Thème choisi (étape « Type de design ») — pertinent seulement si
+  // front.sourceMode === "theme" (voir appendThemeToForm) ; ne s'applique
+  // jamais au verso.
+  selectedTheme: ThemeWithOverlayUrl | null;
   onBack: () => void;
   onRestart: () => void;
 }) {
@@ -107,13 +148,20 @@ export default function DesignSummary({
     setError(null);
     (async () => {
       try {
-        // Outil Shopify : source visuel toujours "upload" (voir DesignPreview,
-        // sourceModes={["upload"]}) — on envoie directement les fichiers, pas
-        // besoin de gérer les branches "visuel de la banque".
+        // Outil Shopify : source visuel toujours "upload" ou "mosaic" (voir
+        // DesignPreview/DesignTypePicker, jamais la banque de visuels) — on
+        // envoie directement les fichiers, pas besoin de gérer les branches
+        // "visuel de la banque".
         const body = new FormData();
         body.append("templateId", template.id);
         body.append("rotated", String(rotated));
-        if (front.file) body.append("image", front.file);
+        if (front.sourceMode === "theme" && selectedTheme) {
+          appendThemeToForm(body, front, selectedTheme.id);
+        } else if (front.sourceMode === "mosaic") {
+          appendMosaicToForm(body, front, mosaicGrid, false);
+        } else if (front.file) {
+          body.append("image", front.file);
+        }
         body.append("pdfPage", "1");
         body.append("positionX", String(front.positionX));
         body.append("positionY", String(front.positionY));
@@ -121,7 +169,9 @@ export default function DesignSummary({
         body.append("imageRotation", String(front.rotation ?? 0));
         appendLayersToForm(body, "front", frontLayers);
         if (template.two_sided) {
-          if (backFromPdf) {
+          if (back.sourceMode === "mosaic") {
+            appendMosaicToForm(body, back, mosaicGrid, true);
+          } else if (backFromPdf) {
             body.append("backImage", backFromPdf.file);
             body.append("backPdfPage", String(backFromPdf.page));
           } else if (back.file) {
@@ -168,11 +218,16 @@ export default function DesignSummary({
       const setState = side === "front" ? setFrontMockup : setBackMockup;
       setState({ loading: true, url: null });
       try {
+        const isMosaic = value.sourceMode === "mosaic";
+        const isTheme = value.sourceMode === "theme" && Boolean(selectedTheme);
         const file = pdfOverride?.file ?? value.file;
+        const hasMosaicFile = isMosaic && (value.mosaicFiles ?? []).some(Boolean);
         // Rien à montrer pour ce côté (ni visuel, ni calque) — au moins l'un
         // des deux suffit (voir DesignTool, frontReady/backReady) : un
-        // montage fait seulement de calques reste un design valide.
-        if (!file && sideLayers.length === 0) {
+        // montage fait seulement de calques reste un design valide. Un
+        // thème, lui, a toujours quelque chose à montrer (son graphisme,
+        // voir ImageSourcePicker) dès qu'il est choisi.
+        if (!file && !hasMosaicFile && !isTheme && sideLayers.length === 0) {
           setState({ loading: false, url: null });
           return;
         }
@@ -180,7 +235,17 @@ export default function DesignSummary({
         body.append("templateId", template.id);
         body.append("rotated", String(rotated));
         body.append("side", side);
-        if (file) body.append("image", file);
+        if (isTheme && selectedTheme) {
+          // Champs jamais préfixés côté /api/design/mockup (un seul côté par
+          // appel, distingué par "side" ci-dessus) — voir appendThemeToForm.
+          appendThemeToForm(body, value, selectedTheme.id);
+        } else if (isMosaic) {
+          // Champs jamais préfixés côté /api/design/mockup (un seul côté par
+          // appel, distingué par "side" ci-dessus) — voir appendMosaicToForm.
+          appendMosaicToForm(body, value, mosaicGrid, false);
+        } else if (file) {
+          body.append("image", file);
+        }
         body.append("pdfPage", String(pdfOverride?.page ?? 1));
         body.append("positionX", String(value.positionX));
         body.append("positionY", String(value.positionY));

@@ -87,6 +87,15 @@ export default function TemplateForm({
   const [overlayOpacities, setOverlayOpacities] = useState<number[]>(() =>
     overlays.map((_, i) => template?.beauty_shot_overlay_opacities?.[i] ?? 100)
   );
+  // Marques de pli (aperçu écran seulement, voir generateTemplatePreviewPng)
+  // — distances en mm depuis le bord de coupe, une par pli, position
+  // réglable individuellement (pas de répartition automatique).
+  const [foldMarksVertical, setFoldMarksVertical] = useState<number[]>(
+    template?.fold_marks_vertical_mm ?? []
+  );
+  const [foldMarksHorizontal, setFoldMarksHorizontal] = useState<number[]>(
+    template?.fold_marks_horizontal_mm ?? []
+  );
 
   function handleOverlayChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -119,6 +128,24 @@ export default function TemplateForm({
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Marques de pli : chaque pli a sa propre distance (mm), réglable
+  // individuellement — pas de répartition automatique par simple compte.
+  function addFold(axis: "vertical" | "horizontal") {
+    const setter = axis === "vertical" ? setFoldMarksVertical : setFoldMarksHorizontal;
+    // Position de départ raisonnable (milieu de la page) — à ajuster ensuite.
+    const defaultMm = (axis === "vertical" ? form.width_mm : form.height_mm) / 2;
+    setter((marks) => [...marks, defaultMm]);
+  }
+  function removeFold(axis: "vertical" | "horizontal", index: number) {
+    const setter = axis === "vertical" ? setFoldMarksVertical : setFoldMarksHorizontal;
+    setter((marks) => marks.filter((_, i) => i !== index));
+  }
+  function updateFold(axis: "vertical" | "horizontal", index: number, displayValue: number) {
+    const setter = axis === "vertical" ? setFoldMarksVertical : setFoldMarksHorizontal;
+    const mm = unit === "mm" ? displayValue : inToMm(displayValue);
+    setter((marks) => marks.map((v, i) => (i === index ? mm : v)));
   }
 
   // Les dimensions sont toujours stockées en mm ; ces helpers ne font que
@@ -162,6 +189,11 @@ export default function TemplateForm({
     if (overlays.length > 0) {
       formData.append("beautyShotOverlayOpacities", JSON.stringify(overlayOpacities));
     }
+    // Toujours envoyés (même vides) : un tableau vide efface les marques
+    // existantes côté serveur (voir parseFoldMarksField) — les omettre
+    // laisserait d'anciennes marques en place après les avoir toutes retirées.
+    formData.append("foldMarksVertical", JSON.stringify(foldMarksVertical));
+    formData.append("foldMarksHorizontal", JSON.stringify(foldMarksHorizontal));
 
     const res = await fetch(isEditing ? `/api/templates/${template!.id}` : "/api/templates", {
       method: isEditing ? "PATCH" : "POST",
@@ -267,6 +299,15 @@ export default function TemplateForm({
             />
           </div>
           <div>
+            <label className="block text-sm font-medium">Résolution (dpi)</label>
+            <input
+              type="number"
+              value={form.dpi}
+              onChange={(e) => update("dpi", parseInt(e.target.value, 10))}
+              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium">
               Marge de protection horizontale ({unit === "mm" ? "mm" : "po"})
             </label>
@@ -327,15 +368,6 @@ export default function TemplateForm({
               un simple guide à l&apos;écran.
             </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium">Résolution (dpi)</label>
-            <input
-              type="number"
-              value={form.dpi}
-              onChange={(e) => update("dpi", parseInt(e.target.value, 10))}
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-            />
-          </div>
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm text-pico-black">
           <input
@@ -350,6 +382,82 @@ export default function TemplateForm({
             Le bouton d&apos;orientation sera masqué dans le formulaire produit pour ce modèle.
           </p>
         )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">Marques de pli</label>
+        <p className="mt-1 text-xs text-neutral-500">
+          Repères affichés dans l&apos;aperçu pour indiquer où le produit sera plié — jamais
+          imprimés sur le PDF final. Chaque pli a sa propre distance depuis le bord de coupe.
+        </p>
+        <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Plis verticaux
+            </p>
+            {foldMarksVertical.map((mm, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-xs text-neutral-500">Pli {i + 1}</span>
+                <input
+                  type="number"
+                  step={unit === "mm" ? "0.1" : "0.01"}
+                  value={toDisplay(mm)}
+                  onChange={(e) => updateFold("vertical", i, parseFloat(e.target.value) || 0)}
+                  aria-label={`Distance du pli vertical ${i + 1} depuis le bord gauche`}
+                  className="w-full min-w-0 rounded border border-neutral-300 px-3 py-2 text-sm"
+                />
+                <span className="shrink-0 text-xs text-neutral-500">{unit === "mm" ? "mm" : "po"}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFold("vertical", i)}
+                  className="shrink-0 text-xs text-neutral-500 underline hover:text-pico-black"
+                >
+                  Retirer
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addFold("vertical")}
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50"
+            >
+              + Ajouter un pli vertical
+            </button>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Plis horizontaux
+            </p>
+            {foldMarksHorizontal.map((mm, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-xs text-neutral-500">Pli {i + 1}</span>
+                <input
+                  type="number"
+                  step={unit === "mm" ? "0.1" : "0.01"}
+                  value={toDisplay(mm)}
+                  onChange={(e) => updateFold("horizontal", i, parseFloat(e.target.value) || 0)}
+                  aria-label={`Distance du pli horizontal ${i + 1} depuis le bord du haut`}
+                  className="w-full min-w-0 rounded border border-neutral-300 px-3 py-2 text-sm"
+                />
+                <span className="shrink-0 text-xs text-neutral-500">{unit === "mm" ? "mm" : "po"}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFold("horizontal", i)}
+                  className="shrink-0 text-xs text-neutral-500 underline hover:text-pico-black"
+                >
+                  Retirer
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addFold("horizontal")}
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50"
+            >
+              + Ajouter un pli horizontal
+            </button>
+          </div>
+        </div>
       </div>
 
       <div>

@@ -13,6 +13,7 @@ import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
 import { resolveLayersFromForm } from "@/lib/pdf/layers";
+import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
 import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
@@ -76,10 +77,32 @@ export async function POST(request: Request) {
   const zoom = zoomValue(formData.get("zoom"));
   const imageRotation = rotationValue(formData.get("imageRotation"));
   const layers = await resolveLayersFromForm(formData, side);
+  // Mosaïque de plusieurs photos uploadées (étape « Type de design ») — voir
+  // resolveProductImage/composeMosaicImage. Un seul côté par appel ici
+  // (`side`), donc champs non préfixés, comme "image"/"positionX".
+  const mosaicCols = parseInt(String(formData.get("mosaicCols") ?? ""), 10);
+  const mosaicRows = parseInt(String(formData.get("mosaicRows") ?? ""), 10);
+  const hasMosaicGrid = Number.isFinite(mosaicCols) && Number.isFinite(mosaicRows) && mosaicCols > 0 && mosaicRows > 0;
+  const mosaicFiles: (File | null)[] | null = hasMosaicGrid
+    ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
+        const f = formData.get(`mosaicCell${i}`);
+        return f instanceof File && f.size > 0 ? f : null;
+      })
+    : null;
+  const hasMosaic = Boolean(mosaicFiles && mosaicFiles.some((f) => f));
+  // Thème (étape « Type de design ») — recto seulement (voir DesignTool :
+  // un thème n'a qu'un seul graphisme, il ne s'applique jamais au verso).
+  const themeIdRaw = formData.get("themeId");
+  const themeId = side === "front" && typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
+  const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
+    const f = formData.get(`themeSlot${i}`);
+    return f instanceof File && f.size > 0 ? f : null;
+  });
+  const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
   const hasFile = file instanceof File && file.size > 0;
-  // Rien à montrer pour ce côté (ni visuel, ni calque) : pas la peine de
-  // composer un mockup entièrement blanc.
-  if (!hasFile && layers.length === 0) {
+  // Rien à montrer pour ce côté (ni visuel, ni mosaïque, ni thème, ni
+  // calque) : pas la peine de composer un mockup entièrement blanc.
+  if (!hasFile && !hasMosaic && !themeId && layers.length === 0) {
     return new NextResponse(null, { status: 204 });
   }
 
@@ -101,7 +124,41 @@ export async function POST(request: Request) {
   const template = applyOrientation(rawTemplate, rotated);
 
   let resolvedBuffer: Buffer | null = null;
-  if (hasFile) {
+  if (themeId) {
+    try {
+      const resolved = await resolveProductImage(supabase, {
+        templateId,
+        file: null,
+        visualId: null,
+        visualMode: null,
+        tileSizeMm: null,
+        rotated,
+        themeId,
+        themeSlotFiles,
+        themeSlotAdjust,
+      });
+      resolvedBuffer = resolved.buffer;
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement de l'image.");
+    }
+  } else if (hasMosaic) {
+    try {
+      const resolved = await resolveProductImage(supabase, {
+        templateId,
+        file: null,
+        visualId: null,
+        visualMode: null,
+        tileSizeMm: null,
+        rotated,
+        mosaicFiles,
+        mosaicCols,
+        mosaicRows,
+      });
+      resolvedBuffer = resolved.buffer;
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement de l'image.");
+    }
+  } else if (hasFile) {
     try {
       const resolved = await resolveProductImage(supabase, {
         templateId,

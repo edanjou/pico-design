@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mmToPx } from "./units";
 import { composeFullCoverImage, composeTiledImage } from "./visual";
+import { composeMosaicImage } from "./mosaic";
+import { composeThemeImage } from "./theme";
 import { applyOrientation } from "./orientation";
 import { prepareUploadedFile } from "../visualUpload";
 import { isPdfBuffer } from "./rasterizePdf";
 import { pdfPageCount, planPdfPages, type PdfPagePlan } from "./pdfPages";
-import type { Template, Visual, VisualMode } from "../types";
+import type { Template, Theme, ThemeSlotAdjust, Visual, VisualMode } from "../types";
 
 export interface ResolveProductImageInput {
   templateId: string;
@@ -18,6 +20,22 @@ export interface ResolveProductImageInput {
   positionX?: number;
   positionY?: number;
   rotated?: boolean;
+  // Mosaïque de plusieurs photos uploadées (Design Shopify, étape « Type de
+  // design ») — distincte de `visualMode: "tile"`, qui répète UN seul visuel
+  // de la banque. `null`/case manquante d'un tableau = cellule vide (voir
+  // composeMosaicImage). Prioritaire sur `file`/`visualId` si présent.
+  mosaicFiles?: (File | null)[] | null;
+  mosaicCols?: number | null;
+  mosaicRows?: number | null;
+  // Thème (Design Shopify, étape « Type de design ») : un graphisme préfait
+  // attribué au modèle, avec 1 à 3 emplacements où les photos du client sont
+  // recadrées — voir composeThemeImage. Prioritaire sur mosaic/file/visualId.
+  themeId?: string | null;
+  themeSlotFiles?: (File | null)[] | null;
+  // Ajustement (position/zoom) du client dans chaque emplacement — voir
+  // ThemeSlotAdjust/composeThemeImage. Absent/case manquante = cadrage
+  // "cover" par défaut pour cet emplacement.
+  themeSlotAdjust?: ThemeSlotAdjust[] | null;
 }
 
 export interface ResolvedProductImage {
@@ -52,6 +70,79 @@ export async function resolveProductImage(
   supabase: SupabaseClient<any>,
   input: ResolveProductImageInput
 ): Promise<ResolvedProductImage> {
+  if (input.themeId) {
+    const { data: theme, error: themeError } = await supabase
+      .from("themes")
+      .select("*")
+      .eq("id", input.themeId)
+      .single<Theme>();
+    if (themeError || !theme) {
+      throw new Error("Thème introuvable.");
+    }
+    const { data: overlayData, error: overlayError } = await supabase.storage
+      .from("overlays")
+      .download(theme.overlay_path);
+    if (overlayError || !overlayData) {
+      throw new Error("Impossible de télécharger le graphisme du thème.");
+    }
+    const overlayBuffer = Buffer.from(await overlayData.arrayBuffer());
+
+    const { data: rawTemplate, error: templateError } = await supabase
+      .from("templates")
+      .select("*")
+      .eq("id", input.templateId)
+      .single<Template>();
+    if (templateError || !rawTemplate) {
+      throw new Error("Modèle introuvable.");
+    }
+    const template = applyOrientation(rawTemplate, input.rotated ?? false);
+    const pageWidthMm = template.width_mm + template.bleed_mm * 2;
+    const pageHeightMm = template.height_mm + template.bleed_mm * 2;
+    const targetWidthPx = mmToPx(pageWidthMm, template.dpi);
+    const targetHeightPx = mmToPx(pageHeightMm, template.dpi);
+
+    const slotBuffers = await Promise.all(
+      (input.themeSlotFiles ?? []).map(async (f) => (f ? Buffer.from(await f.arrayBuffer()) : null))
+    );
+    const buffer = await composeThemeImage(
+      slotBuffers,
+      theme.slots,
+      overlayBuffer,
+      targetWidthPx,
+      targetHeightPx,
+      input.themeSlotAdjust ?? []
+    );
+    return { buffer, contentType: "image/jpeg", filename: "theme.jpg" };
+  }
+
+  if (input.mosaicFiles && input.mosaicFiles.some((f) => f)) {
+    const { data: rawTemplate, error: templateError } = await supabase
+      .from("templates")
+      .select("*")
+      .eq("id", input.templateId)
+      .single<Template>();
+    if (templateError || !rawTemplate) {
+      throw new Error("Modèle introuvable.");
+    }
+    const template = applyOrientation(rawTemplate, input.rotated ?? false);
+    const pageWidthMm = template.width_mm + template.bleed_mm * 2;
+    const pageHeightMm = template.height_mm + template.bleed_mm * 2;
+    const targetWidthPx = mmToPx(pageWidthMm, template.dpi);
+    const targetHeightPx = mmToPx(pageHeightMm, template.dpi);
+
+    const cellBuffers = await Promise.all(
+      input.mosaicFiles.map(async (f) => (f ? Buffer.from(await f.arrayBuffer()) : null))
+    );
+    const buffer = await composeMosaicImage(
+      cellBuffers,
+      input.mosaicCols ?? 1,
+      input.mosaicRows ?? 1,
+      targetWidthPx,
+      targetHeightPx
+    );
+    return { buffer, contentType: "image/jpeg", filename: "mosaic.jpg" };
+  }
+
   if (input.file) {
     // Un PDF uploadé directement (plutôt qu'un visuel de la banque) est
     // converti en PNG (page demandée, 300 dpi) — le reste du pipeline

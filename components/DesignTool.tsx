@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import CategoryPicker from "@/components/CategoryPicker";
 import TemplatePicker from "@/components/TemplatePicker";
+import DesignTypePicker from "@/components/DesignTypePicker";
 import DesignPreview from "@/components/DesignPreview";
 import DesignSummary from "@/components/DesignSummary";
 import { DEFAULT_TILE_SIZE_MM, isPdfFile, type ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
+import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Sku, Template } from "@/lib/types";
 import { pdfPageCount, planPdfPages } from "@/lib/pdf/pdfPages";
 import { applyOrientation } from "@/lib/pdf/orientation";
@@ -16,9 +18,12 @@ import type { DesignLayer } from "@/lib/design/layers";
 const STEPS = [
   { n: 1, label: "Catégorie" },
   { n: 2, label: "Modèle" },
-  { n: 3, label: "Design" },
-  { n: 4, label: "Résumé" },
+  { n: 3, label: "Type de design" },
+  { n: 4, label: "Design" },
+  { n: 5, label: "Résumé" },
 ] as const;
+
+const DEFAULT_MOSAIC_GRID = { cols: 2, rows: 2 };
 
 const emptySource = (visuals: VisualWithUrl[]): ImageSourceValue => ({
   sourceMode: "upload",
@@ -27,6 +32,10 @@ const emptySource = (visuals: VisualWithUrl[]): ImageSourceValue => ({
   tileSizeMm: DEFAULT_TILE_SIZE_MM,
   positionX: 0.5,
   positionY: 0.5,
+  mosaicFiles: [],
+  themeSlotFiles: [],
+  themeSlotAdjust: [],
+  themePhotoBank: [],
 });
 
 /**
@@ -42,6 +51,25 @@ const emptySource = (visuals: VisualWithUrl[]): ImageSourceValue => ({
  * cadrage (voir sa section « Visuel »), plutôt que deux composants avec un
  * aller-retour entre eux.
  *
+ * « Type de design » (étape 3, entre Modèle et Design) : une image de fond
+ * unique (comportement d'origine, `sourceMode: "upload"`), une mosaïque de
+ * plusieurs photos distinctes en grille (`sourceMode: "mosaic"`, voir
+ * ImageSourcePicker et lib/pdf/mosaic.ts), ou un Thème — un visuel préfait
+ * attribué au modèle, affiché par-dessus 1 à 3 photos du client
+ * (`sourceMode: "theme"`, voir lib/pdf/theme.ts) — fait une fois ici puis
+ * propagé sur `front`/`back` (leur `sourceMode`) : ni DesignPreview ni
+ * DesignSummary n'ont besoin de le connaître autrement qu'au travers de ce
+ * champ déjà présent sur chaque valeur. `designTypeChosen` distingue "pas
+ * encore choisi" de "single, la valeur par défaut" — sans lui, `maxStep` ne
+ * pourrait pas bloquer l'étape Design tant que ce choix n'a pas été fait
+ * explicitement.
+ *
+ * Un Thème étant attribué à UN modèle (jamais aux deux côtés à la fois, un
+ * thème n'a qu'un seul graphisme), il ne s'applique qu'au recto — le verso
+ * garde son comportement normal (image unique ou blanc), indépendant du
+ * choix de thème. `selectedTheme` vit ici (pas dans `front`) car
+ * DesignTypePicker et DesignSummary en ont besoin directement (slots, id).
+ *
  * Page sans le chrome admin (voir AppShell.tsx) : son propre en-tête, dans
  * le ton et les couleurs de la boutique (picolabo.ca) plutôt que celui de
  * l'administration Pico Design.
@@ -54,19 +82,30 @@ export default function DesignTool({
   categories,
   skus,
   visuals,
+  themes,
 }: {
   templates: Template[];
   categories: Category[];
   skus: Sku[];
   visuals: VisualWithUrl[];
+  themes: ThemeWithOverlayUrl[];
 }) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [category, setCategory] = useState<Category | null>(null);
   const [template, setTemplate] = useState<Template | null>(null);
   // Portrait/Paysage — seulement quand le modèle le permet (allow_orientation_change).
   const [rotated, setRotated] = useState(false);
   const [front, setFront] = useState<ImageSourceValue>(() => emptySource(visuals));
   const [back, setBack] = useState<ImageSourceValue>(() => emptySource(visuals));
+  // Type de design (étape 3) — voir le commentaire du composant.
+  const [designType, setDesignType] = useState<"single" | "mosaic" | "theme">("single");
+  const [mosaicGrid, setMosaicGrid] = useState(DEFAULT_MOSAIC_GRID);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeWithOverlayUrl | null>(null);
+  const [designTypeChosen, setDesignTypeChosen] = useState(false);
+  // Thèmes attribués au modèle en cours (un thème n'appartient qu'à un seul
+  // modèle) — DesignTypePicker ne propose l'option « Thème » que si cette
+  // liste n'est pas vide.
+  const themesForTemplate = themes.filter((t) => t.template_id === template?.id);
   // Calques additionnels (texte/image), un tableau ordonné par côté — voir
   // lib/design/layers.ts. Possédés ici comme front/back : l'étape 4 continue
   // d'ajuster ce que l'étape précédente a laissé, pas un état déconnecté.
@@ -91,7 +130,60 @@ export default function DesignTool({
     setBack(emptySource(visuals));
     setFrontLayers([]);
     setBackLayers([]);
+    setDesignType("single");
+    setMosaicGrid(DEFAULT_MOSAIC_GRID);
+    setSelectedTheme(null);
+    setDesignTypeChosen(false);
     setStep(3);
+  }
+
+  // Propage le choix (une image / mosaïque / thème) sur front (et, pour la
+  // mosaïque seulement, sur back aussi — un thème, lui, ne s'applique qu'au
+  // recto, voir le commentaire du composant). Repart d'un tableau de
+  // cases/emplacements vide (plutôt que de garder d'anciennes cases d'une
+  // grille/d'un thème différent) : changer de type de design repart à zéro
+  // sur le visuel, comme changer de modèle.
+  function handleSelectDesignType(
+    type: "single" | "mosaic" | "theme",
+    extra?: { grid?: { cols: number; rows: number }; theme?: ThemeWithOverlayUrl }
+  ) {
+    const nextGrid = extra?.grid ?? mosaicGrid;
+    setDesignType(type);
+    if (type === "mosaic") setMosaicGrid(nextGrid);
+    setSelectedTheme(type === "theme" ? extra?.theme ?? null : null);
+
+    const mosaicCellCount = type === "mosaic" ? nextGrid.cols * nextGrid.rows : 0;
+    const themeSlotCount = type === "theme" ? extra?.theme?.slots.length ?? 0 : 0;
+    const frontSourceMode = type === "mosaic" ? "mosaic" : type === "theme" ? "theme" : "upload";
+    setFront((f) => ({
+      ...f,
+      sourceMode: frontSourceMode,
+      file: null,
+      mosaicFiles: Array.from({ length: mosaicCellCount }, () => null),
+      themeSlotFiles: Array.from({ length: themeSlotCount }, () => null),
+      themeSlotAdjust: Array.from({ length: themeSlotCount }, () => ({ positionX: 0.5, positionY: 0.5, scale: 1 })),
+      themePhotoBank: [],
+      positionX: 0.5,
+      positionY: 0.5,
+      scale: undefined,
+      rotation: 0,
+    }));
+    // Le verso n'a pas de notion de thème (voir le commentaire du
+    // composant) : seule la mosaïque, qui s'applique aux deux côtés, le
+    // fait basculer de mode ; un thème le laisse en upload normal.
+    const backSourceMode = type === "mosaic" ? "mosaic" : "upload";
+    setBack((b) => ({
+      ...b,
+      sourceMode: backSourceMode,
+      file: null,
+      mosaicFiles: type === "mosaic" ? Array.from({ length: mosaicCellCount }, () => null) : [],
+      positionX: 0.5,
+      positionY: 0.5,
+      scale: undefined,
+      rotation: 0,
+    }));
+    setDesignTypeChosen(true);
+    setStep(4);
   }
 
   function handleRestart() {
@@ -102,6 +194,10 @@ export default function DesignTool({
     setBack(emptySource(visuals));
     setFrontLayers([]);
     setBackLayers([]);
+    setDesignType("single");
+    setMosaicGrid(DEFAULT_MOSAIC_GRID);
+    setSelectedTheme(null);
+    setDesignTypeChosen(false);
     setStep(1);
   }
 
@@ -127,7 +223,19 @@ export default function DesignTool({
       cancelled = true;
     };
   }, [frontPdf]);
-  const hasOwnBack = back.sourceMode === "upload" ? Boolean(back.file) : Boolean(back.visualId);
+  // A-t-on un visuel de fond de ce côté ? Selon le mode courant : un fichier
+  // (upload), un visuel de banque (full/tile), au moins une case remplie
+  // (mosaic) ou au moins un emplacement rempli (theme) — voir
+  // ImageSourcePicker/composeMosaicImage/composeThemeImage : une case/un
+  // emplacement vide reste simplement blanc, pas besoin que tout soit pris.
+  function hasVisualSource(value: ImageSourceValue): boolean {
+    if (value.sourceMode === "upload") return Boolean(value.file);
+    if (value.sourceMode === "mosaic") return (value.mosaicFiles ?? []).some(Boolean);
+    if (value.sourceMode === "theme") return (value.themeSlotFiles ?? []).some(Boolean);
+    return Boolean(value.visualId);
+  }
+
+  const hasOwnBack = hasVisualSource(back);
   const pdfPlan =
     frontPdf && template
       ? planPdfPages({ pageCount: frontPdfPages, twoSided: template.two_sided, hasOwnBack: template.two_sided && hasOwnBack })
@@ -138,18 +246,25 @@ export default function DesignTool({
   // fait seulement de calques (texte/image/forme), sans visuel de fond,
   // reste un design valide (voir ImageSourcePicker, qui affiche un canvas
   // blanc tant qu'aucun visuel n'est choisi).
-  const frontHasSource = front.sourceMode === "upload" ? Boolean(front.file) : Boolean(front.visualId);
-  const frontReady = frontHasSource || frontLayers.length > 0;
+  const frontReady = hasVisualSource(front) || frontLayers.length > 0;
   const backReady = !template?.two_sided || Boolean(backFromPdf) || hasOwnBack || backLayers.length > 0;
 
   // Étape la plus avancée déjà atteignable avec l'état actuel — sert à
   // permettre de cliquer sur la liste d'étapes pour naviguer directement,
   // sans pouvoir sauter au Résumé sans visuel prêt (le Design, lui, reste
-  // atteignable dès qu'un modèle est choisi — c'est justement là qu'on
-  // choisit ce visuel).
-  const maxStep: 1 | 2 | 3 | 4 = !category ? 1 : !template ? 2 : !frontReady || !backReady ? 3 : 4;
+  // atteignable dès qu'un modèle ET un type de design sont choisis — c'est
+  // justement là qu'on choisit ce visuel).
+  const maxStep: 1 | 2 | 3 | 4 | 5 = !category
+    ? 1
+    : !template
+    ? 2
+    : !designTypeChosen
+    ? 3
+    : !frontReady || !backReady
+    ? 4
+    : 5;
 
-  function goToStep(n: 1 | 2 | 3 | 4) {
+  function goToStep(n: 1 | 2 | 3 | 4 | 5) {
     if (n <= maxStep) setStep(n);
   }
 
@@ -211,7 +326,15 @@ export default function DesignTool({
           />
         )}
 
-        {step === 3 && template && effectiveTemplate && (
+        {step === 3 && template && (
+          <DesignTypePicker
+            themes={themesForTemplate}
+            onSelect={handleSelectDesignType}
+            onBack={() => setStep(2)}
+          />
+        )}
+
+        {step === 4 && template && effectiveTemplate && (
           <DesignPreview
             key={template.id}
             template={effectiveTemplate}
@@ -231,12 +354,15 @@ export default function DesignTool({
             pdfWarning={pdfPlan?.warning ?? null}
             frontReady={frontReady}
             backReady={backReady}
-            onBack={() => setStep(2)}
-            onNext={() => setStep(4)}
+            designType={designType}
+            mosaicGrid={mosaicGrid}
+            selectedTheme={selectedTheme}
+            onBack={() => setStep(3)}
+            onNext={() => setStep(5)}
           />
         )}
 
-        {step === 4 && category && effectiveTemplate && (
+        {step === 5 && category && effectiveTemplate && (
           <DesignSummary
             category={category}
             template={effectiveTemplate}
@@ -247,7 +373,9 @@ export default function DesignTool({
             frontLayers={frontLayers}
             backLayers={backLayers}
             backFromPdf={backFromPdf}
-            onBack={() => setStep(3)}
+            mosaicGrid={mosaicGrid}
+            selectedTheme={selectedTheme}
+            onBack={() => setStep(4)}
             onRestart={handleRestart}
           />
         )}

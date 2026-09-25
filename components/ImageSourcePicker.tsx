@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { LogoShape, Template, VisualMode } from "@/lib/types";
+import type { LogoShape, Template, ThemeSlot, ThemeSlotAdjust, VisualMode } from "@/lib/types";
 import type { LogoShadowSettings } from "@/lib/logoShadowSettings";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import VisualPicker from "@/components/VisualPicker";
 import FileDropZone from "@/components/FileDropZone";
 import { mmToIn, inToMm } from "@/lib/pdf/units";
-import { SpinnerIcon } from "@/components/icons";
+import { SpinnerIcon, UploadIcon } from "@/components/icons";
 import { fontOptionById } from "@/lib/design/fonts";
 import { maxTextSizeMmForTemplate, type DesignLayer, type ImageLayer } from "@/lib/design/layers";
 
-export type SourceMode = "upload" | VisualMode;
+// "mosaic" : mosaïque de plusieurs photos distinctes uploadées (étape « Type
+// de design » de Design Shopify) — à ne pas confondre avec le "tile" de
+// VisualMode, qui répète UN SEUL visuel de la banque en motif.
+// "theme" : un Thème (visuel préfait attribué au modèle, voir lib/pdf/theme.ts)
+// — 1 à 3 photos du client, recadrées dans des emplacements prédéterminés,
+// avec le graphisme du thème par-dessus.
+export type SourceMode = "upload" | VisualMode | "mosaic" | "theme";
 
 // Curseur "zoom" pour la taille de répétition (mosaïque) : un ratio 1-100
 // (pas une unité physique) sur échelle logarithmique en interne, pour que
@@ -47,6 +53,7 @@ export const SOURCE_MODES: { value: SourceMode; label: string }[] = [
   { value: "upload", label: "Uploader une image" },
   { value: "full", label: "Visuel — plein format" },
   { value: "tile", label: "Visuel — mosaïque" },
+  { value: "mosaic", label: "Mosaïque de photos" },
 ];
 
 export interface ImageSourceValue {
@@ -66,6 +73,28 @@ export interface ImageSourceValue {
   // dans son cadre, pas le cadre qui change de forme. Voir coverCropToBuffer.
   // Optionnel : seule l'étape « Aperçu » de Design Shopify l'expose (allowZoom).
   rotation?: number;
+  // Mosaïque (sourceMode "mosaic") : une case par photo, dans l'ordre de la
+  // grille (ligne par ligne) — voir `mosaicGrid` sur ImageSourcePicker pour
+  // ses dimensions (cols/rows), partagées entre recto et verso. `null` =
+  // case vide (laisse un blanc à cet endroit, voir composeMosaicImage).
+  mosaicFiles?: (File | null)[];
+  // Thème (sourceMode "theme") : une photo par emplacement, dans le même
+  // ordre que `theme.slots` — voir `themeSlots`/`themeOverlayUrl` sur
+  // ImageSourcePicker. `null` = emplacement vide (voir composeThemeImage).
+  // Assignée par glisser depuis `themePhotoBank` (voir plus bas), jamais
+  // uploadée directement : le même fichier peut donc se retrouver dans
+  // plusieurs emplacements à la fois (même référence, pas une copie).
+  themeSlotFiles?: (File | null)[];
+  // Ajustement (position/zoom) du client dans chaque emplacement — même
+  // sémantique que positionX/positionY/scale pour un fond simple, mais un
+  // jeu de valeurs par emplacement (voir composeThemeImage). Case manquante
+  // = cadrage "cover" par défaut pour cet emplacement.
+  themeSlotAdjust?: ThemeSlotAdjust[];
+  // Banque de photos (sourceMode "theme") : les photos ajoutées par le
+  // client, indépendamment des emplacements — glissées ensuite dans
+  // `themeSlotFiles` (voir ThemeBankThumbnail/ThemeSlotDropTarget). Retirer
+  // une photo d'ici la retire aussi de tout emplacement qui l'utilisait.
+  themePhotoBank?: File[];
 }
 
 // Poignées de rotation/redimensionnement du calque sélectionné — affichées
@@ -183,6 +212,202 @@ function LayerHandles({
   );
 }
 
+// Une case de la grille mosaïque (sourceMode "mosaic") : une miniature très
+// compacte (carrée), pas le grand FileDropZone habituel — il y en a
+// plusieurs à la fois, côte à côte, pas la place pour son texte d'aide.
+function MosaicCellDropZone({ file, onFileChange }: { file: File | null; onFileChange: (file: File | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        onFileChange(e.dataTransfer.files?.[0] ?? null);
+      }}
+      onClick={() => inputRef.current?.click()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      className={`relative flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-colors ${
+        dragOver ? "border-primary bg-primary-subtle" : "border-border bg-surface hover:border-border-strong"
+      }`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+        className="hidden"
+      />
+      {preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <UploadIcon className="h-5 w-5 text-text-subtle" />
+      )}
+      {file && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFileChange(null);
+            if (inputRef.current) inputRef.current.value = "";
+          }}
+          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] leading-tight text-white hover:bg-black/80"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Une photo de la banque (sourceMode "theme") : une miniature glissable
+// (drag-and-drop natif HTML5 — voir onDragStart) — le seul moyen d'assigner
+// une photo à un emplacement (voir ThemeSlotDropTarget) : jamais uploadée
+// directement dans un emplacement, précisément pour pouvoir glisser la même
+// photo dans plusieurs emplacements sans avoir à l'ajouter plusieurs fois.
+function ThemeBankThumbnail({
+  file,
+  bankIndex,
+  onRemove,
+}: {
+  file: File;
+  bankIndex: number;
+  onRemove: () => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "copy";
+        // Index dans la banque (pas le fichier lui-même, non sérialisable) —
+        // lu par ThemeSlotDropTarget et le rendu des emplacements dans le
+        // grand aperçu (voir plus bas) pour retrouver `value.themePhotoBank[i]`.
+        e.dataTransfer.setData("text/plain", String(bankIndex));
+      }}
+      title="Glisse cette photo dans un emplacement"
+      className="relative aspect-square cursor-grab overflow-hidden rounded-lg border border-border bg-surface active:cursor-grabbing"
+    >
+      {preview && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="" draggable={false} className="h-full w-full object-cover" />
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] leading-tight text-white hover:bg-black/80"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+// Un emplacement (sourceMode "theme"), version compacte de la barre
+// latérale : n'accepte qu'un dépôt depuis la banque (ThemeBankThumbnail),
+// jamais un upload direct — voir le commentaire de `themeSlotFiles`.
+function ThemeSlotDropTarget({
+  index,
+  file,
+  onDropBankIndex,
+  onClear,
+}: {
+  index: number;
+  file: File | null;
+  onDropBankIndex: (bankIndex: number) => void;
+  onClear: () => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const bankIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        if (Number.isFinite(bankIndex)) onDropBankIndex(bankIndex);
+      }}
+      className={`relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed text-center transition-colors ${
+        dragOver ? "border-primary bg-primary-subtle" : "border-border bg-surface"
+      }`}
+    >
+      {preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="" draggable={false} className="h-full w-full object-cover" />
+      ) : (
+        <span className="px-1 text-[10px] leading-tight text-text-subtle">Glisse ici</span>
+      )}
+      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/50 px-1 text-[9px] leading-tight text-white">
+        {index + 1}
+      </span>
+      {file && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] leading-tight text-white hover:bg-black/80"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Sélection de la source d'une image de produit (upload ou visuel de la
  * banque, plein format ou mosaïque) + aperçu avec repositionnement par
@@ -209,6 +434,12 @@ export default function ImageSourcePicker({
   layers = [],
   onChangeLayers,
   selectedLayerId = null,
+  mosaicGrid = { cols: 2, rows: 2 },
+  themeId = null,
+  themeSlots = [],
+  themeOverlayUrl = null,
+  selectedThemeSlot = null,
+  onSelectThemeSlot,
 }: {
   side: "front" | "back";
   template: Template | null;
@@ -257,8 +488,66 @@ export default function ImageSourcePicker({
   // l'aperçu — sans sélection, glisser continue de repositionner le fond,
   // comme avant les calques.
   selectedLayerId?: string | null;
+  // Dimensions de la grille en mode mosaïque (sourceMode "mosaic") — choisies
+  // une fois pour tout le design (voir DesignTypePicker), partagées entre
+  // recto et verso : ignoré pour les autres modes.
+  mosaicGrid?: { cols: number; rows: number };
+  // Thème choisi (sourceMode "theme") — id envoyé au serveur pour la
+  // génération finale (voir composeThemeImage) ; le nombre d'emplacements
+  // vient de `value.themeSlotFiles.length` (déjà dimensionné par DesignTool).
+  themeId?: string | null;
+  // Géométrie (position/taille) de chaque emplacement, fixée par l'admin
+  // (voir ThemeForm) — sert à positionner/clipper chaque photo à l'écran ;
+  // le client ne peut que la déplacer/zoomer À L'INTÉRIEUR de ce rectangle
+  // (voir `themeSlotAdjust` sur ImageSourceValue), jamais le déplacer lui-même.
+  themeSlots?: ThemeSlot[];
+  // Graphisme du thème (avec transparence) — affiché par-dessus les photos,
+  // fixe, jamais déplaçable (comme frameOverlayUrl).
+  themeOverlayUrl?: string | null;
+  // Emplacement actuellement sélectionné (glisser/zoomer l'affecte, lui et
+  // pas les autres) — possédé par DesignPreview, comme selectedLayerId.
+  selectedThemeSlot?: number | null;
+  onSelectThemeSlot?: (index: number | null) => void;
 }) {
   const { sourceMode, visualId, tileSizeMm, positionX, positionY } = value;
+  const mosaicFiles = value.mosaicFiles ?? [];
+  const themeSlotFiles = value.themeSlotFiles ?? [];
+  const themeSlotAdjust = value.themeSlotAdjust ?? [];
+  const themePhotoBank = value.themePhotoBank ?? [];
+  const bankInputRef = useRef<HTMLInputElement>(null);
+  const [bankDragOver, setBankDragOver] = useState(false);
+
+  // Assigne la photo `bankIndex` de la banque à l'emplacement `slotIndex` —
+  // c'est juste la MÊME référence de fichier posée dans le tableau, donc
+  // rien n'empêche de la poser dans plusieurs emplacements à la fois.
+  function assignBankFileToSlot(bankIndex: number, slotIndex: number) {
+    const bankFile = themePhotoBank[bankIndex];
+    if (!bankFile) return;
+    const next = themeSlotFiles.slice();
+    while (next.length <= slotIndex) next.push(null);
+    next[slotIndex] = bankFile;
+    onChange({ themeSlotFiles: next });
+  }
+
+  function clearThemeSlot(slotIndex: number) {
+    const next = themeSlotFiles.slice();
+    next[slotIndex] = null;
+    onChange({ themeSlotFiles: next });
+  }
+
+  function addBankFiles(files: FileList | File[]) {
+    onChange({ themePhotoBank: [...themePhotoBank, ...Array.from(files)] });
+  }
+
+  function removeBankFile(bankIndex: number) {
+    const removed = themePhotoBank[bankIndex];
+    const nextBank = themePhotoBank.filter((_, i) => i !== bankIndex);
+    // Désassigne aussi cette photo des emplacements qui l'utilisaient
+    // (même référence) — sinon un emplacement garderait une photo qu'on
+    // vient pourtant de retirer de la banque.
+    const nextSlots = themeSlotFiles.map((f) => (f === removed ? null : f));
+    onChange({ themePhotoBank: nextBank, themeSlotFiles: nextSlots });
+  }
   // Fichier réellement utilisé : celui choisi ici, sinon le PDF du recto.
   const file = value.file ?? (sourceMode === "upload" ? pairedPdf?.file ?? null : null);
   const pdfPage = value.file ? 1 : pairedPdf?.page ?? 1;
@@ -294,7 +583,18 @@ export default function ImageSourcePicker({
   const [boxSize, setBoxSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
 
-  const hasSource = sourceMode === "upload" ? Boolean(file || currentImageUrl) : Boolean(visualId);
+  const hasSource =
+    sourceMode === "upload"
+      ? Boolean(file || currentImageUrl)
+      : sourceMode === "mosaic"
+      ? mosaicFiles.some(Boolean)
+      : sourceMode === "theme"
+        ? // Contrairement à la mosaïque (rien à montrer sans au moins une
+          // photo), un thème a toujours quelque chose à afficher dès qu'il
+          // est choisi : son graphisme (cadre/décor) — les emplacements
+          // vides restent simplement blancs dessous, voir composeThemeImage.
+          Boolean(themeId)
+        : Boolean(visualId);
   const canPosition = Boolean(template) && hasSource;
   // L'aperçu (et ses calques) s'affiche dès qu'un modèle est choisi, même
   // sans visuel de fond — un canvas blanc (voir plus bas), pour permettre un
@@ -397,9 +697,23 @@ export default function ImageSourcePicker({
   }, []);
 
   const isPdfUpload = sourceMode === "upload" && isPdfFile(file);
+  const isMosaic = sourceMode === "mosaic";
+  const isTheme = sourceMode === "theme";
+  // Clé stable des fichiers de mosaïque/thème (par nom+taille, comme
+  // imageLayerFilesKey plus bas) : `mosaicFiles`/`themeSlotFiles` sont de
+  // nouveaux tableaux à chaque patch, une dépendance d'effet sur leur
+  // référence relancerait le rendu serveur en continu sans rien avoir
+  // réellement changé.
+  const mosaicFilesKey = mosaicFiles.map((f) => (f ? `${f.name}:${f.size}` : "")).join("|");
+  const themeSlotFilesKey = themeSlotFiles.map((f) => (f ? `${f.name}:${f.size}` : "")).join("|");
 
   useEffect(() => {
-    if (!((sourceMode === "tile" || isPdfUpload) && canPosition && template)) {
+    // Un thème n'a plus besoin de ce rendu serveur : chaque photo s'affiche
+    // directement (comme le fond simple), positionnée/clippée dans son
+    // emplacement côté client — voir le bloc de rendu dédié plus bas. Seul
+    // le graphisme final (recto imprimé, mockup) repasse par le serveur
+    // (composeThemeImage), avec l'ajustement du client (themeSlotAdjust).
+    if (!((sourceMode === "tile" || isMosaic || isPdfUpload) && canPosition && template)) {
       setRenderedBackgroundUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
@@ -415,7 +729,13 @@ export default function ImageSourcePicker({
 
       const formData = new FormData();
       formData.append("templateId", template.id);
-      if (isPdfUpload && file) {
+      if (isMosaic) {
+        formData.append("mosaicCols", String(mosaicGrid.cols));
+        formData.append("mosaicRows", String(mosaicGrid.rows));
+        mosaicFiles.forEach((f, i) => {
+          if (f) formData.append(`mosaicCell${i}`, f);
+        });
+      } else if (isPdfUpload && file) {
         formData.append("image", file);
         formData.append("pdfPage", String(pdfPage));
       } else {
@@ -446,7 +766,24 @@ export default function ImageSourcePicker({
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [sourceMode, isPdfUpload, file, pdfPage, canPosition, template, rotated, visualId, tileSizeMm, positionX, positionY]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sourceMode,
+    isMosaic,
+    mosaicFilesKey,
+    mosaicGrid.cols,
+    mosaicGrid.rows,
+    isPdfUpload,
+    file,
+    pdfPage,
+    canPosition,
+    template,
+    rotated,
+    visualId,
+    tileSizeMm,
+    positionX,
+    positionY,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -503,6 +840,33 @@ export default function ImageSourcePicker({
       return;
     }
 
+    // Thème : l'emplacement sélectionné recadre SA photo (même sens que le
+    // fond simple — glisser à droite révèle la gauche de la photo), mais
+    // normalisé par la taille de SON rectangle, pas toute la page (une
+    // photo dans un petit emplacement doit suivre le curseur à la même
+    // vitesse "relative" qu'une grande, pas à la même vitesse en pixels).
+    // Sans emplacement sélectionné, rien à glisser en mode thème — pas de
+    // fond à recadrer (voir composeThemeImage, toujours du blanc).
+    if (isTheme) {
+      if (selectedThemeSlot !== null && themeSlots[selectedThemeSlot]) {
+        const slot = themeSlots[selectedThemeSlot];
+        const slotWidthPx = slot.widthRatio * rect.width;
+        const slotHeightPx = slot.heightRatio * rect.height;
+        const slotDx = dxPx / slotWidthPx;
+        const slotDy = dyPx / slotHeightPx;
+        const current = themeSlotAdjust[selectedThemeSlot] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
+        const next = themeSlotAdjust.slice();
+        while (next.length <= selectedThemeSlot) next.push({ positionX: 0.5, positionY: 0.5, scale: 1 });
+        next[selectedThemeSlot] = {
+          ...current,
+          positionX: Math.min(1, Math.max(0, current.positionX - slotDx)),
+          positionY: Math.min(1, Math.max(0, current.positionY - slotDy)),
+        };
+        onChange({ themeSlotAdjust: next });
+      }
+      return;
+    }
+
     setDragOffsetPx((o) => ({ x: o.x + dxPx, y: o.y + dyPx }));
     onChange({
       positionX: Math.min(1, Math.max(0, positionX - dx)),
@@ -535,6 +899,60 @@ export default function ImageSourcePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageLayerFilesKey]);
 
+  // Aperçu (URL objet) de chaque photo de thème — même principe que
+  // layerImageUrls ci-dessus, recalculé seulement quand l'ensemble des
+  // fichiers change (themeSlotFilesKey, déjà dérivé plus haut).
+  const [themeSlotPreviewUrls, setThemeSlotPreviewUrls] = useState<(string | null)[]>([]);
+  useEffect(() => {
+    const urls = themeSlotFiles.map((f) => (f ? URL.createObjectURL(f) : null));
+    setThemeSlotPreviewUrls(urls);
+    return () => {
+      urls.forEach((u) => u && URL.revokeObjectURL(u));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeSlotFilesKey]);
+
+  // Taille naturelle de chaque photo de thème (indispensable au calcul de
+  // cadrage "cover" par emplacement, voir themeSlotGeometry) — remise à zéro
+  // à chaque changement de fichiers (une nouvelle photo n'a pas encore de
+  // taille connue tant que son <img> n'a pas fini de charger, voir onLoad).
+  const [themeSlotNaturalSizes, setThemeSlotNaturalSizes] = useState<Record<number, { width: number; height: number }>>(
+    {}
+  );
+  useEffect(() => {
+    setThemeSlotNaturalSizes({});
+  }, [themeSlotFilesKey]);
+
+  // Géométrie (position/taille en px, dans la boîte d'aperçu) de chaque
+  // emplacement — même formule que backgroundGeometry, mais sa "boîte" est
+  // le rectangle de l'emplacement (voir ThemeSlot), pas toute la page.
+  function themeSlotGeometry(index: number) {
+    const slot = themeSlots[index];
+    const natural = themeSlotNaturalSizes[index];
+    if (!slot || !natural || boxSize.width === 0 || boxSize.height === 0) return null;
+    const slotWidthPx = slot.widthRatio * boxSize.width;
+    const slotHeightPx = slot.heightRatio * boxSize.height;
+    const slotLeftPx = slot.positionX * boxSize.width - slotWidthPx / 2;
+    const slotTopPx = slot.positionY * boxSize.height - slotHeightPx / 2;
+    const adjust = themeSlotAdjust[index] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
+    const coverScale = Math.max(slotWidthPx / natural.width, slotHeightPx / natural.height);
+    const scale = coverScale * Math.max(0.1, adjust.scale);
+    const boundingWidth = natural.width * scale;
+    const boundingHeight = natural.height * scale;
+    const boundingLeft = (slotWidthPx - boundingWidth) * adjust.positionX;
+    const boundingTop = (slotHeightPx - boundingHeight) * adjust.positionY;
+    return {
+      slotLeftPx,
+      slotTopPx,
+      slotWidthPx,
+      slotHeightPx,
+      imgWidth: boundingWidth,
+      imgHeight: boundingHeight,
+      imgLeft: boundingLeft,
+      imgTop: boundingTop,
+    };
+  }
+
   const pageAspectRatio = template
     ? (template.width_mm + template.bleed_mm * 2) / (template.height_mm + template.bleed_mm * 2)
     : 1;
@@ -551,9 +969,9 @@ export default function ImageSourcePicker({
       ? selectedVisual?.fileUrl ?? null
       : null;
   const backgroundUrl =
-    sourceMode === "tile" || isPdfUpload ? renderedBackgroundUrl ?? rawBackgroundUrl : rawBackgroundUrl;
-  const previewLoading = frameLoading || ((sourceMode === "tile" || isPdfUpload) && renderedBgLoading);
-  const previewError = frameError ?? (sourceMode === "tile" || isPdfUpload ? renderedBgError : null);
+    sourceMode === "tile" || isMosaic || isPdfUpload ? renderedBackgroundUrl ?? rawBackgroundUrl : rawBackgroundUrl;
+  const previewLoading = frameLoading || ((sourceMode === "tile" || isMosaic || isPdfUpload) && renderedBgLoading);
+  const previewError = frameError ?? (sourceMode === "tile" || isMosaic || isPdfUpload ? renderedBgError : null);
 
   // Nouvelle image : la taille naturelle connue ne vaut plus rien tant que
   // la nouvelle n'a pas fini de charger (onLoad, plus bas).
@@ -660,6 +1078,111 @@ export default function ImageSourcePicker({
                 }
               />
             </div>
+          </div>
+        )
+      ) : isMosaic ? (
+        allowFileChange && (
+          <div>
+            <label className="block text-sm font-medium">
+              Photos ({mosaicGrid.cols}×{mosaicGrid.rows})
+            </label>
+            <div
+              className="mt-1 grid gap-1.5"
+              style={{ gridTemplateColumns: `repeat(${mosaicGrid.cols}, minmax(0, 1fr))` }}
+            >
+              {Array.from({ length: mosaicGrid.cols * mosaicGrid.rows }, (_, i) => (
+                <MosaicCellDropZone
+                  key={i}
+                  file={mosaicFiles[i] ?? null}
+                  onFileChange={(f) => {
+                    const next = mosaicFiles.slice(0, mosaicGrid.cols * mosaicGrid.rows);
+                    while (next.length < mosaicGrid.cols * mosaicGrid.rows) next.push(null);
+                    next[i] = f;
+                    onChange({ mosaicFiles: next });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      ) : isTheme ? (
+        allowFileChange && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium">Banque de photos</label>
+              <input
+                ref={bankInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) addBankFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              {/* Vraie zone de glisser-déposer (comme FileDropZone) — dépose
+                  des fichiers depuis le bureau, contrairement aux cases
+                  ci-dessous et aux emplacements, qui reçoivent une photo
+                  DÉJÀ dans la banque (glisser-déposer interne, voir
+                  ThemeBankThumbnail/ThemeSlotDropTarget). Toujours visible
+                  (pas seulement quand la banque est vide) : on peut ajouter
+                  des photos à tout moment. */}
+              <div
+                onClick={() => bankInputRef.current?.click()}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes("Files")) return;
+                  e.preventDefault();
+                  setBankDragOver(true);
+                }}
+                onDragLeave={() => setBankDragOver(false)}
+                onDrop={(e) => {
+                  if (e.dataTransfer.files.length === 0) return;
+                  e.preventDefault();
+                  setBankDragOver(false);
+                  addBankFiles(e.dataTransfer.files);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    bankInputRef.current?.click();
+                  }
+                }}
+                className={`mt-1 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
+                  bankDragOver ? "border-primary bg-primary-subtle" : "border-border bg-surface hover:border-border-strong"
+                }`}
+              >
+                <UploadIcon className="h-6 w-6 text-text-subtle" />
+                <p className="text-xs font-medium text-text">Glisse des photos ici, ou clique pour en ajouter</p>
+              </div>
+              {themePhotoBank.length > 0 && (
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {themePhotoBank.map((f, i) => (
+                    <ThemeBankThumbnail key={i} file={f} bankIndex={i} onRemove={() => removeBankFile(i)} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Emplacements ({themeSlotFiles.length})</label>
+              <div className="mt-1 grid grid-cols-3 gap-1.5">
+                {themeSlotFiles.map((f, i) => (
+                  <ThemeSlotDropTarget
+                    key={i}
+                    index={i}
+                    file={f}
+                    onDropBankIndex={(bankIndex) => assignBankFileToSlot(bankIndex, i)}
+                    onClear={() => clearThemeSlot(i)}
+                  />
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Glisse une photo de la banque dans un emplacement — la même photo peut servir à plusieurs
+              emplacements.
+            </p>
           </div>
         )
       ) : visuals.length === 0 ? (
@@ -783,13 +1306,18 @@ export default function ImageSourcePicker({
                     setNaturalSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
                   }
                   className={
-                    sourceMode === "tile" || !backgroundGeometry
+                    sourceMode === "tile" || isMosaic || !backgroundGeometry
                       ? "absolute inset-0 h-full w-full object-cover"
                       : "absolute max-w-none"
                   }
                   style={
                     sourceMode === "tile"
                       ? { transform: `translate(${dragOffsetPx.x}px, ${dragOffsetPx.y}px)` }
+                      : isMosaic
+                      ? // Déjà composée à la taille exacte de la page (voir
+                        // composeMosaicImage) : pas de zoom/position/rotation
+                        // à appliquer ici, contrairement au fond simple.
+                        undefined
                       : backgroundGeometry
                       ? {
                           width: backgroundGeometry.width,
@@ -803,6 +1331,93 @@ export default function ImageSourcePicker({
                         // dès que backgroundGeometry est calculable.
                         { objectPosition: `${positionX * 100}% ${positionY * 100}%` }
                   }
+                />
+              )}
+              {/* Thème : chaque photo, clippée à son emplacement (voir
+                  ThemeSlot), déplaçable/zoomable individuellement — celui
+                  sélectionné (cadre plein) capte le glisser (voir
+                  handlePointerMove) ; le graphisme (avec transparence)
+                  vient par-dessus toutes les photos, fixe. */}
+              {isTheme &&
+                boxSize.width > 0 &&
+                themeSlots.map((slot, i) => {
+                  const geometry = themeSlotGeometry(i);
+                  const url = themeSlotPreviewUrls[i];
+                  const isSelected = selectedThemeSlot === i;
+                  const slotWidthPx = slot.widthRatio * boxSize.width;
+                  const slotHeightPx = slot.heightRatio * boxSize.height;
+                  const slotLeftPx = slot.positionX * boxSize.width - slotWidthPx / 2;
+                  const slotTopPx = slot.positionY * boxSize.height - slotHeightPx / 2;
+                  return (
+                    <div
+                      key={i}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        onSelectThemeSlot?.(i);
+                        handlePointerDown(e);
+                      }}
+                      // Dépose directement dans le grand aperçu (en plus des
+                      // petits emplacements de la barre latérale, voir
+                      // ThemeSlotDropTarget) — même mécanique (drag-and-drop
+                      // natif depuis ThemeBankThumbnail).
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "copy";
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const bankIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                        if (Number.isFinite(bankIndex)) assignBankFileToSlot(bankIndex, i);
+                      }}
+                      className="absolute cursor-move overflow-hidden"
+                      style={{
+                        left: slotLeftPx,
+                        top: slotTopPx,
+                        width: slotWidthPx,
+                        height: slotHeightPx,
+                        outline: isSelected ? "2px solid var(--accent)" : "1px dashed rgba(0,0,0,0.25)",
+                        outlineOffset: -1,
+                      }}
+                    >
+                      {url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={url}
+                          alt=""
+                          draggable={false}
+                          onLoad={(e) => {
+                            // `currentTarget` peut arriver `null` ici : deux
+                            // photos uploadées coup sur coup changent `url`
+                            // (nouvelle URL objet, voir l'effet plus haut)
+                            // avant que le `onLoad` de la précédente n'ait eu
+                            // le temps de se déclencher — un `load` tardif
+                            // sur un élément déjà remplacé, sans conséquence
+                            // à ignorer plutôt qu'à planter dessus.
+                            const img = e.currentTarget;
+                            if (!img) return;
+                            setThemeSlotNaturalSizes((prev) => ({
+                              ...prev,
+                              [i]: { width: img.naturalWidth, height: img.naturalHeight },
+                            }));
+                          }}
+                          className="absolute max-w-none"
+                          style={
+                            geometry
+                              ? { width: geometry.imgWidth, height: geometry.imgHeight, left: geometry.imgLeft, top: geometry.imgTop }
+                              : { width: "100%", height: "100%", objectFit: "cover" }
+                          }
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              {isTheme && themeOverlayUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={themeOverlayUrl}
+                  alt=""
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full"
                 />
               )}
               {/* Calques (texte/image) : entre le fond et le cadre — visibles
@@ -968,7 +1583,13 @@ export default function ImageSourcePicker({
               )}
             </div>
             <p className="mt-2 text-center text-xs text-neutral-500">
-              {showGuides
+              {isMosaic || isTheme
+                ? showGuides
+                  ? "Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection."
+                  : isTheme
+                  ? "Le graphisme du thème s'affiche par-dessus tes photos — ajoute/change-les dans la liste ci-contre."
+                  : "Chaque photo remplit sa case — ajoute/change-les dans la liste ci-contre."
+                : showGuides
                 ? "Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection · glisse l'image pour la repositionner."
                 : "Glisse l'image pour la repositionner."}
             </p>

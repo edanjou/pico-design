@@ -75,6 +75,25 @@ export async function generateTemplatePreviewPng(
   // seraient redondants/confus.
   const hasOverlay = Boolean(overlayImage);
 
+  // Marques de pli : lignes complètes (traversent toute la page), une par
+  // distance enregistrée (depuis le bord de coupe) — "vertical" = ligne
+  // verticale (divise la largeur), "horizontal" = ligne horizontale (divise
+  // la hauteur). Aperçu écran seulement, jamais dans le PDF imprimé (voir
+  // generatePrintReadyPdf, qui n'en tient pas compte) — comme la ligne de
+  // coupe/marge de sécurité, masquées avec elles par un gabarit de guidage.
+  const foldMarksLinesSvg = hasOverlay
+    ? ""
+    : [
+        ...(template.fold_marks_vertical_mm ?? []).map((mm) => {
+          const x = trimX + mmToPx(mm, previewDpi);
+          return `<line x1="${x}" y1="0" x2="${x}" y2="${pageHeightPx}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6 3"/>`;
+        }),
+        ...(template.fold_marks_horizontal_mm ?? []).map((mm) => {
+          const y = trimY + mmToPx(mm, previewDpi);
+          return `<line x1="0" y1="${y}" x2="${pageWidthPx}" y2="${y}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6 3"/>`;
+        }),
+      ].join("\n");
+
   const linesSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${pageWidthPx}" height="${pageHeightPx}">
       ${showPlaceholder ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ""}
@@ -88,6 +107,7 @@ export async function generateTemplatePreviewPng(
           ? `<rect x="${safetyX}" y="${safetyY}" width="${safetyW}" height="${safetyH}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3 3"/>`
           : ""
       }
+      ${foldMarksLinesSvg}
     </svg>
   `;
 

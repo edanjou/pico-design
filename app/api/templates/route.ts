@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { uploadBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
 import { parseOverlayOpacitiesField } from "@/lib/pdf/beautyShot";
+import { parseFoldMarksField } from "@/lib/pdf/foldMarks";
 
 const STRING_FIELDS = ["name", "category_id", "logo_h_align", "logo_v_align"] as const;
 const NULLABLE_STRING_FIELDS = ["sku_id"] as const;
@@ -101,6 +102,8 @@ export async function POST(request: Request) {
       shading_path: shadingPath,
       beauty_shot_xml_path: beautyShotXmlPath,
       beauty_shot_overlay_opacities: parseOverlayOpacitiesField(formData.get("beautyShotOverlayOpacities")),
+      fold_marks_vertical_mm: parseFoldMarksField(formData.get("foldMarksVertical")),
+      fold_marks_horizontal_mm: parseFoldMarksField(formData.get("foldMarksHorizontal")),
       created_by: user.id,
     })
     .select()

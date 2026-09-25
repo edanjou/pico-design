@@ -7,6 +7,7 @@ import { mmToPx } from "@/lib/pdf/units";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { pdfDownloadName } from "@/lib/imposition/saved";
 import { resolveLayersFromForm } from "@/lib/pdf/layers";
+import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
 import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
@@ -27,6 +28,38 @@ function zoomValue(raw: FormDataEntryValue | null): number {
 function rotationValue(raw: FormDataEntryValue | null): number {
   const n = Math.round(Number(raw ?? 0) / 90) * 90;
   return Number.isFinite(n) ? ((n % 360) + 360) % 360 : 0;
+}
+
+// Mosaïque de plusieurs photos uploadées (étape « Type de design ») — voir
+// resolveProductImage/composeMosaicImage. `side` distingue les champs du
+// recto (mosaicCols/mosaicRows/mosaicCell{i}, comme "image"/"positionX")
+// de ceux du verso (backMosaicCols/backMosaicRows/backMosaicCell{i}).
+function mosaicFromForm(formData: FormData, side: "front" | "back"): (File | null)[] | null {
+  const colsField = side === "back" ? "backMosaicCols" : "mosaicCols";
+  const rowsField = side === "back" ? "backMosaicRows" : "mosaicRows";
+  const cellField = (i: number) => (side === "back" ? `backMosaicCell${i}` : `mosaicCell${i}`);
+  const cols = parseInt(String(formData.get(colsField) ?? ""), 10);
+  const rows = parseInt(String(formData.get(rowsField) ?? ""), 10);
+  if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) return null;
+  const files = Array.from({ length: cols * rows }, (_, i) => {
+    const f = formData.get(cellField(i));
+    return f instanceof File && f.size > 0 ? f : null;
+  });
+  return files.some((f) => f) ? files : null;
+}
+
+// Thème (étape « Type de design ») — voir resolveProductImage/
+// composeThemeImage. Recto seulement (voir DesignTool : un thème n'a
+// qu'un seul graphisme, il ne s'applique jamais au verso).
+function themeIdFromForm(formData: FormData): string | null {
+  const raw = formData.get("themeId");
+  return typeof raw === "string" && raw ? raw : null;
+}
+function themeSlotFilesFromForm(formData: FormData): (File | null)[] {
+  return [0, 1, 2].map((i) => {
+    const f = formData.get(`themeSlot${i}`);
+    return f instanceof File && f.size > 0 ? f : null;
+  });
 }
 
 /**
@@ -86,8 +119,50 @@ export async function POST(request: Request) {
     skuCode = sku?.sku ?? null;
   }
 
+  const frontMosaicFiles = mosaicFromForm(formData, "front");
+  const backMosaicFiles = mosaicFromForm(formData, "back");
+  const mosaicCols = parseInt(String(formData.get("mosaicCols") ?? formData.get("backMosaicCols") ?? ""), 10) || 1;
+  const mosaicRows = parseInt(String(formData.get("mosaicRows") ?? formData.get("backMosaicRows") ?? ""), 10) || 1;
+  const themeId = themeIdFromForm(formData);
+  const themeSlotFiles = themeIdFromForm(formData) ? themeSlotFilesFromForm(formData) : null;
+  const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
+
   let frontBuffer: Buffer | null = null;
-  if (frontFile instanceof File && frontFile.size > 0) {
+  if (themeId) {
+    try {
+      const front = await resolveProductImage(supabase, {
+        templateId,
+        file: null,
+        visualId: null,
+        visualMode: null,
+        tileSizeMm: null,
+        rotated,
+        themeId,
+        themeSlotFiles,
+        themeSlotAdjust,
+      });
+      frontBuffer = front.buffer;
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement du recto.");
+    }
+  } else if (frontMosaicFiles) {
+    try {
+      const front = await resolveProductImage(supabase, {
+        templateId,
+        file: null,
+        visualId: null,
+        visualMode: null,
+        tileSizeMm: null,
+        rotated,
+        mosaicFiles: frontMosaicFiles,
+        mosaicCols,
+        mosaicRows,
+      });
+      frontBuffer = front.buffer;
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement du recto.");
+    }
+  } else if (frontFile instanceof File && frontFile.size > 0) {
     try {
       const front = await resolveProductImage(supabase, {
         templateId,
@@ -106,7 +181,24 @@ export async function POST(request: Request) {
 
   let backBuffer: Buffer | null = null;
   if (rawTemplate.two_sided) {
-    if (backFile instanceof File && backFile.size > 0) {
+    if (backMosaicFiles) {
+      try {
+        const back = await resolveProductImage(supabase, {
+          templateId,
+          file: null,
+          visualId: null,
+          visualMode: null,
+          tileSizeMm: null,
+          rotated,
+          mosaicFiles: backMosaicFiles,
+          mosaicCols,
+          mosaicRows,
+        });
+        backBuffer = back.buffer;
+      } catch (err) {
+        return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement du verso.");
+      }
+    } else if (backFile instanceof File && backFile.size > 0) {
       try {
         const back = await resolveProductImage(supabase, {
           templateId,

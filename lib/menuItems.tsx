@@ -1,9 +1,17 @@
-import { ImageIcon, LayoutGridIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { ImageIcon, LayoutGridIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
 // utilisent les mêmes icônes/couleurs.
-export type MenuKey = "templates" | "visuals" | "products" | "design" | "skus" | "imposition" | "users";
+export type MenuKey =
+  | "templates"
+  | "visuals"
+  | "themes"
+  | "products"
+  | "design"
+  | "skus"
+  | "imposition"
+  | "users";
 
 export const MENU_ITEMS: Record<
   MenuKey,
@@ -20,6 +28,12 @@ export const MENU_ITEMS: Record<
     title: "Visuels",
     icon: ImageIcon,
     gradient: "from-amber-400 to-yellow-500",
+  },
+  themes: {
+    href: "/themes",
+    title: "Thèmes",
+    icon: PaintbrushVerticalIcon,
+    gradient: "from-fuchsia-400 to-purple-600",
   },
   products: {
     href: "/products",
@@ -59,6 +73,7 @@ export const MENU_ITEMS: Record<
 export const DEFAULT_MENU_ORDER: MenuKey[] = [
   "templates",
   "visuals",
+  "themes",
   "products",
   "design",
   "skus",

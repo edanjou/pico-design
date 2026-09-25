@@ -1,0 +1,80 @@
+import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { parseThemeSlotsField } from "@/lib/pdf/theme";
+
+/**
+ * CRUD des Thèmes (voir supabase/migrations/0046_themes.sql et
+ * lib/pdf/theme.ts) — un graphisme préfait, attribué à un modèle précis,
+ * affiché par-dessus 1 à 3 photos du client. `GET` optionnellement filtré
+ * par `templateId` (utilisé par Design Shopify, qui n'a besoin que des
+ * thèmes du modèle en cours, voir DesignTypePicker).
+ */
+export async function GET(request: Request) {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+
+  const templateId = new URL(request.url).searchParams.get("templateId");
+  let query = supabase.from("themes").select("*").order("name", { ascending: true });
+  if (templateId) query = query.eq("template_id", templateId);
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ themes: data });
+}
+
+export async function POST(request: Request) {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+
+  const formData = await request.formData();
+  const templateId = formData.get("templateId");
+  const name = formData.get("name");
+  const overlayFile = formData.get("overlay");
+  const slots = parseThemeSlotsField(formData.get("slots"));
+
+  if (typeof templateId !== "string" || !templateId) {
+    return NextResponse.json({ error: "Modèle manquant." }, { status: 400 });
+  }
+  if (typeof name !== "string" || !name.trim()) {
+    return NextResponse.json({ error: "Nom manquant." }, { status: 400 });
+  }
+  if (!(overlayFile instanceof File) || overlayFile.size === 0) {
+    return NextResponse.json({ error: "Graphisme manquant." }, { status: 400 });
+  }
+  if (!slots) {
+    return NextResponse.json({ error: "Emplacements invalides (1 à 3 attendus)." }, { status: 400 });
+  }
+
+  const themeId = randomUUID();
+  const overlayPath = `themes/${themeId}/overlay-${overlayFile.name}`;
+  const buffer = Buffer.from(await overlayFile.arrayBuffer());
+  const { error: uploadError } = await supabase.storage
+    .from("overlays")
+    .upload(overlayPath, buffer, { contentType: overlayFile.type || "image/png", upsert: true });
+  if (uploadError) {
+    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  }
+
+  const { data, error } = await supabase
+    .from("themes")
+    .insert({
+      id: themeId,
+      template_id: templateId,
+      name: name.trim(),
+      overlay_path: overlayPath,
+      slots,
+      created_by: user.id,
+    })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ theme: data });
+}

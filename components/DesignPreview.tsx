@@ -3,7 +3,8 @@
 import { useState } from "react";
 import ImageSourcePicker, { type ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
-import type { Template } from "@/lib/types";
+import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
+import type { Template, ThemeSlotAdjust } from "@/lib/types";
 import { isLandscape } from "@/lib/pdf/orientation";
 import { ExpandIcon, RefreshCcwIcon, RotateCwIcon } from "@/components/icons";
 import LayersPanel from "@/components/LayersPanel";
@@ -17,7 +18,26 @@ import type { PdfPagePlan } from "@/lib/pdf/pdfPages";
 // de zoom par défaut.
 const COVERAGE_ZOOM_THRESHOLD = 0.999;
 
+// Un emplacement de thème sans photo n'est pas concerné (juste blanc, un
+// choix assumé — voir composeThemeImage) ; avec une photo, elle doit couvrir
+// tout l'emplacement comme un fond simple couvre toute la page.
+function themeSlotCovers(value: ImageSourceValue, index: number): boolean {
+  if (!value.themeSlotFiles?.[index]) return true;
+  return (value.themeSlotAdjust?.[index]?.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
+}
+
 function coversPrintArea(value: ImageSourceValue): boolean {
+  // Thème : chaque emplacement a son propre zoom (voir ThemeSlotAdjust) —
+  // il faut qu'ils couvrent TOUS leur emplacement, pas de raccourci "toujours
+  // couvert" comme pour la mosaïque (cases toujours cover-croppées sans
+  // réglage client, voir composeMosaicImage).
+  if (value.sourceMode === "theme") {
+    return (value.themeSlotFiles ?? []).every((_, i) => themeSlotCovers(value, i));
+  }
+  // Un fond composé côté serveur (mosaïque) couvre toujours toute la zone
+  // par construction — pas de notion de zoom < 100 % à avertir ici,
+  // contrairement à un fond unique.
+  if (value.sourceMode !== "upload") return true;
   return (value.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
 }
 
@@ -128,6 +148,9 @@ export default function DesignPreview({
   pdfWarning,
   frontReady,
   backReady,
+  designType,
+  mosaicGrid,
+  selectedTheme,
   onBack,
   onNext,
 }: {
@@ -154,6 +177,16 @@ export default function DesignPreview({
   // reste désactivé — l'ancien garde-fou de l'étape "Visuel" séparée.
   frontReady: boolean;
   backReady: boolean;
+  // Type de design choisi à l'étape précédente (voir DesignTypePicker) —
+  // "mosaic"/"theme" masquent les contrôles qui n'ont de sens que pour un
+  // fond unique (zoom/pivoter/maximiser/réinitialiser, voir plus bas) :
+  // chaque case/emplacement remplit déjà exactement son espace, rien à
+  // recadrer. Un thème ne s'applique qu'au recto (voir DesignTool) : ces
+  // contrôles restent actifs pour le verso même quand designType === "theme"
+  // — voir `activeValue.sourceMode` plus bas, pas `designType` directement.
+  designType: "single" | "mosaic" | "theme";
+  mosaicGrid: { cols: number; rows: number };
+  selectedTheme: ThemeWithOverlayUrl | null;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -161,6 +194,9 @@ export default function DesignPreview({
   // La sélection ne survit pas à un changement de côté (un calque du recto
   // n'a pas de sens sélectionné pendant qu'on regarde le verso).
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  // Emplacement de thème sélectionné (recto seulement, voir DesignTool) —
+  // celui que le glisser et le curseur Zoom ci-dessous affectent.
+  const [selectedThemeSlot, setSelectedThemeSlot] = useState<number | null>(null);
   // Une fois "Continuer quand même" confirmé (voir handleNext), le clic
   // suivant sur "Voir le résumé" avance sans redemander — jusqu'à ce que la
   // couverture change à nouveau (le visuel reste toujours accessible ici,
@@ -211,6 +247,17 @@ export default function DesignPreview({
     activeOnChange({ positionX: 0.5, positionY: 0.5, scale: undefined });
   }
 
+  const themeSlotCount = selectedTheme?.slots.length ?? 0;
+  const DEFAULT_THEME_ADJUST: ThemeSlotAdjust = { positionX: 0.5, positionY: 0.5, scale: 1 };
+  function themeAdjust(index: number): ThemeSlotAdjust {
+    return front.themeSlotAdjust?.[index] ?? DEFAULT_THEME_ADJUST;
+  }
+  function updateThemeAdjust(index: number, patch: Partial<ThemeSlotAdjust>) {
+    const next = Array.from({ length: themeSlotCount }, (_, i) => front.themeSlotAdjust?.[i] ?? DEFAULT_THEME_ADJUST);
+    next[index] = { ...next[index], ...patch };
+    onChangeFront({ themeSlotAdjust: next });
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -223,12 +270,17 @@ export default function DesignPreview({
           onClick={onBack}
           className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-muted"
         >
-          Changer de modèle
+          Changer le type de design
         </button>
       </div>
       <p className="text-sm text-text-muted">
         Ligne de coupe et marge de sécurité (ou le gabarit du modèle, s&apos;il en a un) sont affichés
-        pour référence — glisse encore l&apos;image ou zoome si besoin.
+        pour référence
+        {side === "front" && designType === "mosaic"
+          ? " — ajoute une photo par case."
+          : side === "front" && designType === "theme"
+          ? " — ajoute une photo par emplacement."
+          : " — glisse encore l’image ou zoome si besoin."}
       </p>
 
       {template.two_sided && (
@@ -236,7 +288,7 @@ export default function DesignPreview({
           <div className="flex max-w-xs rounded-lg border border-border p-0.5 text-sm">
             <button
               type="button"
-              onClick={() => { setActiveSide("front"); setSelectedLayerId(null); }}
+              onClick={() => { setActiveSide("front"); setSelectedLayerId(null); setSelectedThemeSlot(null); }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 ${
                 side === "front" ? "bg-primary text-text-on-brand" : "text-text-muted hover:bg-surface-muted"
               }`}
@@ -251,7 +303,7 @@ export default function DesignPreview({
             </button>
             <button
               type="button"
-              onClick={() => { setActiveSide("back"); setSelectedLayerId(null); }}
+              onClick={() => { setActiveSide("back"); setSelectedLayerId(null); setSelectedThemeSlot(null); }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 ${
                 side === "back" ? "bg-primary text-text-on-brand" : "text-text-muted hover:bg-surface-muted"
               }`}
@@ -287,8 +339,10 @@ export default function DesignPreview({
                 onChange={onChangeFront}
                 logo={null}
                 showGuides={false}
-                sourceModes={["upload"]}
+                sourceModes={[front.sourceMode]}
                 showPreview={false}
+                mosaicGrid={mosaicGrid}
+                themeId={selectedTheme?.id ?? null}
               />
             ) : (
               <ImageSourcePicker
@@ -302,15 +356,26 @@ export default function DesignPreview({
                 logo={null}
                 pairedPdf={backFromPdf}
                 showGuides={false}
-                sourceModes={["upload"]}
+                sourceModes={[back.sourceMode]}
                 showPreview={false}
+                mosaicGrid={mosaicGrid}
               />
             )}
-            {pdfWarning && side === "front" && (
+            {pdfWarning && side === "front" && front.sourceMode === "upload" && (
               <p className="rounded-lg border border-warning bg-warning-subtle p-3 text-xs text-text">
                 ⚠ {pdfWarning}
               </p>
             )}
+            {/* Zoom/Pivoter/Maximiser/Réinitialiser : seulement pour un fond
+                unique (sourceMode "upload") — une mosaïque/un thème n'a pas
+                de zoom ou de position globale, chaque case/emplacement
+                remplit déjà son espace (voir le commentaire de `designType`
+                plus haut). Basé sur `activeValue` (le côté affiché), pas
+                `designType` directement : un thème ne s'applique qu'au
+                recto, le verso garde ces contrôles même si designType
+                === "theme" (voir DesignTool). */}
+            {activeValue.sourceMode === "upload" && (
+              <>
             {/* Zoom (recadrage) — au-dessus de "Pivoter le visuel", même
                 réglage (`activeValue.scale`) qu'avant quand il vivait dans
                 ImageSourcePicker (voir `allowZoom`, retiré de là). */}
@@ -335,6 +400,80 @@ export default function DesignPreview({
             <SidebarButton icon={RotateCwIcon} label="Pivoter le visuel" onClick={rotateVisual} />
             <SidebarButton icon={ExpandIcon} label="Maximiser l'espace" onClick={fillSpace} />
             <SidebarButton icon={RefreshCcwIcon} label="Réinitialiser" onClick={recenter} />
+              </>
+            )}
+            {/* Thème : une photo par emplacement (recto seulement, voir
+                DesignTool) — chacune déplaçable/zoomable dans son propre
+                rectangle (voir ImageSourcePicker) ; le curseur Zoom
+                ci-dessous cible l'emplacement sélectionné (onglets
+                "Photo N"), pas un réglage global comme pour un fond
+                simple. */}
+            {activeValue.sourceMode === "theme" && themeSlotCount > 0 && (
+              <>
+                <div className="flex gap-1">
+                  {Array.from({ length: themeSlotCount }, (_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedThemeSlot(i)}
+                      className={`relative flex-1 rounded-lg border px-1.5 py-1.5 text-xs ${
+                        selectedThemeSlot === i
+                          ? "border-primary bg-primary text-text-on-brand"
+                          : "border-border text-text-muted hover:bg-surface-muted hover:text-text"
+                      }`}
+                    >
+                      Photo {i + 1}
+                      {!themeSlotCovers(front, i) && (
+                        <span
+                          className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${
+                            selectedThemeSlot === i ? "bg-text-on-brand" : "bg-warning"
+                          }`}
+                          aria-label="Cette photo ne couvre pas tout l'emplacement"
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {selectedThemeSlot !== null ? (
+                  <>
+                    {!themeSlotCovers(front, selectedThemeSlot) && (
+                      <p className="rounded-lg border border-warning bg-warning-subtle p-2 text-xs text-text">
+                        ⚠ Cette photo ne couvre pas tout l&apos;emplacement — bordure blanche autour.
+                      </p>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <span className="shrink-0 text-xs text-text-subtle">Zoom</span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={3}
+                        step={0.02}
+                        value={themeAdjust(selectedThemeSlot).scale}
+                        onChange={(e) => updateThemeAdjust(selectedThemeSlot, { scale: parseFloat(e.target.value) })}
+                        className="min-w-0 flex-1"
+                        style={{ accentColor: "var(--accent)" }}
+                        aria-label="Zoom de la photo sélectionnée"
+                      />
+                      <span className="w-10 shrink-0 text-right text-xs text-text-subtle">
+                        {Math.round(themeAdjust(selectedThemeSlot).scale * 100)}%
+                      </span>
+                    </div>
+                    <SidebarButton
+                      icon={ExpandIcon}
+                      label="Maximiser l'espace"
+                      onClick={() => updateThemeAdjust(selectedThemeSlot, { scale: 1 })}
+                    />
+                    <SidebarButton
+                      icon={RefreshCcwIcon}
+                      label="Réinitialiser cette photo"
+                      onClick={() => updateThemeAdjust(selectedThemeSlot, { positionX: 0.5, positionY: 0.5, scale: 1 })}
+                    />
+                  </>
+                ) : (
+                  <p className="text-xs text-text-subtle">Choisis une photo (ci-dessus ou dans l&apos;aperçu) pour la déplacer/zoomer.</p>
+                )}
+              </>
+            )}
           </SidebarGroup>
 
           {rawTemplate.allow_orientation_change && (
@@ -376,8 +515,14 @@ export default function DesignPreview({
                 layers={frontLayers}
                 onChangeLayers={onChangeFrontLayers}
                 selectedLayerId={selectedLayerId}
-                sourceModes={["upload"]}
+                sourceModes={[front.sourceMode]}
                 allowFileChange={false}
+                mosaicGrid={mosaicGrid}
+                themeId={selectedTheme?.id ?? null}
+                themeSlots={selectedTheme?.slots ?? []}
+                themeOverlayUrl={selectedTheme?.overlayUrl ?? null}
+                selectedThemeSlot={selectedThemeSlot}
+                onSelectThemeSlot={setSelectedThemeSlot}
               />
             ) : (
               <ImageSourcePicker
@@ -395,8 +540,9 @@ export default function DesignPreview({
                 layers={backLayers}
                 onChangeLayers={onChangeBackLayers}
                 selectedLayerId={selectedLayerId}
-                sourceModes={["upload"]}
+                sourceModes={[back.sourceMode]}
                 allowFileChange={false}
+                mosaicGrid={mosaicGrid}
               />
             )}
           </div>

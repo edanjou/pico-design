@@ -78,6 +78,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       shading_path: shadingPath,
       beauty_shot_xml_path: beautyShotXmlPath,
       beauty_shot_overlay_opacities: source.beauty_shot_overlay_opacities,
+      fold_marks_vertical_mm: source.fold_marks_vertical_mm,
+      fold_marks_horizontal_mm: source.fold_marks_horizontal_mm,
       created_by: user.id,
     })
     .select()

@@ -6,6 +6,7 @@ import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
 import { loadLogoImage } from "@/lib/pdf/logo";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
+import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
 import type { LogoShape, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
@@ -25,6 +26,32 @@ export async function POST(request: Request) {
   const visualId = formData.get("visualId");
   const visualMode = formData.get("visualMode");
   const tileSizeMm = formData.get("tileSizeMm");
+  // Mosaïque de plusieurs photos uploadées (Design Shopify) — voir
+  // resolveProductImage. `mosaicCols`/`mosaicRows` absents ou nuls = pas de
+  // mosaïque (comportement d'origine, aucun appelant existant n'envoie ça).
+  const mosaicColsRaw = parseInt(String(formData.get("mosaicCols") ?? ""), 10);
+  const mosaicRowsRaw = parseInt(String(formData.get("mosaicRows") ?? ""), 10);
+  const mosaicCols = Number.isFinite(mosaicColsRaw) && mosaicColsRaw > 0 ? mosaicColsRaw : null;
+  const mosaicRows = Number.isFinite(mosaicRowsRaw) && mosaicRowsRaw > 0 ? mosaicRowsRaw : null;
+  const mosaicFiles: (File | null)[] | null =
+    mosaicCols && mosaicRows
+      ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
+          const f = formData.get(`mosaicCell${i}`);
+          return f instanceof File && f.size > 0 ? f : null;
+        })
+      : null;
+  // Thème (Design Shopify) — voir resolveProductImage. `themeId` absent =
+  // pas de thème (comportement d'origine). Toujours 3 cases (le maximum,
+  // voir ThemeForm) : composeThemeImage ignore celles au-delà du nombre
+  // réel d'emplacements du thème (`theme.slots.length`), pas besoin de
+  // connaître ce nombre ici pour construire le tableau.
+  const themeIdRaw = formData.get("themeId");
+  const themeId = typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
+  const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
+    const f = formData.get(`themeSlot${i}`);
+    return f instanceof File && f.size > 0 ? f : null;
+  });
+  const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
   const logoSecondaryColor = formData.get("logoSecondaryColor");
@@ -112,6 +139,12 @@ export async function POST(request: Request) {
       positionX: clampedPositionX,
       positionY: clampedPositionY,
       rotated,
+      mosaicFiles,
+      mosaicCols,
+      mosaicRows,
+      themeId,
+      themeSlotFiles,
+      themeSlotAdjust,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";

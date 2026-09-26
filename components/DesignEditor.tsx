@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import ImageSourcePicker, { type ImageSourceValue } from "@/components/ImageSourcePicker";
+import ImageSourcePicker, {
+  type ImageSourceValue,
+} from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Template, ThemeSlotAdjust } from "@/lib/types";
@@ -11,6 +13,8 @@ import { formatIn, mmToPx } from "@/lib/pdf/units";
 import {
   BoldIcon,
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CopyIcon,
   ExpandIcon,
   HelpCircleIcon,
@@ -44,6 +48,11 @@ import type { PdfPagePlan } from "@/lib/pdf/pdfPages";
 // plus toute la zone d'impression (fond perdu compris).
 const COVERAGE_ZOOM_THRESHOLD = 0.999;
 
+// Thèmes affichés d'un coup dans le sélecteur (4 rangées de 2) : au-delà, le
+// panneau gauche s'allonge au point de pousser le reste des réglages hors de
+// l'écran. Les suivants se rejoignent par les flèches.
+const THEMES_PER_PAGE = 8;
+
 // Cinq dispositions fixes (masonry — cases de tailles différentes —
 // reportée à plus tard, voir la conversation).
 const GRID_PRESETS: { cols: number; rows: number }[] = [
@@ -56,12 +65,16 @@ const GRID_PRESETS: { cols: number; rows: number }[] = [
 
 function themeSlotCovers(value: ImageSourceValue, index: number): boolean {
   if (!value.themeSlotFiles?.[index]) return true;
-  return (value.themeSlotAdjust?.[index]?.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
+  return (
+    (value.themeSlotAdjust?.[index]?.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD
+  );
 }
 
 function coversPrintArea(value: ImageSourceValue): boolean {
   if (value.sourceMode === "theme") {
-    return (value.themeSlotFiles ?? []).every((_, i) => themeSlotCovers(value, i));
+    return (value.themeSlotFiles ?? []).every((_, i) =>
+      themeSlotCovers(value, i),
+    );
   }
   if (value.sourceMode !== "upload") return true;
   return (value.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
@@ -114,15 +127,27 @@ function SideDot({ ready }: { ready: boolean }) {
       role="img"
       aria-label={ready ? "prêt" : "à compléter"}
       className="h-2 w-2 shrink-0 rounded-full"
-      style={{ backgroundColor: ready ? "var(--status-ready, #1d9b4a)" : "var(--status-todo, #ff4346)" }}
+      style={{
+        backgroundColor: ready
+          ? "var(--status-ready, #1d9b4a)"
+          : "var(--status-todo, #ff4346)",
+      }}
     />
   );
 }
 
-function SidebarGroup({ title, children }: { title: string; children: React.ReactNode }) {
+function SidebarGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[11px] font-semibold uppercase text-text-subtle">{title}</p>
+      <p className="text-[11px] font-semibold uppercase text-text-subtle">
+        {title}
+      </p>
       {children}
     </div>
   );
@@ -131,7 +156,15 @@ function SidebarGroup({ title, children }: { title: string; children: React.Reac
 // Pastille de la légende sous le canevas — un trait de la même couleur que
 // le repère qu'elle désigne (voir lib/pdf/preview.ts pour les couleurs
 // exactes des traits eux-mêmes) + son libellé.
-function LegendPill({ color, dashed, label }: { color: string; dashed?: boolean; label: string }) {
+function LegendPill({
+  color,
+  dashed,
+  label,
+}: {
+  color: string;
+  dashed?: boolean;
+  label: string;
+}) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text-muted">
       <span
@@ -220,16 +253,22 @@ export default function DesignEditor({
   selectedTheme: ThemeWithOverlayUrl | null;
   onChangeDesignType: (
     type: "single" | "mosaic" | "theme",
-    extra?: { grid?: { cols: number; rows: number }; theme?: ThemeWithOverlayUrl }
+    extra?: {
+      grid?: { cols: number; rows: number };
+      theme?: ThemeWithOverlayUrl;
+    },
   ) => void;
   onChangeModel: () => void;
   onReview: () => void;
 }) {
   const [activeSide, setActiveSide] = useState<"front" | "back">("front");
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-  const [selectedThemeSlot, setSelectedThemeSlot] = useState<number | null>(null);
+  const [selectedThemeSlot, setSelectedThemeSlot] = useState<number | null>(
+    null,
+  );
   const [confirmingCoverage, setConfirmingCoverage] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const [themePage, setThemePage] = useState(0);
   // « Afficher les guides d'impression » (nouveau, voir le plan) — masque/
   // affiche uniquement les repères sur le canevas d'édition, jamais le PDF
   // final (ImageSourcePicker le fait déjà pour son propre usage admin, on
@@ -252,29 +291,47 @@ export default function DesignEditor({
   const [viewZoom, setViewZoom] = useState(1);
 
   const side = template.two_sided ? activeSide : "front";
-  const frontCovers = coversPrintArea(front) || layersFullyCoverCanvas(frontLayers);
-  const backCovers = coversPrintArea(back) || layersFullyCoverCanvas(backLayers);
+  const themePageCount = Math.max(
+    1,
+    Math.ceil(themesForTemplate.length / THEMES_PER_PAGE),
+  );
+
+  const frontCovers =
+    coversPrintArea(front) || layersFullyCoverCanvas(frontLayers);
+  const backCovers =
+    coversPrintArea(back) || layersFullyCoverCanvas(backLayers);
   const activeCovers = side === "front" ? frontCovers : backCovers;
   const activeValue = side === "front" ? front : back;
   const activeOnChange = side === "front" ? onChangeFront : onChangeBack;
   const activeLayers = side === "front" ? frontLayers : backLayers;
-  const activeOnChangeLayers = side === "front" ? onChangeFrontLayers : onChangeBackLayers;
+  const activeOnChangeLayers =
+    side === "front" ? onChangeFrontLayers : onChangeBackLayers;
   const maxFontSizeMm = maxTextSizeMmForTemplate(template);
   const anyUncovered = !frontCovers || (template.two_sided && !backCovers);
   const uncoveredLabel = !template.two_sided
     ? "Ton visuel ne couvre"
     : !frontCovers && !backCovers
-    ? "Le recto et le verso ne couvrent"
-    : !frontCovers
-    ? "Le recto ne couvre"
-    : "Le verso ne couvre";
-  const effectiveIsLandscape = isLandscape(template.width_mm, template.height_mm);
-  const selectedLayer = activeLayers.find((l) => l.id === selectedLayerId) ?? null;
+      ? "Le recto et le verso ne couvrent"
+      : !frontCovers
+        ? "Le recto ne couvre"
+        : "Le verso ne couvre";
+  const effectiveIsLandscape = isLandscape(
+    template.width_mm,
+    template.height_mm,
+  );
+  const selectedLayer =
+    activeLayers.find((l) => l.id === selectedLayerId) ?? null;
   // Page complète (fond perdu compris) à la résolution d'impression — la
   // même cible que le rendu final côté serveur (coverCropToBuffer) — sert
   // de référence à FileVisualCard pour son indicateur de qualité.
-  const targetWidthPx = mmToPx(template.width_mm + 2 * template.bleed_mm, template.dpi);
-  const targetHeightPx = mmToPx(template.height_mm + 2 * template.bleed_mm, template.dpi);
+  const targetWidthPx = mmToPx(
+    template.width_mm + 2 * template.bleed_mm,
+    template.dpi,
+  );
+  const targetHeightPx = mmToPx(
+    template.height_mm + 2 * template.bleed_mm,
+    template.dpi,
+  );
 
   function switchSide(next: "front" | "back") {
     setActiveSide(next);
@@ -292,7 +349,10 @@ export default function DesignEditor({
   }
 
   function rotateVisual() {
-    activeOnChange({ rotation: ((activeValue.rotation ?? 0) + 90) % 360, scale: undefined });
+    activeOnChange({
+      rotation: ((activeValue.rotation ?? 0) + 90) % 360,
+      scale: undefined,
+    });
   }
   function fillSpace() {
     activeOnChange({ scale: 1 });
@@ -302,12 +362,19 @@ export default function DesignEditor({
   }
 
   const themeSlotCount = selectedTheme?.slots.length ?? 0;
-  const DEFAULT_THEME_ADJUST: ThemeSlotAdjust = { positionX: 0.5, positionY: 0.5, scale: 1 };
+  const DEFAULT_THEME_ADJUST: ThemeSlotAdjust = {
+    positionX: 0.5,
+    positionY: 0.5,
+    scale: 1,
+  };
   function themeAdjust(index: number): ThemeSlotAdjust {
     return front.themeSlotAdjust?.[index] ?? DEFAULT_THEME_ADJUST;
   }
   function updateThemeAdjust(index: number, patch: Partial<ThemeSlotAdjust>) {
-    const next = Array.from({ length: themeSlotCount }, (_, i) => front.themeSlotAdjust?.[i] ?? DEFAULT_THEME_ADJUST);
+    const next = Array.from(
+      { length: themeSlotCount },
+      (_, i) => front.themeSlotAdjust?.[i] ?? DEFAULT_THEME_ADJUST,
+    );
     next[index] = { ...next[index], ...patch };
     onChangeFront({ themeSlotAdjust: next });
   }
@@ -322,7 +389,9 @@ export default function DesignEditor({
   function updateTextLayer(patch: Partial<TextLayer>) {
     if (selectedLayer?.type !== "text") return;
     activeOnChangeLayers(
-      activeLayers.map((l) => (l.id === selectedLayer.id && l.type === "text" ? { ...l, ...patch } : l))
+      activeLayers.map((l) =>
+        l.id === selectedLayer.id && l.type === "text" ? { ...l, ...patch } : l,
+      ),
     );
   }
   function toggleBold() {
@@ -361,7 +430,9 @@ export default function DesignEditor({
           </Link>
           <span className="h-7 w-px shrink-0 bg-border" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">{template.name}</p>
+            <p className="truncate text-sm font-semibold text-text">
+              {template.name}
+            </p>
             <p className="truncate text-xs text-text-subtle">
               {formatIn(template.width_mm)} × {formatIn(template.height_mm)} po
               {template.two_sided ? " · Recto verso" : " · Recto"}
@@ -382,7 +453,9 @@ export default function DesignEditor({
               type="button"
               onClick={() => switchSide("front")}
               className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
-                side === "front" ? "bg-primary text-text-on-brand" : "text-text-muted hover:bg-surface-muted"
+                side === "front"
+                  ? "bg-primary text-text-on-brand"
+                  : "text-text-muted hover:bg-surface-muted"
               }`}
             >
               Recto
@@ -392,7 +465,9 @@ export default function DesignEditor({
               type="button"
               onClick={() => switchSide("back")}
               className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
-                side === "back" ? "bg-primary text-text-on-brand" : "text-text-muted hover:bg-surface-muted"
+                side === "back"
+                  ? "bg-primary text-text-on-brand"
+                  : "text-text-muted hover:bg-surface-muted"
               }`}
             >
               Verso
@@ -446,7 +521,9 @@ export default function DesignEditor({
               type="button"
               onClick={() => switchSide("front")}
               className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
-                side === "front" ? "bg-primary text-text-on-brand" : "text-text-muted"
+                side === "front"
+                  ? "bg-primary text-text-on-brand"
+                  : "text-text-muted"
               }`}
             >
               Recto
@@ -456,7 +533,9 @@ export default function DesignEditor({
               type="button"
               onClick={() => switchSide("back")}
               className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
-                side === "back" ? "bg-primary text-text-on-brand" : "text-text-muted"
+                side === "back"
+                  ? "bg-primary text-text-on-brand"
+                  : "text-text-muted"
               }`}
             >
               Verso
@@ -518,6 +597,7 @@ export default function DesignEditor({
                       // Thème ET l'ancien choix (Image/Mosaïque) pouvaient
                       // alors s'afficher actifs en même temps.
                       onChangeDesignType("theme");
+                      setThemePage(0);
                       setThemePickerOpen(true);
                     }}
                     className={`flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-full px-1.5 py-2 font-medium ${
@@ -526,7 +606,8 @@ export default function DesignEditor({
                         : "text-text-muted hover:text-text"
                     }`}
                   >
-                    <PaintbrushVerticalIcon className="h-3.5 w-3.5 shrink-0" /> Thème
+                    <PaintbrushVerticalIcon className="h-3.5 w-3.5 shrink-0" />{" "}
+                    Thème
                   </button>
                 )}
               </div>
@@ -539,7 +620,9 @@ export default function DesignEditor({
                   <button
                     key={`${cols}x${rows}`}
                     type="button"
-                    onClick={() => onChangeDesignType("mosaic", { grid: { cols, rows } })}
+                    onClick={() =>
+                      onChangeDesignType("mosaic", { grid: { cols, rows } })
+                    }
                     className={`rounded-lg border px-2.5 py-1 text-xs ${
                       mosaicGrid.cols === cols && mosaicGrid.rows === rows
                         ? "border-primary bg-primary text-text-on-brand"
@@ -556,42 +639,94 @@ export default function DesignEditor({
                 sélecteur est ouvert (bouton « Thème » cliqué, ou « Changer
                 de thème » plus bas), jamais affichée par défaut sous Image/
                 Mosaïque. */}
-            {side === "front" && themePickerOpen && themesForTemplate.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                {themesForTemplate.map((theme) => (
-                  <button
-                    key={theme.id}
-                    type="button"
-                    onClick={() => {
-                      onChangeDesignType("theme", { theme });
-                      setThemePickerOpen(false);
-                    }}
-                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-2 text-center ${
-                      selectedTheme?.id === theme.id ? "border-primary" : "border-border hover:border-border-strong"
-                    }`}
-                  >
-                    <div className="flex h-14 w-14 items-center justify-center rounded-md border border-border bg-surface-muted p-1.5">
-                      {theme.overlayUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={theme.overlayUrl} alt="" className="max-h-full max-w-full object-contain" />
-                      ) : (
-                        <PaintbrushVerticalIcon className="h-6 w-6 text-text-subtle" />
-                      )}
+            {side === "front" &&
+              themePickerOpen &&
+              themesForTemplate.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {themesForTemplate
+                      .slice(
+                        themePage * THEMES_PER_PAGE,
+                        (themePage + 1) * THEMES_PER_PAGE,
+                      )
+                      .map((theme) => (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => {
+                            onChangeDesignType("theme", { theme });
+                            setThemePickerOpen(false);
+                          }}
+                          className={`flex flex-col items-center gap-1.5 rounded-lg border p-2 text-center ${
+                            selectedTheme?.id === theme.id
+                              ? "border-primary"
+                              : "border-border hover:border-border-strong"
+                          }`}
+                        >
+                          <div className="flex h-14 w-14 items-center justify-center rounded-md border border-border bg-surface-muted p-1.5">
+                            {theme.overlayUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={theme.overlayUrl}
+                                alt=""
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <PaintbrushVerticalIcon className="h-6 w-6 text-text-subtle" />
+                            )}
+                          </div>
+                          <span className="line-clamp-2 text-[11px] font-medium text-text">
+                            {theme.name}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                  {themePageCount > 1 && (
+                    <div className="flex items-center justify-center gap-3 text-xs text-text-muted">
+                      <button
+                        type="button"
+                        onClick={() => setThemePage((p) => Math.max(0, p - 1))}
+                        disabled={themePage === 0}
+                        aria-label="Thèmes précédents"
+                        className="rounded-full border border-border p-1 hover:text-text disabled:opacity-30"
+                      >
+                        <ChevronLeftIcon className="h-4 w-4" />
+                      </button>
+                      <span>
+                        {themePage + 1} / {themePageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setThemePage((p) =>
+                            Math.min(themePageCount - 1, p + 1),
+                          )
+                        }
+                        disabled={themePage >= themePageCount - 1}
+                        aria-label="Thèmes suivants"
+                        className="rounded-full border border-border p-1 hover:text-text disabled:opacity-30"
+                      >
+                        <ChevronRightIcon className="h-4 w-4" />
+                      </button>
                     </div>
-                    <span className="line-clamp-2 text-[11px] font-medium text-text">{theme.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {side === "front" && designType === "theme" && !themePickerOpen && themesForTemplate.length > 1 && (
-              <button
-                type="button"
-                onClick={() => setThemePickerOpen(true)}
-                className="self-start text-xs font-medium text-primary underline"
-              >
-                Changer de thème
-              </button>
-            )}
+                  )}
+                </div>
+              )}
+            {side === "front" &&
+              designType === "theme" &&
+              !themePickerOpen &&
+              themesForTemplate.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setThemePage(0);
+                    setThemePickerOpen(true);
+                  }}
+                  className="self-start text-xs font-medium text-primary underline"
+                >
+                  Changer de thème
+                </button>
+              )}
 
             {/* Fichier : carte dédiée (voir FileVisualCard) pour un fond
                 unique — reprend le Figma (vignette + nom + qualité +
@@ -600,15 +735,26 @@ export default function DesignEditor({
                 même carte. Masqué tant que le sélecteur de thème est ouvert
                 (évite de montrer en même temps l'ancien mode et la liste des
                 thèmes). */}
-            {side === "front" && themePickerOpen ? null : activeValue.sourceMode === "upload" ? (
+            {side === "front" &&
+            themePickerOpen ? null : activeValue.sourceMode === "upload" ? (
               <FileVisualCard
                 file={activeValue.file}
-                pairedPdfLabel={side === "back" && !back.file && backFromPdf ? `Page ${backFromPdf.page} du PDF (recto)` : null}
+                pairedPdfLabel={
+                  side === "back" && !back.file && backFromPdf
+                    ? `Page ${backFromPdf.page} du PDF (recto)`
+                    : null
+                }
                 targetWidthPx={targetWidthPx}
                 targetHeightPx={targetHeightPx}
                 scale={activeValue.scale ?? 1}
                 onFileChange={(f) =>
-                  activeOnChange({ file: f, positionX: 0.5, positionY: 0.5, scale: undefined, rotation: 0 })
+                  activeOnChange({
+                    file: f,
+                    positionX: 0.5,
+                    positionY: 0.5,
+                    scale: undefined,
+                    rotation: 0,
+                  })
                 }
               />
             ) : (
@@ -626,20 +772,26 @@ export default function DesignEditor({
                 sourceModes={[activeValue.sourceMode]}
                 showPreview={false}
                 mosaicGrid={mosaicGrid}
-                themeId={side === "front" ? selectedTheme?.id ?? null : null}
+                themeId={side === "front" ? (selectedTheme?.id ?? null) : null}
               />
             )}
 
-            {pdfWarning && side === "front" && front.sourceMode === "upload" && (
-              <p className="rounded-lg border border-warning bg-warning-subtle p-3 text-xs text-text">⚠ {pdfWarning}</p>
-            )}
+            {pdfWarning &&
+              side === "front" &&
+              front.sourceMode === "upload" && (
+                <p className="rounded-lg border border-warning bg-warning-subtle p-3 text-xs text-text">
+                  ⚠ {pdfWarning}
+                </p>
+              )}
 
             {activeValue.sourceMode === "upload" && !themePickerOpen && (
               <>
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-text">Zoom</span>
-                    <span className="text-text-subtle">{Math.round((activeValue.scale ?? 1) * 100)}%</span>
+                    <span className="text-text-subtle">
+                      {Math.round((activeValue.scale ?? 1) * 100)}%
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -647,7 +799,9 @@ export default function DesignEditor({
                     max={3}
                     step={0.02}
                     value={activeValue.scale ?? 1}
-                    onChange={(e) => activeOnChange({ scale: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      activeOnChange({ scale: parseFloat(e.target.value) })
+                    }
                     className="pico-range w-full"
                     style={rangeFillStyle(activeValue.scale ?? 1, 0.1, 3)}
                     aria-label="Zoom (recadrage)"
@@ -700,7 +854,9 @@ export default function DesignEditor({
                       {!themeSlotCovers(front, i) && (
                         <span
                           className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${
-                            selectedThemeSlot === i ? "bg-text-on-brand" : "bg-warning"
+                            selectedThemeSlot === i
+                              ? "bg-text-on-brand"
+                              : "bg-warning"
                           }`}
                         />
                       )}
@@ -717,7 +873,12 @@ export default function DesignEditor({
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium text-text">Zoom</span>
-                        <span className="text-text-subtle">{Math.round(themeAdjust(selectedThemeSlot).scale * 100)}%</span>
+                        <span className="text-text-subtle">
+                          {Math.round(
+                            themeAdjust(selectedThemeSlot).scale * 100,
+                          )}
+                          %
+                        </span>
                       </div>
                       <input
                         type="range"
@@ -725,25 +886,44 @@ export default function DesignEditor({
                         max={3}
                         step={0.02}
                         value={themeAdjust(selectedThemeSlot).scale}
-                        onChange={(e) => updateThemeAdjust(selectedThemeSlot, { scale: parseFloat(e.target.value) })}
+                        onChange={(e) =>
+                          updateThemeAdjust(selectedThemeSlot, {
+                            scale: parseFloat(e.target.value),
+                          })
+                        }
                         className="pico-range w-full"
-                        style={rangeFillStyle(themeAdjust(selectedThemeSlot).scale, 0.1, 3)}
+                        style={rangeFillStyle(
+                          themeAdjust(selectedThemeSlot).scale,
+                          0.1,
+                          3,
+                        )}
                         aria-label="Zoom de la photo sélectionnée"
                       />
                     </div>
                     <SidebarButton
                       icon={ExpandIcon}
                       label="Maximiser l'espace"
-                      onClick={() => updateThemeAdjust(selectedThemeSlot, { scale: 1 })}
+                      onClick={() =>
+                        updateThemeAdjust(selectedThemeSlot, { scale: 1 })
+                      }
                     />
                     <SidebarButton
                       icon={RefreshCcwIcon}
                       label="Réinitialiser cette photo"
-                      onClick={() => updateThemeAdjust(selectedThemeSlot, { positionX: 0.5, positionY: 0.5, scale: 1 })}
+                      onClick={() =>
+                        updateThemeAdjust(selectedThemeSlot, {
+                          positionX: 0.5,
+                          positionY: 0.5,
+                          scale: 1,
+                        })
+                      }
                     />
                   </>
                 ) : (
-                  <p className="text-xs text-text-subtle">Choisis une photo (ci-dessus ou dans l&apos;aperçu) pour la déplacer/zoomer.</p>
+                  <p className="text-xs text-text-subtle">
+                    Choisis une photo (ci-dessus ou dans l&apos;aperçu) pour la
+                    déplacer/zoomer.
+                  </p>
                 )}
               </>
             )}
@@ -758,7 +938,11 @@ export default function DesignEditor({
               <div className="flex rounded-full border border-border bg-background p-0.5 text-sm">
                 <button
                   type="button"
-                  onClick={() => onRotatedChange(isLandscape(rawTemplate.width_mm, rawTemplate.height_mm))}
+                  onClick={() =>
+                    onRotatedChange(
+                      isLandscape(rawTemplate.width_mm, rawTemplate.height_mm),
+                    )
+                  }
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-1.5 ${
                     !effectiveIsLandscape
                       ? "bg-primary text-text-on-brand"
@@ -770,7 +954,11 @@ export default function DesignEditor({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onRotatedChange(!isLandscape(rawTemplate.width_mm, rawTemplate.height_mm))}
+                  onClick={() =>
+                    onRotatedChange(
+                      !isLandscape(rawTemplate.width_mm, rawTemplate.height_mm),
+                    )
+                  }
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-1.5 ${
                     effectiveIsLandscape
                       ? "bg-primary text-text-on-brand"
@@ -783,8 +971,14 @@ export default function DesignEditor({
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-text">Afficher les guides d&apos;impression</span>
-              <Switch checked={showGuides} onChange={setShowGuides} label="Afficher les guides d'impression" />
+              <span className="text-sm text-text">
+                Afficher les guides d&apos;impression
+              </span>
+              <Switch
+                checked={showGuides}
+                onChange={setShowGuides}
+                label="Afficher les guides d'impression"
+              />
             </div>
           </SidebarGroup>
 
@@ -798,8 +992,12 @@ export default function DesignEditor({
           <div className="mt-auto flex items-start gap-2.5 rounded-xl bg-[rgba(79,10,31,0.06)] p-3.5">
             <HelpCircleIcon className="h-[18px] w-[18px] shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-semibold text-primary">Besoin d&apos;un coup de main?</p>
-              <p className="text-xs text-text-subtle">Notre équipe peut finaliser ton design.</p>
+              <p className="text-sm font-semibold text-primary">
+                Besoin d&apos;un coup de main?
+              </p>
+              <p className="text-xs text-text-subtle">
+                Notre équipe peut finaliser ton design.
+              </p>
             </div>
           </div>
         </div>
@@ -828,7 +1026,10 @@ export default function DesignEditor({
                 value={Math.round(selectedLayer.fontSizeMm)}
                 onChange={(e) => {
                   const v = parseFloat(e.target.value);
-                  if (!Number.isNaN(v)) updateTextLayer({ fontSizeMm: Math.min(maxFontSizeMm, Math.max(3, v)) });
+                  if (!Number.isNaN(v))
+                    updateTextLayer({
+                      fontSizeMm: Math.min(maxFontSizeMm, Math.max(3, v)),
+                    });
                 }}
                 aria-label="Taille du texte (mm)"
                 className="w-16 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
@@ -877,7 +1078,8 @@ export default function DesignEditor({
 
           {!activeCovers && (
             <p className="w-full max-w-xl rounded-lg border border-warning bg-warning-subtle p-3 text-center text-sm text-text">
-              ⚠ Ton visuel ne couvre pas toute la zone d&apos;impression — il y aura une bordure blanche autour.
+              ⚠ Ton visuel ne couvre pas toute la zone d&apos;impression — il y
+              aura une bordure blanche autour.
             </p>
           )}
 
@@ -901,11 +1103,15 @@ export default function DesignEditor({
               sourceModes={[activeValue.sourceMode]}
               allowFileChange={false}
               mosaicGrid={mosaicGrid}
-              themeId={side === "front" ? selectedTheme?.id ?? null : null}
-              themeSlots={side === "front" ? selectedTheme?.slots ?? [] : []}
-              themeOverlayUrl={side === "front" ? selectedTheme?.overlayUrl ?? null : null}
+              themeId={side === "front" ? (selectedTheme?.id ?? null) : null}
+              themeSlots={side === "front" ? (selectedTheme?.slots ?? []) : []}
+              themeOverlayUrl={
+                side === "front" ? (selectedTheme?.overlayUrl ?? null) : null
+              }
               selectedThemeSlot={side === "front" ? selectedThemeSlot : null}
-              onSelectThemeSlot={side === "front" ? setSelectedThemeSlot : undefined}
+              onSelectThemeSlot={
+                side === "front" ? setSelectedThemeSlot : undefined
+              }
             />
           </div>
 
@@ -914,7 +1120,11 @@ export default function DesignEditor({
           <div className="flex flex-wrap justify-center gap-2">
             <LegendPill color="#ff00ff" label="Coupe" />
             <LegendPill color="#60a5fa" dashed label="Marge de protection" />
-            <LegendPill color="var(--text-subtle)" dashed label={`Fond perdu : ${formatIn(template.bleed_mm)} po`} />
+            <LegendPill
+              color="var(--text-subtle)"
+              dashed
+              label={`Fond perdu : ${formatIn(template.bleed_mm)} po`}
+            />
             {((rawTemplate.fold_marks_vertical_mm?.length ?? 0) > 0 ||
               (rawTemplate.fold_marks_horizontal_mm?.length ?? 0) > 0) && (
               <LegendPill color="#16a34a" dashed label="Marques de pli" />
@@ -926,8 +1136,8 @@ export default function DesignEditor({
             {side === "front" && designType === "mosaic"
               ? " — ajoute une photo par case."
               : side === "front" && designType === "theme"
-              ? " — ajoute une photo par emplacement."
-              : " — glisse encore l'image ou zoome si besoin."}
+                ? " — ajoute une photo par emplacement."
+                : " — glisse encore l'image ou zoome si besoin."}
           </p>
 
           {/* Zoom de vue — échelle d'affichage du canevas, distincte du zoom
@@ -935,16 +1145,26 @@ export default function DesignEditor({
           <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
             <button
               type="button"
-              onClick={() => setViewZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10))}
+              onClick={() =>
+                setViewZoom((z) =>
+                  Math.max(0.5, Math.round((z - 0.1) * 10) / 10),
+                )
+              }
               className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
               aria-label="Réduire l'échelle d'affichage"
             >
               −
             </button>
-            <span className="w-12 text-center text-xs font-semibold text-text">{Math.round(viewZoom * 100)}%</span>
+            <span className="w-12 text-center text-xs font-semibold text-text">
+              {Math.round(viewZoom * 100)}%
+            </span>
             <button
               type="button"
-              onClick={() => setViewZoom((z) => Math.min(1.5, Math.round((z + 0.1) * 10) / 10))}
+              onClick={() =>
+                setViewZoom((z) =>
+                  Math.min(1.5, Math.round((z + 0.1) * 10) / 10),
+                )
+              }
               className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
               aria-label="Augmenter l'échelle d'affichage"
             >
@@ -976,13 +1196,15 @@ export default function DesignEditor({
               {category.name} · {template.two_sided ? "recto verso" : "recto"}
             </p>
             <div className="flex items-center gap-2">
-              <CheckIcon className={`h-3.5 w-3.5 shrink-0 ${frontReady && backReady ? "text-success" : "text-text-subtle"}`} />
+              <CheckIcon
+                className={`h-3.5 w-3.5 shrink-0 ${frontReady && backReady ? "text-success" : "text-text-subtle"}`}
+              />
               <p className="text-xs text-text-subtle">
                 {template.two_sided
                   ? `Recto ${frontReady ? "prêt" : "à compléter"} · Verso ${backReady ? "prêt" : "à compléter"}`
                   : frontReady
-                  ? "Recto prêt"
-                  : "Recto à compléter"}
+                    ? "Recto prêt"
+                    : "Recto à compléter"}
               </p>
             </div>
           </div>

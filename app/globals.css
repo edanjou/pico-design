@@ -163,6 +163,44 @@ h4 {
   a[href]:hover svg:not(.animate-spin) {
     @apply motion-safe:animate-jello;
   }
+
+  /* Curseur personnalisé (zoom, taille, opacité...) — piste fine + curseur
+     rond, comme le Figma de l'Outil Shopify, plutôt que le style natif très
+     variable d'un navigateur à l'autre. Le remplissage (couleur avant/après
+     la valeur) est un dégradé posé en JS (voir components/ui/rangeFill.ts),
+     cette classe ne pose que la forme du curseur/de la piste elle-même. */
+  input[type="range"].pico-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    outline: none;
+  }
+  input[type="range"].pico-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 2px solid var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+  }
+  input[type="range"].pico-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 2px solid var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+  }
+  input[type="range"].pico-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: transparent;
+  }
 }
 
 /* Polices de l'outil de calques (texte) de l'Outil Shopify — voir

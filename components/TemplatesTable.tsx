@@ -5,18 +5,15 @@ import { useRouter } from "next/navigation";
 import TemplateRow from "@/components/TemplateRow";
 import TemplateForm from "@/components/TemplateForm";
 import CollectionsManager from "@/components/CollectionsManager";
+import TemplateMockupsManager from "@/components/TemplateMockupsManager";
 import Modal from "@/components/Modal";
 import BulkActionsBar from "@/components/BulkActionsBar";
 import UpdatingBadge from "@/components/UpdatingBadge";
 import { useSelection } from "@/components/useSelection";
 import type { Category, Sku, Template } from "@/lib/types";
-import type { BeautyShotOverlay } from "@/lib/pdf/beautyShot";
 
 export type TemplateWithOverlayUrl = Template & {
   overlayUrl: string | null;
-  beautyShotXmlUrl: string | null;
-  beautyShotAssetNames: string[];
-  beautyShotOverlays: BeautyShotOverlay[];
 };
 
 function SortIcon() {
@@ -31,6 +28,7 @@ type ModalState =
   | { mode: "create" }
   | { mode: "edit"; template: TemplateWithOverlayUrl }
   | { mode: "preview"; template: Template; nonce: number }
+  | { mode: "mockups"; template: Template }
   | { mode: "categories" }
   | null;
 
@@ -215,6 +213,7 @@ export default function TemplatesTable({
                   onToggleSelect={() => selection.toggle(t.id)}
                   onPreview={(tpl) => setModal({ mode: "preview", template: tpl, nonce: Date.now() })}
                   onEdit={(tpl) => setModal({ mode: "edit", template: tpl })}
+                  onManageMockups={(tpl) => setModal({ mode: "mockups", template: tpl })}
                   onRefresh={refresh}
                 />
               ))}
@@ -251,6 +250,12 @@ export default function TemplatesTable({
         </Modal>
       )}
 
+      {modal?.mode === "mockups" && (
+        <Modal title={`Mockups — ${modal.template.name}`} onClose={() => setModal(null)}>
+          <TemplateMockupsManager templateId={modal.template.id} />
+        </Modal>
+      )}
+
       {(modal?.mode === "create" || modal?.mode === "edit") && (
         <Modal
           title={modal.mode === "create" ? "Nouveau modèle" : `Modifier « ${modal.template.name} »`}
@@ -263,9 +268,6 @@ export default function TemplatesTable({
             categories={categories}
             skus={skus}
             currentOverlayUrl={modal.mode === "edit" ? modal.template.overlayUrl : null}
-            currentBeautyShotXmlUrl={modal.mode === "edit" ? modal.template.beautyShotXmlUrl : null}
-            currentBeautyShotAssetNames={modal.mode === "edit" ? modal.template.beautyShotAssetNames : []}
-            currentBeautyShotOverlays={modal.mode === "edit" ? modal.template.beautyShotOverlays : []}
             onSuccess={handleSuccess}
             onBusyChange={setFormBusy}
           />

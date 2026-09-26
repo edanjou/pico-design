@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Sku, Template } from "@/lib/types";
-import { ExpandIcon, SpinnerIcon, XIcon } from "@/components/icons";
+import type { Category, Sku, Template, TemplateMockup } from "@/lib/types";
+import { SpinnerIcon, XIcon } from "@/components/icons";
+import MockupGallery, { type MockupView } from "@/components/MockupGallery";
 import { layerImageFieldName, type DesignLayer } from "@/lib/design/layers";
 
 // Ajoute les calques d'un côté au formulaire : un champ JSON (métadonnées
@@ -63,6 +64,15 @@ interface MockupState {
   url: string | null;
 }
 
+// Une vue à rendre : soit un mockup précis du modèle (`mockupId`), soit un
+// côté imprimé pour les modèles sans bundle (papeterie).
+interface ViewSpec {
+  key: string;
+  label: string;
+  side: "front" | "back";
+  mockupId: string | null;
+}
+
 /**
  * Overlay « Vérifier et commander » : remplace l'ancienne étape séparée
  * Résumé (DesignSummary.tsx, supprimé) — même logique de génération (au
@@ -87,6 +97,7 @@ export default function DesignReviewOverlay({
   backFromPdf,
   mosaicGrid,
   selectedTheme,
+  mockups,
   onClose,
   onRestart,
 }: {
@@ -101,14 +112,33 @@ export default function DesignReviewOverlay({
   backFromPdf: { file: File; page: number } | null;
   mosaicGrid: { cols: number; rows: number };
   selectedTheme: ThemeWithOverlayUrl | null;
+  // Mockups configurés pour ce modèle (0, 1 ou plusieurs — voir
+  // supabase/migrations/0049_template_mockups.sql). Vide = on retombe sur
+  // le rendu par côté (recto/verso), comme avant.
+  mockups: TemplateMockup[];
   onClose: () => void;
   onRestart: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdf, setPdf] = useState<GeneratedPdf | null>(null);
-  const [frontMockup, setFrontMockup] = useState<MockupState>({ loading: true, url: null });
-  const [backMockup, setBackMockup] = useState<MockupState>({ loading: template.two_sided, url: null });
+  // Une vue par mockup du modèle (plusieurs angles possibles) ; à défaut,
+  // une par côté imprimé, comme avant.
+  const viewSpecs: ViewSpec[] = useMemo(() => {
+    if (mockups.length > 0) {
+      // Les bundles réalistes n'ont jamais de rendu verso (voir
+      // /api/design/mockup) : chaque mockup montre le recto.
+      return mockups.map((m) => ({ key: m.id, label: m.name, side: "front" as const, mockupId: m.id }));
+    }
+    const specs: ViewSpec[] = [{ key: "front", label: "Recto", side: "front", mockupId: null }];
+    if (template.two_sided) specs.push({ key: "back", label: "Verso", side: "back", mockupId: null });
+    return specs;
+  }, [mockups, template.two_sided]);
+
+  const [mockupStates, setMockupStates] = useState<Record<string, MockupState>>(() =>
+    Object.fromEntries(viewSpecs.map((v) => [v.key, { loading: true, url: null }]))
+  );
+  const [activeMockupKey, setActiveMockupKey] = useState(() => viewSpecs[0]?.key ?? "");
   // Mockup affiché en grand (plein écran) — cliquer une vignette l'ouvre,
   // Échap/clic la referme. Le mockup est l'élément qu'on vient vraiment
   // regarder dans ce résumé : il doit pouvoir être inspecté de près.
@@ -186,27 +216,33 @@ export default function DesignReviewOverlay({
   }, []);
 
   useEffect(() => {
+    function setState(key: string, state: MockupState) {
+      setMockupStates((prev) => ({ ...prev, [key]: state }));
+    }
+
     async function fetchMockup(
-      side: "front" | "back",
+      spec: ViewSpec,
       value: ImageSourceValue,
       sideLayers: DesignLayer[],
       pdfOverride?: { file: File; page: number }
     ) {
-      const setState = side === "front" ? setFrontMockup : setBackMockup;
-      setState({ loading: true, url: null });
+      const { key, side, mockupId } = spec;
+      setState(key, { loading: true, url: null });
       try {
         const isMosaic = value.sourceMode === "mosaic";
         const isTheme = value.sourceMode === "theme" && Boolean(selectedTheme);
         const file = pdfOverride?.file ?? value.file;
         const hasMosaicFile = isMosaic && (value.mosaicFiles ?? []).some(Boolean);
         if (!file && !hasMosaicFile && !isTheme && sideLayers.length === 0) {
-          setState({ loading: false, url: null });
+          setState(key, { loading: false, url: null });
           return;
         }
         const body = new FormData();
         body.append("templateId", template.id);
         body.append("rotated", String(rotated));
         body.append("side", side);
+        // Quel mockup rendre, quand le modèle en a plusieurs.
+        if (mockupId) body.append("mockupId", mockupId);
         if (isTheme && selectedTheme) {
           appendThemeToForm(body, value, selectedTheme.id);
         } else if (isMosaic) {
@@ -223,22 +259,29 @@ export default function DesignReviewOverlay({
 
         const res = await fetch("/api/design/mockup", { method: "POST", body });
         if (res.status === 204 || !res.ok) {
-          setState({ loading: false, url: null });
+          setState(key, { loading: false, url: null });
           return;
         }
         const blob = await res.blob();
-        setState({ loading: false, url: URL.createObjectURL(blob) });
+        setState(key, { loading: false, url: URL.createObjectURL(blob) });
       } catch {
-        setState({ loading: false, url: null });
+        setState(key, { loading: false, url: null });
       }
     }
 
-    fetchMockup("front", front, frontLayers);
-    if (template.two_sided) fetchMockup("back", back, backLayers, backFromPdf ?? undefined);
+    for (const spec of viewSpecs) {
+      if (spec.side === "back") fetchMockup(spec, back, backLayers, backFromPdf ?? undefined);
+      else fetchMockup(spec, front, frontLayers);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const hasMockupColumn = frontMockup.loading || frontMockup.url || backMockup.loading || backMockup.url;
+  const views: MockupView[] = viewSpecs.map((spec) => ({
+    key: spec.key,
+    label: spec.label,
+    ...(mockupStates[spec.key] ?? { loading: true, url: null }),
+  }));
+  const hasMockupColumn = views.some((v) => v.loading || v.url);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -308,21 +351,13 @@ export default function DesignReviewOverlay({
           </div>
 
           {hasMockupColumn && (
-            <div className="order-1 flex flex-wrap items-start justify-center gap-4 lg:order-none">
-              <MockupCard
-                label="Recto"
-                state={frontMockup}
-                templateName={template.name}
-                onZoom={(url) => setZoomed({ url, label: "Recto" })}
+            <div className="order-1 flex items-start justify-center lg:order-none">
+              <MockupGallery
+                views={views}
+                activeKey={activeMockupKey}
+                onActiveKeyChange={setActiveMockupKey}
+                onZoom={(view) => view.url && setZoomed({ url: view.url, label: view.label })}
               />
-              {template.two_sided && (
-                <MockupCard
-                  label="Verso"
-                  state={backMockup}
-                  templateName={template.name}
-                  onZoom={(url) => setZoomed({ url, label: "Verso" })}
-                />
-              )}
             </div>
           )}
         </div>
@@ -373,50 +408,5 @@ export default function DesignReviewOverlay({
         </div>
       )}
     </div>
-  );
-}
-
-function MockupCard({
-  label,
-  state,
-  templateName,
-  onZoom,
-}: {
-  label: string;
-  state: MockupState;
-  templateName: string;
-  onZoom: (url: string) => void;
-}) {
-  if (!state.loading && !state.url) return null;
-  return (
-    // `flex-1 basis-64` : deux mockups (recto-verso) se partagent la
-    // largeur, un seul prend toute celle disponible (jusqu'à max-w-xl) —
-    // c'est l'élément principal du résumé, il doit être grand.
-    <figure className="w-full min-w-0 flex-1 basis-64 md:max-w-xl">
-      <figcaption className="mb-1 text-center text-sm font-medium text-text">{label}</figcaption>
-      {state.loading ? (
-        <div className="flex aspect-square items-center justify-center gap-2 rounded-2xl border border-border bg-surface-muted p-8 text-text-muted">
-          <SpinnerIcon className="h-5 w-5" />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => state.url && onZoom(state.url)}
-          aria-label={`Agrandir le mockup ${label.toLowerCase()}`}
-          className="group relative mx-auto block cursor-zoom-in"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={state.url ?? undefined}
-            alt={`${label} — ${templateName}`}
-            className="mx-auto max-h-[55vh] w-auto max-w-full rounded-2xl border border-border bg-surface-muted shadow-sm"
-          />
-          <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <ExpandIcon className="h-3.5 w-3.5" />
-            Agrandir
-          </span>
-        </button>
-      )}
-    </figure>
   );
 }

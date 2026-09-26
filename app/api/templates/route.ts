@@ -86,6 +86,10 @@ export async function POST(request: Request) {
     overlayPath = await uploadOptionalFile("overlay");
     maskPath = await uploadOptionalFile("mask");
     shadingPath = await uploadOptionalFile("shading");
+    // Bundle hérité (un seul par modèle) : TemplateForm ne l'envoie plus —
+    // les mockups se créent via /api/template-mockups, qui en accepte
+    // autant qu'on veut. Conservé pour les appels directs à l'API et pour
+    // ne pas casser les modèles déjà configurés ainsi.
     beautyShotXmlPath = await uploadBeautyShotBundle(supabase.storage, formData, templateId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur lors de l'envoi d'un fichier.";

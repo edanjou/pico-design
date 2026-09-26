@@ -154,16 +154,34 @@ export function extensionForMimeType(mimeType: string): string {
   return "png";
 }
 
+// Les images d'un bundle vivent TOUJOURS dans le même dossier que son XML.
+// C'est ce qui permet de faire cohabiter deux conventions sans déplacer de
+// fichier ni dupliquer le code de chargement : les bundles hérités sont
+// sous `<templateId>/`, les nouveaux (plusieurs par modèle, voir la table
+// template_mockups) sous `mockups/<mockupId>/`. On repart donc toujours du
+// chemin du XML plutôt que d'un id.
+export function beautyShotFolderOf(xmlPath: string): string {
+  const parts = xmlPath.split("/");
+  parts.pop();
+  return parts.join("/");
+}
+
 // Chemin de stockage déterministe pour un asset donné : le nom de fichier
 // original importe peu, seul le nom de l'asset (déclaré dans le XML) sert
 // de clé, pour que ré-uploader un bundle sans changer tel ou tel visuel
 // n'oblige pas à tout renvoyer.
-export function beautyShotAssetPath(templateId: string, assetName: string, mimeType: string): string {
-  return `${templateId}/beautyshot-${assetName}.${extensionForMimeType(mimeType)}`;
+export function beautyShotAssetPath(folder: string, assetName: string, mimeType: string): string {
+  return `${folder}/beautyshot-${assetName}.${extensionForMimeType(mimeType)}`;
 }
 
-export function beautyShotXmlPath(templateId: string): string {
-  return `${templateId}/beautyshot.xml`;
+export function beautyShotXmlPath(folder: string): string {
+  return `${folder}/beautyshot.xml`;
+}
+
+// Dossier d'un mockup de la table template_mockups (un par ligne), distinct
+// du dossier hérité `<templateId>/` qui ne peut en contenir qu'un.
+export function mockupFolder(mockupId: string): string {
+  return `mockups/${mockupId}`;
 }
 
 // Noms d'assets réellement utilisés par le rendu (fond, masque, overlays) —
@@ -197,6 +215,82 @@ export function parseOverlayOpacitiesField(raw: FormDataEntryValue | null): numb
   }
 }
 
+/**
+ * Bords du produit dans son masque, en fraction de la largeur et de la
+ * hauteur (0.12 = le produit commence à 12 % du bord). C'est ce qu'il faut
+ * donner comme marges de zone pour que le visuel occupe le produit et non
+ * toute l'image — voir marginLeft/Right/Top/Bottom de
+ * generateBeautyShotMockupPng.
+ *
+ * Le masque découpe par son canal alpha (composite "dest-in"), c'est donc
+ * l'alpha qu'on mesure ; un masque opaque peint en noir et blanc est lu par
+ * sa luminosité, sans quoi il paraîtrait plein d'un bord à l'autre.
+ */
+export async function maskHorizontalBounds(
+  maskImage: Buffer
+): Promise<{ left: number; right: number; top: number; bottom: number } | null> {
+  // Réduit d'abord : au pixel près c'est inutile ici, et un masque de scène
+  // fait plusieurs millions de pixels.
+  const SAMPLE_WIDTH = 240;
+  const { data, info } = await sharp(maskImage)
+    .resize({ width: SAMPLE_WIDTH, fit: "inside" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  if (width < 2) return null;
+  const alphaVaries = (() => {
+    for (let i = channels - 1; i < data.length; i += channels) if (data[i] < 250) return true;
+    return false;
+  })();
+
+  let minX = width;
+  let maxX = -1;
+  let minY = height;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const opaque = alphaVaries ? data[i + channels - 1] > 16 : (data[i] + data[i + 1] + data[i + 2]) / 3 > 16;
+      if (!opaque) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < minX) return null;
+
+  return {
+    left: minX / width,
+    right: (width - 1 - maxX) / width,
+    top: minY / height,
+    bottom: (height - 1 - maxY) / height,
+  };
+}
+
+// Retire une bordure symétrique pour ne garder que le rectangle centré
+// demandé. Sans marge à retirer, l'image ressort telle quelle.
+async function extractCentered(
+  image: Buffer,
+  fromWidth: number,
+  fromHeight: number,
+  toWidth: number,
+  toHeight: number
+): Promise<Buffer> {
+  if (fromWidth <= toWidth && fromHeight <= toHeight) return image;
+  return sharp(image)
+    .extract({
+      left: Math.max(0, Math.round((fromWidth - toWidth) / 2)),
+      top: Math.max(0, Math.round((fromHeight - toHeight) / 2)),
+      width: Math.min(toWidth, fromWidth),
+      height: Math.min(toHeight, fromHeight),
+    })
+    .png()
+    .toBuffer();
+}
+
 async function buildDesignForZone(
   template: Template,
   // null = pas de visuel de fond choisi (voir coverCropToBuffer) — un
@@ -205,28 +299,66 @@ async function buildDesignForZone(
   logoImage: Buffer | null,
   zoneWidthPx: number,
   zoneHeightPx: number,
-  effectiveDpi: number,
   positionX: number,
   positionY: number,
   logoShadow: LogoShadowSettings | null,
   zoom = 1,
   imageRotation = 0,
-  layers: ResolvedLayer[] = []
+  layers: ResolvedLayer[] = [],
+  // Quelle tranche de l'imprimé la caméra voit (voir TemplateMockup.position_x) :
+  // c'est un réglage du MOCKUP, distinct du cadrage du visuel sur la page.
+  viewPositionX = 0.5,
+  viewPositionY = 0.5,
+  viewZoom = 1
 ): Promise<Buffer> {
-  const covered = await coverCropToBuffer(
+  // Le mockup se fabrique en DEUX temps, comme dans la vraie vie : on
+  // imprime la page, puis on photographie le produit.
+  //
+  // 1. L'imprimé : le visuel est cadré sur la page (format rogné + fond
+  //    perdu) avec le cadrage du produit / du client — exactement la même
+  //    géométrie que generateProductPreviewPng et generate.ts, donc le même
+  //    résultat que l'aperçu et que le PDF. La marge d'impression n'y entre
+  //    pas : ce n'est qu'une bande blanche ajoutée autour de la page au
+  //    moment du PDF, absente du produit fini.
+  // 2. La prise de vue : l'imprimé rogné est posé dans la zone du mesh, qui
+  //    n'en montre souvent qu'une tranche (une tasse ne se voit que d'un
+  //    côté à la fois) — c'est viewPositionX qui choisit laquelle.
+  //
+  // Sauter l'étape 1 (ce que faisait ce code) revenait à poser la photo
+  // brute sur le produit : sur une tasse, le mockup montrait la photo
+  // entière alors que l'impression n'en garde qu'une bande.
+  const trimWidthMm = template.width_mm > 0 ? template.width_mm : 1;
+  const trimHeightMm = template.height_mm > 0 ? template.height_mm : 1;
+  // Résolution : juste ce qu'il faut pour couvrir la zone après l'étape 2,
+  // sans agrandir inutilement.
+  const pxPerMm = Math.max(zoneWidthPx / trimWidthMm, zoneHeightPx / trimHeightMm);
+  const trimWidthPx = Math.max(1, Math.round(pxPerMm * trimWidthMm));
+  const trimHeightPx = Math.max(1, Math.round(pxPerMm * trimHeightMm));
+  const pageWidthPx = Math.max(1, Math.round(pxPerMm * (trimWidthMm + template.bleed_mm * 2)));
+  const pageHeightPx = Math.max(1, Math.round(pxPerMm * (trimHeightMm + template.bleed_mm * 2)));
+  // Une seule source de vérité pour tout ce qui se mesure en mm (calques,
+  // logo) : la résolution de l'imprimé qu'on vient de fixer.
+  const printDpi = pxPerMm * 25.4;
+
+  const page = await coverCropToBuffer(
     sourceImage,
-    zoneWidthPx,
-    zoneHeightPx,
+    pageWidthPx,
+    pageHeightPx,
     positionX,
     positionY,
     zoom,
     imageRotation
   );
-  const withLayers = await compositeLayers(covered, layers, zoneWidthPx, zoneHeightPx, effectiveDpi);
+  // Les calques sont positionnés en ratios de la page, fond perdu compris
+  // (voir DesignLayer) : ils se posent donc sur la page, avant le rognage.
+  // Le logo, lui, se mesure depuis le bord de coupe et reste posé tout à la
+  // fin.
+  const withLayers = await compositeLayers(page, layers, pageWidthPx, pageHeightPx, printDpi);
+  const trimmed = await extractCentered(withLayers, pageWidthPx, pageHeightPx, trimWidthPx, trimHeightPx);
 
   const composites: sharp.OverlayOptions[] = [];
   if (logoImage && template.logo_width_mm > 0) {
-    const mmToPx = (mm: number) => Math.round((mm / 25.4) * effectiveDpi);
+    const mmToPx = (mm: number) => Math.round((mm / 25.4) * printDpi);
     const logoWidthPx = Math.max(1, mmToPx(template.logo_width_mm));
     const rawLogoPng = await rasterizeLogoToPng(logoImage, logoWidthPx);
     const meta = await sharp(rawLogoPng).metadata();
@@ -241,28 +373,34 @@ async function buildDesignForZone(
       template.logo_h_align === "left"
         ? marginXPx
         : template.logo_h_align === "right"
-        ? zoneWidthPx - marginXPx - logoWidthPx
-        : (zoneWidthPx - logoWidthPx) / 2;
-    const top = template.logo_v_align === "top" ? marginYPx : zoneHeightPx - marginYPx - logoHeightPx;
+        ? trimWidthPx - marginXPx - logoWidthPx
+        : (trimWidthPx - logoWidthPx) / 2;
+    const top = template.logo_v_align === "top" ? marginYPx : trimHeightPx - marginYPx - logoHeightPx;
 
     composites.push(
       await logoOverlay(
         logoPng,
         logoShadow,
-        Math.round(Math.min(Math.max(left, 0), Math.max(zoneWidthPx - logoWidthPx, 0))),
-        Math.round(Math.min(Math.max(top, 0), Math.max(zoneHeightPx - logoHeightPx, 0))),
-        zoneWidthPx,
-        zoneHeightPx
+        Math.round(Math.min(Math.max(left, 0), Math.max(trimWidthPx - logoWidthPx, 0))),
+        Math.round(Math.min(Math.max(top, 0), Math.max(trimHeightPx - logoHeightPx, 0))),
+        trimWidthPx,
+        trimHeightPx
       )
     );
   }
 
-  return sharp(withLayers)
+  // L'imprimé est prêt (visuel cadré, calques, logo) : reste l'étape 2, le
+  // poser dans la zone du mesh. La zone n'en montre souvent qu'une tranche,
+  // choisie par viewPositionX — c'est ce qui distingue « vue de gauche » de
+  // « vue de droite » sur une tasse.
+  const printed = await sharp(trimmed)
     .flatten({ background: "#ffffff" })
     .composite(composites)
     .ensureAlpha()
     .png()
     .toBuffer();
+
+  return coverCropToBuffer(printed, zoneWidthPx, zoneHeightPx, viewPositionX, viewPositionY, viewZoom, 0);
 }
 
 export async function generateBeautyShotMockupPng(
@@ -286,7 +424,22 @@ export async function generateBeautyShotMockupPng(
   zoom = 1,
   // Rotation du visuel lui-même (0/90/180/270) — voir coverCropToBuffer.
   imageRotation = 0,
-  layers: ResolvedLayer[] = []
+  layers: ResolvedLayer[] = [],
+  // Où le visuel commence et s'arrête dans le mesh, en fraction de sa
+  // largeur et de sa hauteur : le mesh couvre souvent toute la scène alors
+  // que le produit (découpé par le masque) n'en occupe qu'une partie. Tout à
+  // 0 = le visuel s'étale d'un bord à l'autre du mesh, comme avant.
+  marginLeft = 0,
+  marginRight = 0,
+  marginTop = 0,
+  marginBottom = 0,
+  // Prise de vue : quelle tranche de l'imprimé ce mockup montre (0 = bord
+  // gauche du visuel, donc vue de droite du produit ; 1 = bord droit). Rien
+  // à voir avec positionX/positionY, qui cadrent le visuel sur la page.
+  viewPositionX = 0.5,
+  viewPositionY = 0.5,
+  // Resserre la prise de vue sur l'imprimé (1 = la tranche entière).
+  viewZoom = 1
 ): Promise<Buffer> {
   const canvasWidth = Math.max(1, config.width);
   const canvasHeight = Math.max(1, config.height);
@@ -294,22 +447,69 @@ export async function generateBeautyShotMockupPng(
   if (!zone || zone.width <= 0 || zone.height <= 0) {
     throw new Error("Le XML du beauty shot ne définit pas de zone d'image exploitable.");
   }
+  // La zone (mesh) doit tenir dans la scène : sinon sharp refuse de la
+  // composer ("Image to composite must have same dimensions or smaller"),
+  // un message qui ne dit pas quoi corriger. En pratique c'est presque
+  // toujours un bundle dont le mesh vient d'un autre produit (mesh d'étui
+  // de téléphone laissé dans le XML d'une tasse, par exemple) — d'où un
+  // message qui donne les deux tailles.
+  if (
+    zone.left < 0 ||
+    zone.top < 0 ||
+    zone.left + zone.width > canvasWidth ||
+    zone.top + zone.height > canvasHeight
+  ) {
+    throw new Error(
+      `Bundle mockup incohérent : la zone d'image du XML (${Math.round(zone.width)}×${Math.round(zone.height)} px ` +
+        `à ${Math.round(zone.left)},${Math.round(zone.top)}) sort de la scène (${canvasWidth}×${canvasHeight} px). ` +
+        `Le mesh du beauty shot ne correspond pas à ce produit.`
+    );
+  }
 
-  const effectiveDpi = template.width_mm > 0 ? zone.width / (template.width_mm / 25.4) : template.dpi;
-  const design = await buildDesignForZone(
+  // Rectangle réellement occupé par le visuel dans le mesh, une fois les
+  // marges retirées. C'est lui qui sert de référence pour la résolution :
+  // sinon le visuel serait calculé pour une surface qu'il n'occupe pas —
+  // c'est ce qui l'agrandissait sur les tasses, dont le mesh couvre toute la
+  // scène alors que la tasse n'en occupe que le milieu.
+  const zoneWidth = Math.round(zone.width);
+  const zoneHeight = Math.round(zone.height);
+  const marginLeftPx = Math.round(zoneWidth * Math.min(0.9, Math.max(0, marginLeft)));
+  const marginRightPx = Math.round(zoneWidth * Math.min(0.9, Math.max(0, marginRight)));
+  const marginTopPx = Math.round(zoneHeight * Math.min(0.9, Math.max(0, marginTop)));
+  const marginBottomPx = Math.round(zoneHeight * Math.min(0.9, Math.max(0, marginBottom)));
+  const designWidth = Math.max(1, zoneWidth - marginLeftPx - marginRightPx);
+  const designHeight = Math.max(1, zoneHeight - marginTopPx - marginBottomPx);
+
+  const designInner = await buildDesignForZone(
     template,
     sourceImage,
     logoImage,
-    Math.round(zone.width),
-    Math.round(zone.height),
-    effectiveDpi,
+    designWidth,
+    designHeight,
+    // Cadrage du visuel SUR LA PAGE : celui du produit ou du client.
     positionX,
     positionY,
     logoShadow,
     zoom,
     imageRotation,
-    layers
+    layers,
+    // Cadrage de la PRISE DE VUE : celui du mockup.
+    viewPositionX,
+    viewPositionY,
+    viewZoom
   );
+
+  // Replacé dans le mesh à sa marge : ce qui reste de part et d'autre est
+  // transparent, et de toute façon découpé par le masque.
+  const design =
+    designWidth !== zoneWidth || designHeight !== zoneHeight
+      ? await sharp({
+          create: { width: zoneWidth, height: zoneHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+        })
+          .composite([{ input: designInner, left: marginLeftPx, top: marginTopPx }])
+          .png()
+          .toBuffer()
+      : designInner;
 
   const maskBuffer = config.maskAssetName ? assets.get(config.maskAssetName) : null;
   const maskedDesign = maskBuffer
@@ -317,7 +517,7 @@ export async function generateBeautyShotMockupPng(
         .composite([
           {
             input: await sharp(maskBuffer)
-              .resize(Math.round(zone.width), Math.round(zone.height), { fit: "fill" })
+              .resize(zoneWidth, zoneHeight, { fit: "fill" })
               .ensureAlpha()
               .png()
               .toBuffer(),

@@ -12,6 +12,7 @@ export default async function ProductsPage() {
     { data: categories },
     { data: visuals },
     { data: productCollections },
+    { data: mockupRows },
   ] = await Promise.all([
     supabase
       .from("products")
@@ -23,6 +24,10 @@ export default async function ProductsPage() {
     supabase.from("categories").select("*").order("sort_order", { ascending: true }),
     supabase.from("visuals").select("*").order("name", { ascending: true }),
     supabase.from("product_collections").select("*").order("sort_order", { ascending: true }),
+    // Juste de quoi savoir quels modèles ont au moins un mockup (voir
+    // supabase/migrations/0049_template_mockups.sql) — le détail est
+    // chargé à l'ouverture de la modale.
+    supabase.from("template_mockups").select("template_id"),
   ]);
 
   const rows = (products as ProductWithTemplate[]) ?? [];
@@ -54,6 +59,9 @@ export default async function ProductsPage() {
       categories={(categories as Category[]) ?? []}
       visuals={visualsWithUrls}
       collections={(productCollections as ProductCollection[]) ?? []}
+      templateIdsWithMockups={Array.from(
+        new Set(((mockupRows as { template_id: string }[]) ?? []).map((m) => m.template_id))
+      )}
     />
   );
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Template } from "@/lib/types";
 import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
-import { CopyIcon, EyeIcon, FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import { CopyIcon, EyeIcon, FilePenIcon, LayersIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function TemplateRow({
   template,
@@ -13,6 +13,7 @@ export default function TemplateRow({
   onToggleSelect,
   onPreview,
   onEdit,
+  onManageMockups,
   onRefresh,
 }: {
   template: TemplateWithOverlayUrl;
@@ -21,6 +22,7 @@ export default function TemplateRow({
   onToggleSelect: () => void;
   onPreview: (template: Template) => void;
   onEdit: (template: TemplateWithOverlayUrl) => void;
+  onManageMockups: (template: Template) => void;
   onRefresh: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -90,6 +92,16 @@ export default function TemplateRow({
             className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
           >
             <FilePenIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => onManageMockups(template)}
+            title="Mockups"
+            aria-label="Mockups"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+          >
+            {/* Même icône que le mockup d'un produit (ProductTableRow) : un
+                mockup se reconnaît partout au même symbole. */}
+            <LayersIcon className="h-4 w-4" />
           </button>
           <button
             onClick={handleDuplicate}

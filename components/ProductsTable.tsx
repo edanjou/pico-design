@@ -48,12 +48,16 @@ export default function ProductsTable({
   categories,
   visuals,
   collections,
+  templateIdsWithMockups,
 }: {
   products: ProductWithTemplate[];
   templates: Template[];
   categories: Category[];
   visuals: VisualWithUrl[];
   collections: ProductCollection[];
+  // Modèles ayant au moins un mockup dans template_mockups — s'ajoute au
+  // bundle hérité pour décider si le bouton « Mockup » s'affiche.
+  templateIdsWithMockups: string[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -79,6 +83,8 @@ export default function ProductsTable({
     const map = new Map(collections.map((c) => [c.id, c.name]));
     return (id: string | null) => (id ? map.get(id) ?? null : null);
   }, [collections]);
+
+  const mockupTemplateIds = useMemo(() => new Set(templateIdsWithMockups), [templateIdsWithMockups]);
 
   const filtered = useMemo(() => {
     return products
@@ -252,7 +258,9 @@ export default function ProductsTable({
                   collectionLabel={collectionName(p.collection_id)}
                   imageUrl={p.imageUrl}
                   hasMockup={Boolean(
-                    p.template?.beauty_shot_xml_path || (p.template?.mask_path && p.template?.shading_path)
+                    mockupTemplateIds.has(p.template_id) ||
+                      p.template?.beauty_shot_xml_path ||
+                      (p.template?.mask_path && p.template?.shading_path)
                   )}
                   selected={selection.selected.has(p.id)}
                   onToggleSelect={() => selection.toggle(p.id)}
@@ -302,6 +310,7 @@ export default function ProductsTable({
         <ProductMockupModal
           productId={modal.product.id}
           productName={modal.product.name}
+          templateId={modal.product.template_id}
           onClose={() => setModal(null)}
         />
       )}

@@ -2,7 +2,7 @@ import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import DesignTool from "@/components/DesignTool";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Sku, Template, Theme, Visual } from "@/lib/types";
+import type { Category, Sku, Template, TemplateMockup, Theme, Visual } from "@/lib/types";
 
 // Données de l'outil de design : modèles, catégories, SKUs (affiché au
 // résumé), banque de visuels et thèmes (visuels préfaits, voir
@@ -12,13 +12,25 @@ import type { Category, Sku, Template, Theme, Visual } from "@/lib/types";
 export default async function DesignPage() {
   await requireUser();
   const supabase = createServerSupabaseClient();
-  const [{ data: templates }, { data: categories }, { data: skus }, { data: visuals }, { data: themes }] =
+  const [
+    { data: templates },
+    { data: categories },
+    { data: skus },
+    { data: visuals },
+    { data: themes },
+    { data: mockups },
+  ] =
     await Promise.all([
       supabase.from("templates").select("*").order("name", { ascending: true }),
       supabase.from("categories").select("*").order("sort_order", { ascending: true }),
       supabase.from("skus").select("*").order("sku", { ascending: true }),
       supabase.from("visuals").select("*").order("name", { ascending: true }),
       supabase.from("themes").select("*").order("name", { ascending: true }),
+      supabase
+        .from("template_mockups")
+        .select("*")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
     ]);
 
   const visualRows = (visuals as Visual[]) ?? [];
@@ -44,6 +56,7 @@ export default async function DesignPage() {
       skus={(skus as Sku[]) ?? []}
       visuals={visualsWithUrls}
       themes={themesWithUrls}
+      mockups={(mockups as TemplateMockup[]) ?? []}
     />
   );
 }

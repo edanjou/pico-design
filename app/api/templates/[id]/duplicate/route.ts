@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { copyBeautyShotBundle } from "@/lib/templateBeautyShotUpload";
+import { mockupFolder } from "@/lib/pdf/beautyShot";
+import { listTemplateMockups } from "@/lib/templateMockups";
+import { randomUUID as randomMockupId } from "crypto";
 import type { Template } from "@/lib/types";
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
@@ -86,5 +89,31 @@ export async function POST(_request: Request, { params }: { params: { id: string
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Les mockups du modèle source (table template_mockups) suivent la copie :
+  // chacun a son propre dossier de bundle, donc une nouvelle ligne + une
+  // copie des fichiers vers le dossier du nouveau mockup.
+  try {
+    const sourceMockups = await listTemplateMockups(supabase, params.id);
+    for (const mockup of sourceMockups) {
+      const newMockupId = randomMockupId();
+      const newXmlPath = await copyBeautyShotBundle(supabase.storage, mockup.xml_path, mockupFolder(newMockupId));
+      if (!newXmlPath) continue;
+      const { error: mockupError } = await supabase.from("template_mockups").insert({
+        id: newMockupId,
+        template_id: newId,
+        name: mockup.name,
+        sort_order: mockup.sort_order,
+        xml_path: newXmlPath,
+        overlay_opacities: mockup.overlay_opacities,
+        created_by: user.id,
+      });
+      if (mockupError) throw new Error(mockupError.message);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur lors de la copie des mockups.";
+    return NextResponse.json({ error: `Modèle dupliqué, mais ses mockups n'ont pas suivi : ${message}` }, { status: 500 });
+  }
+
   return NextResponse.json({ template: data });
 }

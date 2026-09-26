@@ -73,6 +73,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     await handleOptionalFile("mask", "mask_path");
     await handleOptionalFile("shading", "shading_path");
 
+    // Idem : plus envoyé par TemplateForm (voir /api/template-mockups),
+    // conservé pour les appels directs et les modèles déjà configurés.
     if (formData.get("removeBeautyShot") === "true") {
       update.beauty_shot_xml_path = null;
     } else if (formData.get("beautyShotXml") || formData.getAll("beautyShotImages").length > 0) {

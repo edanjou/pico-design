@@ -8,7 +8,7 @@ import { useHideChrome } from "@/components/ChromeVisibility";
 import { DEFAULT_TILE_SIZE_MM, isPdfFile, type ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Sku, Template } from "@/lib/types";
+import type { Category, Sku, Template, TemplateMockup } from "@/lib/types";
 import { pdfPageCount, planPdfPages } from "@/lib/pdf/pdfPages";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import type { DesignLayer } from "@/lib/design/layers";
@@ -61,12 +61,16 @@ export default function DesignTool({
   skus,
   visuals,
   themes,
+  mockups,
 }: {
   templates: Template[];
   categories: Category[];
   skus: Sku[];
   visuals: VisualWithUrl[];
   themes: ThemeWithOverlayUrl[];
+  // Mockups de TOUS les modèles — filtrés par modèle courant plus bas,
+  // comme `themes`.
+  mockups: TemplateMockup[];
 }) {
   const [phase, setPhase] = useState<"pick" | "editor">("pick");
   const [category, setCategory] = useState<Category | null>(null);
@@ -83,6 +87,7 @@ export default function DesignTool({
 
   const effectiveTemplate = template ? applyOrientation(template, rotated) : null;
   const themesForTemplate = themes.filter((t) => t.template_id === template?.id);
+  const mockupsForTemplate = mockups.filter((m) => m.template_id === template?.id);
 
   function handleSelectTemplate(t: Template, c: Category) {
     setCategory(c);
@@ -278,6 +283,7 @@ export default function DesignTool({
           backFromPdf={backFromPdf}
           mosaicGrid={mosaicGrid}
           selectedTheme={selectedTheme}
+          mockups={mockupsForTemplate}
           onClose={() => setReviewOpen(false)}
           onRestart={handleRestart}
         />

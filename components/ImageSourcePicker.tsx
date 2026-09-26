@@ -1150,12 +1150,12 @@ export default function ImageSourcePicker({
                     bankInputRef.current?.click();
                   }
                 }}
-                className={`mt-1 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-                  bankDragOver ? "border-primary bg-primary-subtle" : "border-border bg-surface hover:border-border-strong"
+                className={`mt-1 flex cursor-pointer items-center justify-center gap-2.5 rounded-xl border-2 border-dashed px-4 py-4 text-center transition-colors ${
+                  bankDragOver ? "border-primary bg-primary-subtle" : "border-border-strong bg-surface hover:border-text-subtle"
                 }`}
               >
-                <UploadIcon className="h-6 w-6 text-text-subtle" />
-                <p className="text-xs font-medium text-text">Glisse des photos ici, ou clique pour en ajouter</p>
+                <UploadIcon className="h-4 w-4 shrink-0 text-text-subtle" />
+                <span className="text-sm font-medium text-text-subtle">Glisse des photos ici, ou clique pour en ajouter</span>
               </div>
               {themePhotoBank.length > 0 && (
                 <div className="mt-2 grid grid-cols-3 gap-1.5">

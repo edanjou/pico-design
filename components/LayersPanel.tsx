@@ -8,12 +8,14 @@ import {
   CircleIcon,
   GripVerticalIcon,
   ImageIcon,
+  PlusIcon,
   SquareIcon,
   TrashIcon,
   TypeIcon,
 } from "@/components/icons";
 import { FONT_OPTIONS } from "@/lib/design/fonts";
 import { BLEND_MODES, newImageLayer, newShapeLayer, newTextLayer, type DesignLayer, type ShapeKind } from "@/lib/design/layers";
+import { rangeFillStyle } from "@/components/ui/rangeFill";
 
 const SHAPE_OPTIONS: { value: ShapeKind; icon: (props: { className?: string }) => JSX.Element; label: string }[] = [
   { value: "rectangle", icon: SquareIcon, label: "Rectangle" },
@@ -50,6 +52,11 @@ export default function LayersPanel({
 }) {
   const effectiveMaxFontSizeMm = maxFontSizeMm ?? 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Fichier du calque Image SÉLECTIONNÉ (Remplacer) — input séparé de celui
+  // qui sert à en AJOUTER un nouveau (fileInputRef) : les deux peuvent être
+  // pertinents en même temps (un calque image déjà sélectionné pendant
+  // qu'on ajoute).
+  const replaceImageInputRef = useRef<HTMLInputElement>(null);
   // Index (dans la liste affichée, "haut de la pile" d'abord) du calque en
   // cours de glissement — voir handleDrop.
   const draggedDisplayedIndexRef = useRef<number | null>(null);
@@ -115,7 +122,61 @@ export default function LayersPanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">Calques</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase text-text-subtle">Calques</p>
+        <p className="text-xs font-semibold text-text-subtle">{layers.length}</p>
+      </div>
+
+      {/* Trois cartes côte à côte (icône + badge "+" + libellé) — comme le
+          Figma. Tenaient auparavant sur une seule colonne (une rangée par
+          bouton) quand la barre latérale faisait sm:w-48 ; elle fait
+          maintenant 320px (voir DesignEditor), largement assez pour ça. */}
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          onClick={addText}
+          className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-surface-muted pb-2.5 pt-3 text-text-muted hover:border-border-strong hover:text-text"
+        >
+          <span className="relative">
+            <TypeIcon className="h-[18px] w-[18px]" />
+            <PlusIcon className="absolute -right-1.5 -top-1 h-3 w-3 rounded-full bg-surface-muted" />
+          </span>
+          <span className="text-xs font-medium">Texte</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-surface-muted pb-2.5 pt-3 text-text-muted hover:border-border-strong hover:text-text"
+        >
+          <span className="relative">
+            <ImageIcon className="h-[18px] w-[18px]" />
+            <PlusIcon className="absolute -right-1.5 -top-1 h-3 w-3 rounded-full bg-surface-muted" />
+          </span>
+          <span className="text-xs font-medium">Image</span>
+        </button>
+        <button
+          type="button"
+          onClick={addShape}
+          className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-surface-muted pb-2.5 pt-3 text-text-muted hover:border-border-strong hover:text-text"
+        >
+          <span className="relative">
+            <SquareIcon className="h-[18px] w-[18px]" />
+            <PlusIcon className="absolute -right-1.5 -top-1 h-3 w-3 rounded-full bg-surface-muted" />
+          </span>
+          <span className="text-xs font-medium">Forme</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) addImage(f);
+            e.target.value = "";
+          }}
+        />
+      </div>
 
       {layers.length > 0 && (
         <ul className="space-y-1">
@@ -192,51 +253,6 @@ export default function LayersPanel({
         </ul>
       )}
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">Ajouter un calque</p>
-
-      {/* Les trois boutons empilés (un par rangée) plutôt que côte à côte :
-          à trois sur une même ligne, "Texte"/"Image"/"Forme" (icône + texte
-          chacun) ne tiennent plus dans la colonne latérale étroite
-          (sm:w-48) et débordent sur l'aperçu — même famille de bug que les
-          rangées de l'éditeur plus bas, voir leurs commentaires. */}
-      <div className="space-y-2">
-        <button
-          type="button"
-          onClick={addText}
-          className="flex w-full items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
-        >
-          <TypeIcon className="h-4 w-4" />
-          Texte
-        </button>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex w-full items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
-        >
-          <ImageIcon className="h-4 w-4" />
-          Image
-        </button>
-        <button
-          type="button"
-          onClick={addShape}
-          className="flex w-full items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
-        >
-          <SquareIcon className="h-4 w-4" />
-          Forme
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) addImage(f);
-            e.target.value = "";
-          }}
-        />
-      </div>
-
       {selectedLayer?.type === "text" && (
         <div className="space-y-3 rounded-lg border border-border p-3">
           <textarea
@@ -268,8 +284,8 @@ export default function LayersPanel({
               step={0.5}
               value={selectedLayer.fontSizeMm}
               onChange={(e) => updateLayer(selectedLayer.id, { fontSizeMm: parseFloat(e.target.value) })}
-              className="flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range flex-1"
+              style={rangeFillStyle(selectedLayer.fontSizeMm, 3, effectiveMaxFontSizeMm)}
               aria-label="Taille du texte"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -307,8 +323,8 @@ export default function LayersPanel({
               step={0.1}
               value={selectedLayer.letterSpacingMm}
               onChange={(e) => updateLayer(selectedLayer.id, { letterSpacingMm: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.letterSpacingMm, -2, 15)}
               aria-label="Espacement entre les lettres"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -339,8 +355,8 @@ export default function LayersPanel({
               step={0.1}
               value={selectedLayer.strokeWidthMm}
               onChange={(e) => updateLayer(selectedLayer.id, { strokeWidthMm: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 3)}
               aria-label="Épaisseur de la bordure du texte"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -360,7 +376,27 @@ export default function LayersPanel({
 
       {selectedLayer?.type === "image" && (
         <div className="space-y-3 rounded-lg border border-border p-3">
-          <p className="truncate text-sm text-text-muted">{selectedLayer.fileName}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-sm text-text-muted">{selectedLayer.fileName}</p>
+            <button
+              type="button"
+              onClick={() => replaceImageInputRef.current?.click()}
+              className="shrink-0 text-xs font-semibold text-primary hover:underline"
+            >
+              Remplacer
+            </button>
+            <input
+              ref={replaceImageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) updateLayer(selectedLayer.id, { file: f, fileName: f.name });
+                e.target.value = "";
+              }}
+            />
+          </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-text-subtle">Taille</span>
             <input
@@ -370,8 +406,8 @@ export default function LayersPanel({
               step={0.01}
               value={selectedLayer.widthRatio}
               onChange={(e) => updateLayer(selectedLayer.id, { widthRatio: parseFloat(e.target.value) })}
-              className="flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range flex-1"
+              style={rangeFillStyle(selectedLayer.widthRatio, 0.05, 1)}
               aria-label="Taille de l'image"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -414,8 +450,8 @@ export default function LayersPanel({
               step={0.01}
               value={selectedLayer.widthRatio}
               onChange={(e) => updateLayer(selectedLayer.id, { widthRatio: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.widthRatio, 0.05, 1.5)}
               aria-label="Largeur de la forme"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -431,8 +467,8 @@ export default function LayersPanel({
               step={0.01}
               value={selectedLayer.heightRatio}
               onChange={(e) => updateLayer(selectedLayer.id, { heightRatio: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.heightRatio, 0.05, 1.5)}
               aria-label="Hauteur de la forme"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -466,8 +502,8 @@ export default function LayersPanel({
               step={0.1}
               value={selectedLayer.strokeWidthMm}
               onChange={(e) => updateLayer(selectedLayer.id, { strokeWidthMm: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 3)}
               aria-label="Épaisseur de la bordure de la forme"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -498,8 +534,8 @@ export default function LayersPanel({
               step={0.01}
               value={selectedLayer.opacity}
               onChange={(e) => updateLayer(selectedLayer.id, { opacity: parseFloat(e.target.value) })}
-              className="min-w-0 flex-1"
-              style={{ accentColor: "var(--accent)" }}
+              className="pico-range min-w-0 flex-1"
+              style={rangeFillStyle(selectedLayer.opacity, 0, 1)}
               aria-label="Opacité du calque"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">

@@ -94,6 +94,31 @@ function SidebarButton({
   );
 }
 
+/**
+ * État d'un côté dans la pilule Recto/Verso : vert quand il est prêt à être
+ * commandé, rouge tant qu'il manque quelque chose — même notion que le
+ * bouton « Vérifier et commander », qui reste désactivé tant que les deux
+ * côtés ne sont pas verts. Les deux teintes tiennent sur le fond clair comme
+ * sur le bourgogne du côté actif, sans variante ni contour.
+ *
+ * Couleur posée en style inline plutôt qu'en classe Tailwind : une classe
+ * ajoutée à `theme.extend.colors` n'existe qu'après régénération du CSS, et
+ * un serveur de dev déjà lancé garde sa config résolue en mémoire — la
+ * pastille restait alors transparente. Le repli littéral de `var()` garantit
+ * la couleur même avec un CSS périmé, tout en laissant le token (donc le
+ * thème sombre) décider quand il est bien chargé.
+ */
+function SideDot({ ready }: { ready: boolean }) {
+  return (
+    <span
+      role="img"
+      aria-label={ready ? "prêt" : "à compléter"}
+      className="h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: ready ? "var(--status-ready, #1d9b4a)" : "var(--status-todo, #ff4346)" }}
+    />
+  );
+}
+
 function SidebarGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3">
@@ -361,9 +386,7 @@ export default function DesignEditor({
               }`}
             >
               Recto
-              {!frontCovers && (
-                <span className={`h-1.5 w-1.5 rounded-full ${side === "front" ? "bg-text-on-brand" : "bg-warning"}`} />
-              )}
+              <SideDot ready={frontReady} />
             </button>
             <button
               type="button"
@@ -373,9 +396,7 @@ export default function DesignEditor({
               }`}
             >
               Verso
-              {!backCovers && (
-                <span className={`h-1.5 w-1.5 rounded-full ${side === "back" ? "bg-text-on-brand" : "bg-warning"}`} />
-              )}
+              <SideDot ready={backReady} />
             </button>
           </div>
         )}
@@ -424,16 +445,22 @@ export default function DesignEditor({
             <button
               type="button"
               onClick={() => switchSide("front")}
-              className={`rounded-full px-4 py-1.5 ${side === "front" ? "bg-primary text-text-on-brand" : "text-text-muted"}`}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
+                side === "front" ? "bg-primary text-text-on-brand" : "text-text-muted"
+              }`}
             >
               Recto
+              <SideDot ready={frontReady} />
             </button>
             <button
               type="button"
               onClick={() => switchSide("back")}
-              className={`rounded-full px-4 py-1.5 ${side === "back" ? "bg-primary text-text-on-brand" : "text-text-muted"}`}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${
+                side === "back" ? "bg-primary text-text-on-brand" : "text-text-muted"
+              }`}
             >
               Verso
+              <SideDot ready={backReady} />
             </button>
           </div>
         </div>

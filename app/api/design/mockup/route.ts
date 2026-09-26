@@ -2,13 +2,9 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateProductMockupPng } from "@/lib/pdf/mockup";
-import {
-  beautyShotAssetPath,
-  generateBeautyShotMockupPng,
-  mimeTypeForAsset,
-  parseBeautyShotXml,
-  usedAssetNames,
-} from "@/lib/pdf/beautyShot";
+import { generateBeautyShotMockupPng } from "@/lib/pdf/beautyShot";
+import { loadBeautyShotBundle } from "@/lib/pdf/beautyShotBundle";
+import { resolveMockupBundle } from "@/lib/templateMockups";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
@@ -66,6 +62,10 @@ export async function POST(request: Request) {
   if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
   const rotated = formData.get("rotated") === "true";
   const side = formData.get("side") === "back" ? "back" : "front";
+  // Quel mockup rendre, quand le modèle en a plusieurs (voir
+  // resolveMockupBundle) — absent = le premier.
+  const mockupIdField = formData.get("mockupId");
+  const mockupId = typeof mockupIdField === "string" && mockupIdField ? mockupIdField : null;
 
   // Optionnel : sans fichier, le mockup se compose quand même — un canvas
   // blanc (voir coverCropToBuffer), pour permettre un montage fait
@@ -112,7 +112,13 @@ export async function POST(request: Request) {
     .eq("id", templateId)
     .single<Template>();
   if (templateError || !rawTemplate) return errorResponse("Modèle introuvable.", 404);
-  const hasRealisticBundle = Boolean(rawTemplate.beauty_shot_xml_path || (rawTemplate.mask_path && rawTemplate.shading_path));
+
+  // Le bundle peut venir de la table template_mockups (un modèle peut en
+  // avoir plusieurs) ou, à défaut, des colonnes héritées du modèle — voir
+  // resolveMockupBundle.
+  const bundle = await resolveMockupBundle(supabase, rawTemplate, mockupId);
+  if (mockupId && !bundle) return errorResponse("Mockup introuvable pour ce modèle.", 404);
+  const hasRealisticBundle = Boolean(bundle || (rawTemplate.mask_path && rawTemplate.shading_path));
 
   // Les modèles à bundle réaliste sont toujours à recto seul (aucun n'a de
   // second rendu "verso") — un appel side=back pour l'un d'eux n'a rien à
@@ -197,24 +203,12 @@ export async function POST(request: Request) {
   const admin = createAdminSupabaseClient();
 
   try {
-    if (rawTemplate.beauty_shot_xml_path) {
-      const xmlRes = await admin.storage.from("overlays").download(rawTemplate.beauty_shot_xml_path);
-      if (!xmlRes.data) return errorResponse("Impossible de charger le XML du mockup.", 500);
-      const config = parseBeautyShotXml(await xmlRes.data.text());
+    if (bundle) {
+      const { config, assets } = await loadBeautyShotBundle(admin.storage, bundle.xmlPath);
 
-      const assetEntries = await Promise.all(
-        usedAssetNames(config).map(async (name) => {
-          const path = beautyShotAssetPath(rawTemplate.id, name, mimeTypeForAsset(config, name));
-          const { data } = await admin.storage.from("overlays").download(path);
-          return [name, data ? Buffer.from(await data.arrayBuffer()) : null] as const;
-        })
-      );
-      const missing = assetEntries.filter(([, buf]) => !buf);
-      if (missing.length > 0) {
-        return errorResponse(`Fichiers manquants pour le mockup : ${missing.map(([name]) => name).join(", ")}.`, 500);
-      }
-      const assets = new Map(assetEntries.map(([name, buf]) => [name, buf as Buffer]));
-
+      // Deux cadrages distincts, à ne pas confondre (voir
+      // buildDesignForZone) : celui du CLIENT place son visuel sur la page,
+      // celui du MOCKUP choisit la tranche que la caméra voit.
       const png = await generateBeautyShotMockupPng(
         template,
         config,
@@ -224,10 +218,17 @@ export async function POST(request: Request) {
         positionX,
         positionY,
         null,
-        rawTemplate.beauty_shot_overlay_opacities,
+        bundle.overlayOpacities,
         zoom,
         imageRotation,
-        layers
+        layers,
+        bundle.marginLeft,
+        bundle.marginRight,
+        bundle.marginTop,
+        bundle.marginBottom,
+        bundle.positionX ?? 0.5,
+        bundle.positionY ?? 0.5,
+        bundle.zoom ?? 1
       );
       return new NextResponse(new Uint8Array(png), {
         headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },

@@ -53,6 +53,15 @@
   --warning-subtle: #fdefd9;
   --danger: #c0392b;
   --danger-subtle: #fae7e4;
+  /* Pastilles d'état (voir SideDot, DesignEditor) : --success/--danger sont
+     volontairement doux pour les encadrés et les textes, trop discrets sur
+     une pastille de 8 px. Ces deux-ci tiennent aussi bien sur le fond clair
+     que sur le bourgogne de --primary, d'où une seule valeur par état.
+     Le vert est la teinte demandée (141°) assombrie à 36 % : au-dessus, il
+     passe sous 3:1 sur le fond clair ; en dessous, sous 3:1 sur le
+     bourgogne. Le créneau qui tient sur les deux va de 34 % à 38 %. */
+  --status-ready: #1d9b4a;
+  --status-todo: #ff4346;
   --info: var(--pico-bleu);
   --info-subtle: #e7eef6;
 

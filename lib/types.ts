@@ -104,6 +104,39 @@ export interface Theme {
   created_by: string | null;
 }
 
+// Un mockup (bundle « beauty shot ») d'un modèle — voir
+// supabase/migrations/0049_template_mockups.sql. Un modèle peut en avoir
+// plusieurs (mêmes produit sous différents angles) ; `xml_path` est la
+// source de vérité, les images du bundle vivent dans le même dossier (voir
+// beautyShotFolderOf, lib/pdf/beautyShot.ts).
+export interface TemplateMockup {
+  id: string;
+  template_id: string;
+  name: string;
+  sort_order: number;
+  xml_path: string;
+  // Point de cadrage horizontal du visuel dans la zone du mockup : 0 = bord
+  // gauche du visuel (vue de droite du produit), 0.5 = milieu (face), 1 =
+  // bord droit (vue de gauche). Voir migration 0050.
+  position_x: number;
+  // Cadrage vertical (0 = haut, 1 = bas) et échelle du visuel dans la zone
+  // (1 = « cover », 2 = agrandi ×2 puis recadré). Voir migration 0051.
+  position_y: number;
+  zoom: number;
+  // Où le visuel commence et s'arrête dans le mesh, en fraction de la largeur
+  // de la zone : le mesh couvre souvent toute la scène alors que le produit
+  // n'en occupe qu'une partie. Voir migration 0052.
+  margin_left: number;
+  margin_right: number;
+  // Idem en vertical, en fraction de la hauteur. Voir migration 0053.
+  margin_top: number;
+  margin_bottom: number;
+  // Positionnel, dans l'ordre des <overlay> du XML ; null = 100 % partout.
+  overlay_opacities: number[] | null;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface VisualCollection {
   id: string;
   name: string;

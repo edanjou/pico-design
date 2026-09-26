@@ -5,7 +5,6 @@ import type { Category, LogoHAlign, LogoVAlign, Sku, Template } from "@/lib/type
 import { inToMm, mmToIn } from "@/lib/pdf/units";
 import { SpinnerIcon } from "@/components/icons";
 import SkuPicker from "@/components/SkuPicker";
-import type { BeautyShotOverlay } from "@/lib/pdf/beautyShot";
 
 type Unit = "mm" | "in";
 
@@ -25,9 +24,6 @@ export default function TemplateForm({
   categories,
   skus,
   currentOverlayUrl,
-  currentBeautyShotXmlUrl,
-  currentBeautyShotAssetNames,
-  currentBeautyShotOverlays,
   onSuccess,
   onBusyChange,
 }: {
@@ -35,11 +31,6 @@ export default function TemplateForm({
   categories: Category[];
   skus: Sku[];
   currentOverlayUrl?: string | null;
-  currentBeautyShotXmlUrl?: string | null;
-  currentBeautyShotAssetNames?: string[];
-  // Surcouches (nom d'asset + mode de fusion) du bundle mockup déjà
-  // enregistré — sert à afficher un curseur d'intensité par couche.
-  currentBeautyShotOverlays?: BeautyShotOverlay[];
   onSuccess: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -77,16 +68,6 @@ export default function TemplateForm({
   const [overlayFile, setOverlayFile] = useState<File | null>(null);
   const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
   const [removeOverlay, setRemoveOverlay] = useState(false);
-  const [beautyShotXmlFile, setBeautyShotXmlFile] = useState<File | null>(null);
-  const [beautyShotImageFiles, setBeautyShotImageFiles] = useState<File[]>([]);
-  const [removeBeautyShot, setRemoveBeautyShot] = useState(false);
-  const [beautyShotAssetNames, setBeautyShotAssetNames] = useState<string[] | null>(null);
-  const overlays = currentBeautyShotOverlays ?? [];
-  // Une valeur (0-100) par surcouche, dans le même ordre que le XML. 100 par
-  // défaut (comportement d'origine) pour toute surcouche sans valeur enregistrée.
-  const [overlayOpacities, setOverlayOpacities] = useState<number[]>(() =>
-    overlays.map((_, i) => template?.beauty_shot_overlay_opacities?.[i] ?? 100)
-  );
   // Marques de pli (aperçu écran seulement, voir generateTemplatePreviewPng)
   // — distances en mm depuis le bord de coupe, une par pli, position
   // réglable individuellement (pas de répartition automatique).
@@ -102,28 +83,6 @@ export default function TemplateForm({
     setOverlayFile(f);
     setOverlayPreview(f ? URL.createObjectURL(f) : null);
     if (f) setRemoveOverlay(false);
-  }
-
-  async function handleBeautyShotXmlChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setBeautyShotXmlFile(f);
-    if (f) {
-      setRemoveBeautyShot(false);
-      try {
-        const text = await f.text();
-        const names = Array.from(text.matchAll(/<asset\s+name="([^"]+)"/g)).map((m) => m[1]);
-        setBeautyShotAssetNames(names);
-      } catch {
-        setBeautyShotAssetNames(null);
-      }
-    } else {
-      setBeautyShotAssetNames(null);
-    }
-  }
-
-  function handleBeautyShotImagesChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setBeautyShotImageFiles(Array.from(e.target.files ?? []));
-    if (e.target.files && e.target.files.length > 0) setRemoveBeautyShot(false);
   }
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -183,12 +142,6 @@ export default function TemplateForm({
     }
     if (overlayFile) formData.append("overlay", overlayFile);
     if (removeOverlay) formData.append("removeOverlay", "true");
-    if (beautyShotXmlFile) formData.append("beautyShotXml", beautyShotXmlFile);
-    for (const f of beautyShotImageFiles) formData.append("beautyShotImages", f);
-    if (removeBeautyShot) formData.append("removeBeautyShot", "true");
-    if (overlays.length > 0) {
-      formData.append("beautyShotOverlayOpacities", JSON.stringify(overlayOpacities));
-    }
     // Toujours envoyés (même vides) : un tableau vide efface les marques
     // existantes côté serveur (voir parseFoldMarksField) — les omettre
     // laisserait d'anciennes marques en place après les avoir toutes retirées.
@@ -629,95 +582,14 @@ export default function TemplateForm({
         ) : null}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium">Mockup (bundle XML + images) — optionnel</label>
-        <p className="mt-1 text-xs text-neutral-500">
-          Fichier XML (format beauty shot : fond, masque, zone du visuel, surcouches) accompagné des
-          images qu&apos;il référence. Chaque image doit porter le même nom que son asset dans le XML
-          (ex. <code>background-bs1.png</code> pour <code>&lt;asset name=&quot;background-bs1&quot;&gt;</code>).
-        </p>
-        <label className="mt-2 block text-xs text-neutral-500">Fichier XML</label>
-        <input
-          type="file"
-          accept=".xml,application/xml,text/xml"
-          onChange={handleBeautyShotXmlChange}
-          className="mt-1 w-full text-sm"
-        />
-        <label className="mt-3 block text-xs text-neutral-500">Images référencées par le XML</label>
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-          onChange={handleBeautyShotImagesChange}
-          className="mt-1 w-full text-sm"
-        />
-
-        {beautyShotAssetNames && (
-          <p className="mt-2 text-xs text-neutral-500">
-            Assets attendus : {beautyShotAssetNames.join(", ") || "aucun trouvé dans ce XML"}
-          </p>
-        )}
-        {beautyShotImageFiles.length > 0 && (
-          <p className="mt-1 text-xs text-neutral-500">
-            Images sélectionnées : {beautyShotImageFiles.map((f) => f.name).join(", ")}
-          </p>
-        )}
-
-        {!beautyShotXmlFile && !removeBeautyShot && currentBeautyShotXmlUrl && (
-          <div className="mt-3 text-sm text-pico-black">
-            <p>
-              Bundle actuel configuré
-              {currentBeautyShotAssetNames && currentBeautyShotAssetNames.length > 0
-                ? ` (${currentBeautyShotAssetNames.join(", ")})`
-                : ""}
-              {" — "}
-              <a href={currentBeautyShotXmlUrl} target="_blank" rel="noreferrer" className="underline">
-                voir le XML
-              </a>
-            </p>
-            <button
-              type="button"
-              onClick={() => setRemoveBeautyShot(true)}
-              className="mt-2 text-sm text-red-600 hover:underline"
-            >
-              Retirer le bundle mockup
-            </button>
-          </div>
-        )}
-
-        {!beautyShotXmlFile && !removeBeautyShot && overlays.length > 0 && (
-          <div className="mt-4 space-y-3 rounded-lg border border-neutral-200 p-3">
-            <p className="text-xs font-medium text-neutral-600">
-              Intensité des surcouches — le XML ne fixe qu&apos;un mode de fusion (pas d&apos;opacité) ;
-              un mockup trop sombre vient souvent de la surcouche d&apos;ombre appliquée à 100 %.
-            </p>
-            {overlays.map((overlay, i) => (
-              <div key={`${overlay.assetName}-${i}`}>
-                <div className="flex items-center justify-between text-xs text-neutral-500">
-                  <span>
-                    {overlay.assetName} <span className="text-neutral-400">— mode {overlay.blendMode}</span>
-                  </span>
-                  <span className="tabular-nums">{overlayOpacities[i] ?? 100}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={overlayOpacities[i] ?? 100}
-                  onChange={(e) =>
-                    setOverlayOpacities((prev) => {
-                      const next = [...prev];
-                      next[i] = Number(e.target.value);
-                      return next;
-                    })
-                  }
-                  className="mt-1 w-full"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Les mockups ne se configurent plus ici : un modèle peut en avoir
+          plusieurs (voir TemplateMockupsManager et
+          supabase/migrations/0049_template_mockups.sql), ce qui se prête mal
+          à ce formulaire envoyé d'un seul bloc. */}
+      <p className="rounded-xl border border-border bg-surface-muted p-3 text-xs text-text-muted">
+        Mockups : gérés séparément — bouton « Mockups » sur la ligne du modèle, dans la liste. Un modèle peut en avoir
+        plusieurs (le même produit sous différents angles).
+      </p>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

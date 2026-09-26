@@ -1,6 +1,7 @@
 import type { createServerSupabaseClient } from "./supabase/server";
 import {
   beautyShotAssetPath,
+  beautyShotFolderOf,
   beautyShotXmlPath,
   mimeTypeForAsset,
   parseBeautyShotXml,
@@ -39,10 +40,15 @@ function fileMatchesAsset(filename: string, assetName: string): boolean {
 // asset utilisé par le XML n'a ni image fraîchement envoyée ni image déjà
 // stockée sous son chemin déterministe — pour échouer à l'enregistrement
 // plutôt qu'au moment de générer le mockup.
+//
+// `folder` est le dossier de destination dans le bucket `overlays` : l'id
+// du modèle pour le bundle hérité (un seul par modèle), ou
+// `mockupFolder(mockupId)` pour un mockup de la table template_mockups (un
+// dossier par mockup, donc autant de bundles qu'on veut).
 export async function uploadBeautyShotBundle(
   storage: Storage,
   formData: FormData,
-  templateId: string,
+  folder: string,
   existingXmlPath?: string | null
 ): Promise<string | null> {
   const xmlFile = formData.get("beautyShotXml");
@@ -54,7 +60,7 @@ export async function uploadBeautyShotBundle(
   let xmlPath: string;
   if (xmlFile instanceof File && xmlFile.size > 0) {
     xmlText = await xmlFile.text();
-    xmlPath = beautyShotXmlPath(templateId);
+    xmlPath = beautyShotXmlPath(folder);
   } else if (imageFiles.length > 0 && existingXmlPath) {
     const { data, error } = await storage.from("overlays").download(existingXmlPath);
     if (error || !data) throw error ?? new Error("XML du bundle mockup introuvable pour y associer les images.");
@@ -74,7 +80,7 @@ export async function uploadBeautyShotBundle(
     const file = imageFiles.find((f) => !usedFiles.has(f) && fileMatchesAsset(f.name, assetName));
     if (file) usedFiles.add(file);
     const mimeType = mimeTypeForAsset(config, assetName);
-    const path = beautyShotAssetPath(templateId, assetName, mimeType);
+    const path = beautyShotAssetPath(folder, assetName, mimeType);
     if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const { error } = await storage
@@ -83,9 +89,9 @@ export async function uploadBeautyShotBundle(
       if (error) throw error;
     } else {
       // Pas ré-envoyée : vérifie qu'une image existe déjà sous ce chemin.
-      const folder = path.slice(0, path.lastIndexOf("/"));
+      const assetFolder = path.slice(0, path.lastIndexOf("/"));
       const filename = path.slice(path.lastIndexOf("/") + 1);
-      const { data: existing } = await storage.from("overlays").list(folder, { search: filename });
+      const { data: existing } = await storage.from("overlays").list(assetFolder, { search: filename });
       if (!existing || !existing.some((f) => f.name === filename)) missing.push(assetName);
     }
   }
@@ -107,11 +113,14 @@ export async function uploadBeautyShotBundle(
   return xmlPath;
 }
 
-// Copie le XML et les images d'un bundle vers un nouveau modèle (duplication).
+// Copie le XML et les images d'un bundle vers un autre dossier
+// (duplication d'un modèle, ou d'un mockup vers le modèle dupliqué).
+// `targetFolder` suit la même convention que `uploadBeautyShotBundle` :
+// l'id du modèle (bundle hérité) ou `mockupFolder(mockupId)`.
 export async function copyBeautyShotBundle(
   storage: Storage,
   sourceXmlPath: string | null,
-  newTemplateId: string
+  targetFolder: string
 ): Promise<string | null> {
   if (!sourceXmlPath) return null;
 
@@ -119,17 +128,19 @@ export async function copyBeautyShotBundle(
   if (downloadError || !xmlData) throw downloadError ?? new Error("XML du bundle introuvable.");
   const xmlText = await xmlData.text();
   const config = parseBeautyShotXml(xmlText);
-  const sourceTemplateId = sourceXmlPath.split("/")[0];
+  // Les images sont toujours à côté du XML, quelle que soit la convention
+  // du dossier source (voir beautyShotFolderOf).
+  const sourceFolder = beautyShotFolderOf(sourceXmlPath);
 
   for (const assetName of usedAssetNames(config)) {
     const mimeType = mimeTypeForAsset(config, assetName);
-    const sourcePath = beautyShotAssetPath(sourceTemplateId, assetName, mimeType);
-    const newPath = beautyShotAssetPath(newTemplateId, assetName, mimeType);
+    const sourcePath = beautyShotAssetPath(sourceFolder, assetName, mimeType);
+    const newPath = beautyShotAssetPath(targetFolder, assetName, mimeType);
     const { error } = await storage.from("overlays").copy(sourcePath, newPath);
     if (error) throw error;
   }
 
-  const newXmlPath = beautyShotXmlPath(newTemplateId);
+  const newXmlPath = beautyShotXmlPath(targetFolder);
   const { error: xmlCopyError } = await storage.from("overlays").copy(sourceXmlPath, newXmlPath);
   if (xmlCopyError) throw xmlCopyError;
 

@@ -318,13 +318,13 @@ export default function LayersPanel({
             <span className="w-14 shrink-0 text-xs text-text-subtle">Espacement</span>
             <input
               type="range"
-              min={-2}
+              min={-5}
               max={15}
               step={0.1}
               value={selectedLayer.letterSpacingMm}
               onChange={(e) => updateLayer(selectedLayer.id, { letterSpacingMm: parseFloat(e.target.value) })}
               className="pico-range min-w-0 flex-1"
-              style={rangeFillStyle(selectedLayer.letterSpacingMm, -2, 15)}
+              style={rangeFillStyle(selectedLayer.letterSpacingMm, -5, 15)}
               aria-label="Espacement entre les lettres"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -351,12 +351,12 @@ export default function LayersPanel({
             <input
               type="range"
               min={0}
-              max={3}
+              max={7}
               step={0.1}
               value={selectedLayer.strokeWidthMm}
               onChange={(e) => updateLayer(selectedLayer.id, { strokeWidthMm: parseFloat(e.target.value) })}
               className="pico-range min-w-0 flex-1"
-              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 3)}
+              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 7)}
               aria-label="Épaisseur de la bordure du texte"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">
@@ -498,12 +498,12 @@ export default function LayersPanel({
             <input
               type="range"
               min={0}
-              max={3}
+              max={7}
               step={0.1}
               value={selectedLayer.strokeWidthMm}
               onChange={(e) => updateLayer(selectedLayer.id, { strokeWidthMm: parseFloat(e.target.value) })}
               className="pico-range min-w-0 flex-1"
-              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 3)}
+              style={rangeFillStyle(selectedLayer.strokeWidthMm, 0, 7)}
               aria-label="Épaisseur de la bordure de la forme"
             />
             <span className="w-12 shrink-0 text-right text-xs text-text-subtle">

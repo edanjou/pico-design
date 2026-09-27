@@ -118,16 +118,31 @@ export function textLayerToSvgGroup(
     })
     .join("");
 
-  // Bordure (contour) : trait autour de chaque glyphe, réglé fill/stroke sur
-  // le groupe (hérité par les <path> enfants, qui n'en précisent pas) —
-  // `paint-order="stroke fill"` peint le trait derrière le fond, sinon un
-  // trait épais mangerait l'intérieur des glyphes. Épaisseur nulle par
-  // défaut : la propriété stroke reste inoffensive (invisible) tant que le
-  // client n'a pas réglé de bordure.
+  // Bordure (contour) en DEUX passes : tout le texte est d'abord tracé en
+  // contour seul, puis redessiné plein par-dessus. `paint-order="stroke fill"`
+  // ne suffisait pas : il s'applique glyphe par glyphe, si bien que le contour
+  // d'une lettre repassait sur le plein de la précédente — visible dès que les
+  // lettres se touchent (crénage serré, interlettrage négatif, italiques).
+  // Deux passes = un contour continu derrière un texte intact, ce que les
+  // polices non dessinées pour être contournées supportent bien mieux.
+  //
+  // La bordure est ENTIÈREMENT extérieure au glyphe : un trait SVG est centré
+  // sur le contour, donc on en trace le double et le texte plein recouvre la
+  // moitié intérieure. L'épaisseur réglée par le client (en mm) est ainsi
+  // celle qu'on voit déborder de la lettre, et la lettre garde sa forme.
+  //
+  // Le `stroke-width` doit être exprimé dans l'espace de la POLICE, pas en
+  // pixels du canevas : chaque glyphe porte un `scale(fontSize/unitsPerEm)`
+  // (voir layoutLine) qui s'applique aussi au trait. Sans cette division, une
+  // bordure réglée à 7 mm n'en mesurait que 3,2 — l'écart passait inaperçu
+  // faute d'être mesuré.
+  const glyphScale = fontSizePx / instance.unitsPerEm;
   const strokeWidthPx = mmToPx(layer.strokeWidthMm ?? 0, dpi);
-  const strokeAttrs =
-    strokeWidthPx > 0
-      ? ` stroke="${layer.strokeColor}" stroke-width="${strokeWidthPx}" stroke-linejoin="round" paint-order="stroke fill"`
+  const strokePass =
+    strokeWidthPx > 0 && glyphScale > 0
+      ? `<g fill="none" stroke="${layer.strokeColor}" stroke-width="${
+          (strokeWidthPx * 2) / glyphScale
+        }" stroke-linejoin="round" stroke-linecap="round">${lineGroups}</g>`
       : "";
 
   // Rotation autour du centre du bloc — appliquée en dernier (englobe tout),
@@ -136,5 +151,5 @@ export function textLayerToSvgGroup(
   const rotationDeg = layer.rotationDeg ?? 0;
   const rotateAttr = rotationDeg ? `rotate(${rotationDeg} ${centerX} ${centerY}) ` : "";
 
-  return `<g transform="${rotateAttr}translate(${blockLeft} ${blockTop})" fill="${layer.color}"${strokeAttrs} opacity="${layer.opacity ?? 1}">${lineGroups}</g>`;
+  return `<g transform="${rotateAttr}translate(${blockLeft} ${blockTop})" fill="${layer.color}" opacity="${layer.opacity ?? 1}">${strokePass}<g>${lineGroups}</g></g>`;
 }

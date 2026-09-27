@@ -111,8 +111,13 @@ function SidebarButton({
  * État d'un côté dans la pilule Recto/Verso : vert quand il est prêt à être
  * commandé, rouge tant qu'il manque quelque chose — même notion que le
  * bouton « Vérifier et commander », qui reste désactivé tant que les deux
- * côtés ne sont pas verts. Les deux teintes tiennent sur le fond clair comme
- * sur le bourgogne du côté actif, sans variante ni contour.
+ * côtés ne sont pas verts.
+ *
+ * Anneau blanc de 1 px : il détache la pastille du fond quelle que soit la
+ * couleur derrière — le côté actif est peint en --primary, désormais réglable
+ * dans le module Paramètres, donc on ne peut plus supposer un bourgogne
+ * foncé. En box-shadow plutôt qu'en `border`, qui rognerait la pastille au
+ * lieu de l'entourer.
  *
  * Couleur posée en style inline plutôt qu'en classe Tailwind : une classe
  * ajoutée à `theme.extend.colors` n'existe qu'après régénération du CSS, et
@@ -131,6 +136,7 @@ function SideDot({ ready }: { ready: boolean }) {
         backgroundColor: ready
           ? "var(--status-ready, #1d9b4a)"
           : "var(--status-todo, #ff4346)",
+        boxShadow: "0 0 0 1px #ffffff",
       }}
     />
   );

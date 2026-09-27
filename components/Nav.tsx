@@ -18,7 +18,10 @@ const ROLE_LABELS: Record<string, string> = {
   employee: "Designer",
 };
 
-const DEFAULT_ORDER_NO_ADMIN = DEFAULT_MENU_ORDER.filter((k) => k !== "users");
+// Pages réservées aux administrateurs : Utilisateurs et Paramètres, qui
+// changent respectivement les accès et l'interface de tout le monde.
+const ADMIN_ONLY: MenuKey[] = ["users", "settings"];
+const DEFAULT_ORDER_NO_ADMIN = DEFAULT_MENU_ORDER.filter((k) => !ADMIN_ONLY.includes(k));
 
 export default function Nav() {
   const router = useRouter();
@@ -93,7 +96,16 @@ export default function Nav() {
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-6 py-3">
         <div className="flex items-center">
           <Link href="/">
-            <img src="/pico-noir.svg" alt="Pico Design" className="h-6 w-auto" />
+            {/* Logo réglable (module Paramètres). Le jeu suit la surface :
+                l'Outil Shopify peut porter un autre logo que
+                l'administration. La route renvoie le logo d'origine tant
+                que rien n'est téléversé. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/settings/${pathname.startsWith("/design") ? "tool" : "admin"}/asset/logo`}
+              alt="Pico Design"
+              className="h-6 w-auto"
+            />
           </Link>
         </div>
 

@@ -1467,13 +1467,43 @@ export default function ImageSourcePicker({
                             color: designLayer.color,
                             textAlign: "center",
                             letterSpacing: letterSpacingPx ? `${letterSpacingPx}px` : undefined,
-                            WebkitTextStrokeWidth: strokeWidthPx ? `${strokeWidthPx}px` : undefined,
-                            WebkitTextStrokeColor: strokeWidthPx ? designLayer.strokeColor : undefined,
                             outline: isSelected ? "1px dashed var(--accent)" : undefined,
                             outlineOffset: 4,
                           }}
                         >
-                          {designLayer.content}
+                          {/* Contour : une copie du texte posée DESSOUS, en
+                              trait seul, puis le texte plein par-dessus (voir
+                              textLayerSvg côté rendu, même principe).
+                              -webkit-text-stroke seul dessine un trait centré
+                              PAR-DESSUS le glyphe, qui ronge la lettre — très
+                              visible sur les polices qui ne sont pas dessinées
+                              pour être contournées. La copie est purement
+                              décorative, d'où aria-hidden. */}
+                          {strokeWidthPx > 0 && (
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute left-0 top-0 w-full whitespace-pre"
+                              style={{
+                                // Même largeur que le bloc, pour que
+                                // l'alignement centré retombe ligne à ligne.
+                                // Doublé : le trait est centré sur le
+                                // contour, le texte plein par-dessus en
+                                // masque la moitié intérieure — il ne reste
+                                // donc que l'épaisseur réglée, à l'extérieur.
+                                WebkitTextStrokeWidth: `${strokeWidthPx * 2}px`,
+                                WebkitTextStrokeColor: designLayer.strokeColor,
+                                color: "transparent",
+                              }}
+                            >
+                              {designLayer.content}
+                            </span>
+                          )}
+                          {/* Positionné lui aussi : en CSS, un élément
+                              positionné se peint au-dessus du contenu qui ne
+                              l'est pas — sans ça la copie en contour
+                              repasserait PAR-DESSUS le texte plein et on
+                              retomberait sur le défaut d'origine. */}
+                          <span className="relative">{designLayer.content}</span>
                           {isSelected && onChangeLayers && (
                             <LayerHandles
                               layer={designLayer}

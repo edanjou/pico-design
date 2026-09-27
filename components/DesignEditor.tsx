@@ -136,6 +136,61 @@ function SideDot({ ready }: { ready: boolean }) {
   );
 }
 
+/**
+ * Valeur en pourcentage à la fois lisible et saisissable : les curseurs vont
+ * vite mais ne permettent pas de viser une valeur précise (ni de reprendre
+ * exactement le même réglage d'un côté à l'autre). Champ texte plutôt que
+ * `type="number"` pour éviter les flèches natives dans une interface déjà
+ * dense.
+ *
+ * La frappe est conservée telle quelle tant que le champ a le focus (un
+ * champ vidé pour être retapé ne doit pas se remettre à 100), puis bornée et
+ * validée à la sortie ou sur Entrée.
+ */
+function PercentField({
+  value,
+  min,
+  max,
+  onChange,
+  label,
+  className = "",
+}: {
+  value: number; // ratio : 1 = 100 %
+  min: number; // en %
+  max: number; // en %
+  onChange: (ratio: number) => void;
+  label: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit(raw: string) {
+    setDraft(null);
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return; // saisie inutilisable : on garde la valeur en place
+    onChange(Math.min(max, Math.max(min, n)) / 100);
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className}`}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={draft ?? String(Math.round(value * 100))}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setDraft(null);
+        }}
+        aria-label={label}
+        className="w-8 rounded border border-transparent bg-transparent px-0.5 text-right tabular-nums hover:border-border focus:border-border focus:outline-none"
+      />
+      %
+    </span>
+  );
+}
+
 function SidebarGroup({
   title,
   children,
@@ -789,9 +844,14 @@ export default function DesignEditor({
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-text">Zoom</span>
-                    <span className="text-text-subtle">
-                      {Math.round((activeValue.scale ?? 1) * 100)}%
-                    </span>
+                    <PercentField
+                      value={activeValue.scale ?? 1}
+                      min={10}
+                      max={300}
+                      onChange={(scale) => activeOnChange({ scale })}
+                      label="Zoom du visuel, en pourcentage"
+                      className="text-text-subtle"
+                    />
                   </div>
                   <input
                     type="range"
@@ -873,12 +933,16 @@ export default function DesignEditor({
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium text-text">Zoom</span>
-                        <span className="text-text-subtle">
-                          {Math.round(
-                            themeAdjust(selectedThemeSlot).scale * 100,
-                          )}
-                          %
-                        </span>
+                        <PercentField
+                          value={themeAdjust(selectedThemeSlot).scale}
+                          min={10}
+                          max={300}
+                          onChange={(scale) =>
+                            updateThemeAdjust(selectedThemeSlot, { scale })
+                          }
+                          label="Zoom de la photo, en pourcentage"
+                          className="text-text-subtle"
+                        />
                       </div>
                       <input
                         type="range"
@@ -1155,9 +1219,14 @@ export default function DesignEditor({
             >
               −
             </button>
-            <span className="w-12 text-center text-xs font-semibold text-text">
-              {Math.round(viewZoom * 100)}%
-            </span>
+            <PercentField
+              value={viewZoom}
+              min={50}
+              max={150}
+              onChange={setViewZoom}
+              label="Échelle d'affichage, en pourcentage"
+              className="w-12 justify-center text-xs font-semibold text-text"
+            />
             <button
               type="button"
               onClick={() =>

@@ -1,4 +1,6 @@
 import { ImageResponse } from "next/og";
+import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { loadAppSettings } from "@/lib/appSettings";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -13,6 +15,22 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function OpengraphImage() {
+  // Image téléversée dans le module Paramètres : elle remplace purement et
+  // simplement l'image générée ci-dessous. Jeu « admin » : c'est le lien du
+  // site qui est partagé, pas l'outil client.
+  const settings = await loadAppSettings(createServerSupabaseClient(), "admin");
+  if (settings.shareImagePath) {
+    const { data } = await createAdminSupabaseClient().storage.from("assets").download(settings.shareImagePath);
+    if (data) {
+      const buffer = Buffer.from(await data.arrayBuffer());
+      // Type réel du fichier, pas la constante `contentType` ci-dessus :
+      // l'image téléversée peut être en JPEG ou WebP.
+      const ext = settings.shareImagePath.split(".").pop()?.toLowerCase();
+      const type = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
+      return new Response(new Uint8Array(buffer), { headers: { "Content-Type": type } });
+    }
+  }
+
   const [logoSvg, gelica] = await Promise.all([
     readFile(path.join(process.cwd(), "public/pico-noir.svg"), "utf8"),
     readFile(path.join(process.cwd(), "public/fonts/gelica-semibold.otf")),

@@ -41,7 +41,9 @@ const config: Config = {
       },
       // Titre de page (h1) : 26 px, soit 30 % de plus que l'ancien text-xl (20 px).
       fontSize: {
-        "page-title": ["1.625rem", { lineHeight: "2.25rem" }],
+        // En var() pour suivre l'échelle typographique réglée dans le
+        // module Paramètres (voir AppSettingsStyle).
+        "page-title": ["var(--page-title-size, 1.625rem)", { lineHeight: "2.25rem" }],
       },
       // Secousse élastique « jello » (Animate.css) : un biais qui s'amortit et
       // revient à zéro. Utilisée sur les icônes du menu du haut au survol.

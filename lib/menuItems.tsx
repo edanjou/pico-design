@@ -1,4 +1,4 @@
-import { ImageIcon, LayoutGridIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { ImageIcon, LayoutGridIcon, PaintbrushVerticalIcon, PencilRulerIcon, PipetteIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -11,7 +11,8 @@ export type MenuKey =
   | "design"
   | "skus"
   | "imposition"
-  | "users";
+  | "users"
+  | "settings";
 
 export const MENU_ITEMS: Record<
   MenuKey,
@@ -67,6 +68,12 @@ export const MENU_ITEMS: Record<
     icon: UsersIcon,
     gradient: "from-violet-400 to-purple-600",
   },
+  settings: {
+    href: "/settings",
+    title: "Paramètres",
+    icon: PipetteIcon,
+    gradient: "from-slate-400 to-slate-600",
+  },
 };
 
 // Ordre par défaut quand l'utilisateur n'a encore rien personnalisé.
@@ -79,6 +86,7 @@ export const DEFAULT_MENU_ORDER: MenuKey[] = [
   "skus",
   "imposition",
   "users",
+  "settings",
 ];
 
 function isMenuKey(value: string): value is MenuKey {

@@ -5,10 +5,12 @@ import { createHmac, timingSafeEqual } from "crypto";
  * `/design?template=<id>&cle=<secret>` ouvre l'éditeur sans connexion, pour
  * un client venant de Shopify.
  *
- * Le secret vit dans PUBLIC_DESIGN_KEY, **jamais** préfixée NEXT_PUBLIC_ :
- * préfixée, Next l'inlinerait dans le JavaScript envoyé au navigateur, où
- * n'importe qui la lirait. Variable absente = mode public désactivé, donc
- * fermé par défaut.
+ * Le secret vit dans DESIGN_LINK_KEY. Le nom évite volontairement tout
+ * préfixe « PUBLIC » : Next n'expose au navigateur que NEXT_PUBLIC_, mais
+ * d'autres outils de la chaîne (Vercel, Vite, Astro) traitent `PUBLIC_`
+ * comme une valeur publiable — un nom qui invite à la confusion sur un
+ * secret n'a rien à faire ici. Variable absente = mode public désactivé,
+ * donc fermé par défaut.
  *
  * Le secret ne quitte pas le serveur. Une fois la clé validée, la page
  * fabrique un LAISSEZ-PASSER à sa place, transmis au navigateur et renvoyé
@@ -18,7 +20,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 const GRANT_TTL_MS = 12 * 60 * 60 * 1000;
 
 function secret(): string | null {
-  const key = process.env.PUBLIC_DESIGN_KEY;
+  const key = process.env.DESIGN_LINK_KEY;
   return key && key.length >= 16 ? key : null;
 }
 

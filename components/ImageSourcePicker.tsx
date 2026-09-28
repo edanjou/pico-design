@@ -97,6 +97,17 @@ export interface ImageSourceValue {
   themePhotoBank?: File[];
 }
 
+// Coins de redimensionnement. Le nom dit quel coin on saisit ; le coin
+// DIAGONALEMENT opposé est celui qui reste fixe.
+const CORNERS = [
+  { id: "nw", sx: -1, sy: -1, className: "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize" },
+  { id: "ne", sx: 1, sy: -1, className: "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize" },
+  { id: "sw", sx: -1, sy: 1, className: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize" },
+  { id: "se", sx: 1, sy: 1, className: "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize" },
+] as const;
+
+type CornerId = (typeof CORNERS)[number]["id"];
+
 // Poignées de rotation/redimensionnement du calque sélectionné — affichées
 // par LayerHandles, imbriquées dans le même conteneur déjà positionné/
 // tourné que le calque (voir son rendu plus bas) : leur position à l'écran
@@ -104,6 +115,12 @@ export interface ImageSourceValue {
 // la poignée de rotation, elle, a besoin de connaître le centre réel du
 // calque à l'écran (`getBoundingClientRect`) pour convertir un mouvement de
 // souris en angle.
+//
+// Redimensionnement : saisir un coin laisse le coin OPPOSÉ en place, comme
+// dans tous les outils de mise en page. Ça oblige à recalculer la taille ET
+// à déplacer le centre, puisqu'un calque est positionné par son centre
+// (positionX/Y) — un redimensionnement purement radial, centré, est ce qui
+// rendait le geste déroutant.
 function LayerHandles({
   layer,
   layers,
@@ -119,11 +136,17 @@ function LayerHandles({
 }) {
   const dragRef = useRef<{
     mode: "rotate" | "resize";
+    corner: CornerId;
     centerX: number;
     centerY: number;
     startAngleDeg: number;
     startRotationDeg: number;
     startDist: number;
+    // Demi-dimensions du calque AVANT rotation (offsetWidth/Height, donc en
+    // pixels de mise en page) : getBoundingClientRect renverrait la boîte
+    // englobante du calque tourné, inutilisable pour ce calcul.
+    halfW: number;
+    halfH: number;
     startFontSizeMm: number;
     startWidthRatio: number;
     startHeightRatio: number;
@@ -136,18 +159,24 @@ function LayerHandles({
     return { x: rect.left + layer.positionX * rect.width, y: rect.top + layer.positionY * rect.height };
   }
 
-  function beginDrag(e: React.PointerEvent<HTMLDivElement>, mode: "rotate" | "resize") {
+  function beginDrag(e: React.PointerEvent<HTMLDivElement>, mode: "rotate" | "resize", corner: CornerId = "se") {
     e.stopPropagation();
     const { x, y } = centerPx();
+    // Le conteneur du calque : ses dimensions de mise en page servent de
+    // référence, la rotation étant appliquée par-dessus en CSS.
+    const host = e.currentTarget.parentElement as HTMLElement | null;
     const startAngleDeg = (Math.atan2(e.clientY - y, e.clientX - x) * 180) / Math.PI;
     const startDist = Math.max(1, Math.hypot(e.clientX - x, e.clientY - y));
     dragRef.current = {
       mode,
+      corner,
       centerX: x,
       centerY: y,
       startAngleDeg,
       startRotationDeg: layer.rotationDeg ?? 0,
       startDist,
+      halfW: Math.max(1, (host?.offsetWidth ?? 2) / 2),
+      halfH: Math.max(1, (host?.offsetHeight ?? 2) / 2),
       startFontSizeMm: layer.type === "text" ? layer.fontSizeMm : 0,
       startWidthRatio: layer.type === "image" || layer.type === "shape" ? layer.widthRatio : 0,
       startHeightRatio: layer.type === "shape" ? layer.heightRatio : 0,
@@ -158,6 +187,7 @@ function LayerHandles({
   function handleMove(e: React.PointerEvent<HTMLDivElement>) {
     const d = dragRef.current;
     if (!d) return;
+
     if (d.mode === "rotate") {
       const angleDeg = (Math.atan2(e.clientY - d.centerY, e.clientX - d.centerX) * 180) / Math.PI;
       let next = d.startRotationDeg + (angleDeg - d.startAngleDeg);
@@ -167,23 +197,72 @@ function LayerHandles({
       if (Math.abs(next - snapped) < 4) next = snapped;
       next = ((next % 360) + 360) % 360;
       onChangeLayers(layers.map((l) => (l.id === layer.id ? { ...l, rotationDeg: next } : l)));
-    } else {
-      const dist = Math.max(1, Math.hypot(e.clientX - d.centerX, e.clientY - d.centerY));
-      const scale = dist / d.startDist;
-      if (layer.type === "text") {
-        const next = Math.min(maxFontSizeMm, Math.max(3, d.startFontSizeMm * scale));
-        onChangeLayers(layers.map((l) => (l.id === layer.id ? { ...l, fontSizeMm: next } : l)));
-      } else if (layer.type === "shape") {
-        const nextWidth = Math.min(1.5, Math.max(0.05, d.startWidthRatio * scale));
-        const nextHeight = Math.min(1.5, Math.max(0.05, d.startHeightRatio * scale));
-        onChangeLayers(
-          layers.map((l) => (l.id === layer.id ? { ...l, widthRatio: nextWidth, heightRatio: nextHeight } : l))
-        );
-      } else {
-        const next = Math.min(1, Math.max(0.05, d.startWidthRatio * scale));
-        onChangeLayers(layers.map((l) => (l.id === layer.id ? { ...l, widthRatio: next } : l)));
-      }
+      return;
     }
+
+    const box = previewBoxRef.current;
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+
+    // On raisonne dans le repère du calque, rotation annulée : sans ça, le
+    // coin « opposé » d'un calque tourné ne serait pas celui qu'on voit.
+    const theta = ((d.startRotationDeg % 360) * Math.PI) / 180;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const dx = e.clientX - d.centerX;
+    const dy = e.clientY - d.centerY;
+    const localX = dx * cos + dy * sin;
+    const localY = -dx * sin + dy * cos;
+
+    const corner = CORNERS.find((c) => c.id === d.corner)!;
+    // Coin fixe = l'opposé de celui qu'on tire.
+    const fixedX = -corner.sx * d.halfW;
+    const fixedY = -corner.sy * d.halfH;
+
+    // Échelle demandée par le geste, puis bornée par les limites du calque.
+    // On recalcule l'échelle effective APRÈS bornage, sinon le coin fixe
+    // dériverait dès qu'on atteint une borne.
+    const wantedHalfW = Math.max(1, Math.abs(localX - fixedX) / 2);
+    const wantedHalfH = Math.max(1, Math.abs(localY - fixedY) / 2);
+
+    let scaleX = wantedHalfW / d.halfW;
+    let scaleY = wantedHalfH / d.halfH;
+    let patch: Partial<DesignLayer> = {};
+
+    if (layer.type === "shape") {
+      const w = Math.min(1.5, Math.max(0.05, d.startWidthRatio * scaleX));
+      const h = Math.min(1.5, Math.max(0.05, d.startHeightRatio * scaleY));
+      scaleX = w / d.startWidthRatio;
+      scaleY = h / d.startHeightRatio;
+      patch = { widthRatio: w, heightRatio: h };
+    } else if (layer.type === "image") {
+      // Une image garde ses proportions : sa hauteur découle de sa largeur.
+      const w = Math.min(1, Math.max(0.05, d.startWidthRatio * scaleX));
+      scaleX = w / d.startWidthRatio;
+      scaleY = scaleX;
+      patch = { widthRatio: w };
+    } else {
+      // Texte : la boîte grandit avec le corps, donc une seule échelle.
+      const size = Math.min(maxFontSizeMm, Math.max(3, d.startFontSizeMm * scaleX));
+      scaleX = size / d.startFontSizeMm;
+      scaleY = scaleX;
+      patch = { fontSizeMm: size };
+    }
+
+    // Nouveau centre : celui qui laisse le coin fixe exactement où il est.
+    const newHalfW = d.halfW * scaleX;
+    const newHalfH = d.halfH * scaleY;
+    const centerLocalX = fixedX + corner.sx * newHalfW;
+    const centerLocalY = fixedY + corner.sy * newHalfH;
+    const centerWorldX = d.centerX + centerLocalX * cos - centerLocalY * sin;
+    const centerWorldY = d.centerY + centerLocalX * sin + centerLocalY * cos;
+
+    const positionX = Math.min(1.5, Math.max(-0.5, (centerWorldX - rect.left) / rect.width));
+    const positionY = Math.min(1.5, Math.max(-0.5, (centerWorldY - rect.top) / rect.height));
+
+    onChangeLayers(
+      layers.map((l) => (l.id === layer.id ? ({ ...l, ...patch, positionX, positionY } as DesignLayer) : l))
+    );
   }
 
   function endDrag() {
@@ -200,14 +279,17 @@ function LayerHandles({
         aria-label="Pivoter le calque"
         className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-7 cursor-alias touch-none rounded-full border-2 border-[var(--accent)] bg-white shadow"
       />
-      <div
-        onPointerDown={(e) => beginDrag(e, "resize")}
-        onPointerMove={handleMove}
-        onPointerUp={endDrag}
-        role="button"
-        aria-label="Redimensionner le calque"
-        className="absolute bottom-0 right-0 h-3 w-3 translate-x-1/2 translate-y-1/2 cursor-nwse-resize touch-none rounded-sm border-2 border-[var(--accent)] bg-white shadow"
-      />
+      {CORNERS.map((corner) => (
+        <div
+          key={corner.id}
+          onPointerDown={(e) => beginDrag(e, "resize", corner.id)}
+          onPointerMove={handleMove}
+          onPointerUp={endDrag}
+          role="button"
+          aria-label={`Redimensionner le calque (coin ${corner.id})`}
+          className={`absolute h-3 w-3 touch-none rounded-sm border-2 border-[var(--accent)] bg-white shadow ${corner.className}`}
+        />
+      ))}
     </>
   );
 }

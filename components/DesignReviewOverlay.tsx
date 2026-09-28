@@ -98,6 +98,7 @@ export default function DesignReviewOverlay({
   mosaicGrid,
   selectedTheme,
   mockups,
+  grant,
   onClose,
   onRestart,
 }: {
@@ -116,6 +117,9 @@ export default function DesignReviewOverlay({
   // supabase/migrations/0049_template_mockups.sql). Vide = on retombe sur
   // le rendu par côté (recto/verso), comme avant.
   mockups: TemplateMockup[];
+  // Laissez-passer du mode public (voir lib/publicDesign.ts) : il remplace
+  // la session pour /api/design/pdf et /api/design/mockup.
+  grant?: string;
   onClose: () => void;
   onRestart: () => void;
 }) {
@@ -163,6 +167,7 @@ export default function DesignReviewOverlay({
       try {
         const body = new FormData();
         body.append("templateId", template.id);
+        if (grant) body.append("grant", grant);
         body.append("rotated", String(rotated));
         if (front.sourceMode === "theme" && selectedTheme) {
           appendThemeToForm(body, front, selectedTheme.id);
@@ -239,6 +244,7 @@ export default function DesignReviewOverlay({
         }
         const body = new FormData();
         body.append("templateId", template.id);
+        if (grant) body.append("grant", grant);
         body.append("rotated", String(rotated));
         body.append("side", side);
         // Quel mockup rendre, quand le modèle en a plusieurs.

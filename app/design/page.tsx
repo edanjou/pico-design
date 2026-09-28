@@ -1,5 +1,7 @@
-import { createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
+import { createAdminSupabaseClient, createServerSupabaseClient, requireUser } from "@/lib/supabase/server";
 import DesignTool from "@/components/DesignTool";
+import { redirect } from "next/navigation";
+import { createGrant, isValidPublicKey, verifyGrant } from "@/lib/publicDesign";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Sku, Template, TemplateMockup, Theme, Visual } from "@/lib/types";
@@ -9,7 +11,33 @@ import type { Category, Sku, Template, TemplateMockup, Theme, Visual } from "@/l
 // supabase/migrations/0046_themes.sql) — plus de notion de Produit (ni de
 // collection) ici, l'outil ne fait que préparer un design (aperçu +
 // téléchargement), il n'enregistre rien.
-export default async function DesignPage() {
+//
+// Deux entrées possibles :
+// - interne, avec une session : tout le catalogue, galerie de modèles ;
+// - publique, par un lien `?template=<id>&cle=<secret>` venant de Shopify :
+//   pas de connexion, et STRICTEMENT le modèle demandé (voir
+//   lib/publicDesign.ts). La lecture y passe par le client admin, faute de
+//   session à autoriser côté RLS.
+export default async function DesignPage({
+  searchParams,
+}: {
+  searchParams?: { template?: string; cle?: string; jeton?: string };
+}) {
+  const templateId = searchParams?.template;
+
+  // Le secret est échangé contre un laissez-passer dès l'arrivée, puis
+  // disparaît de l'adresse. Il ne traîne donc ni dans l'historique, ni dans
+  // les en-têtes Referer, ni dans le code de la page — contrairement au
+  // jeton, qui ne vaut que pour ce modèle et que douze heures.
+  if (templateId && isValidPublicKey(searchParams?.cle)) {
+    const grant = createGrant(templateId);
+    if (grant) redirect(`/design?template=${encodeURIComponent(templateId)}&jeton=${encodeURIComponent(grant)}`);
+  }
+
+  if (templateId && verifyGrant(searchParams?.jeton) === templateId) {
+    return publicTool(templateId, searchParams!.jeton!);
+  }
+
   await requireUser();
   const supabase = createServerSupabaseClient();
   const [
@@ -57,6 +85,61 @@ export default async function DesignPage() {
       visuals={visualsWithUrls}
       themes={themesWithUrls}
       mockups={(mockups as TemplateMockup[]) ?? []}
+    />
+  );
+}
+
+/**
+ * Entrée publique : un seul modèle, ses thèmes et ses mockups. Rien d'autre
+ * n'est envoyé au navigateur — ni les autres modèles, ni la banque de
+ * visuels (commune à tous, elle fuirait bien au-delà du lien), ni le secret,
+ * remplacé par un laissez-passer limité à ce modèle.
+ */
+async function publicTool(templateId: string, grant: string) {
+  const admin = createAdminSupabaseClient();
+
+  const { data: template } = await admin.from("templates").select("*").eq("id", templateId).maybeSingle();
+  if (!template) {
+    return (
+      <main className="mx-auto max-w-lg px-4 py-16 text-center">
+        <h1 className="font-display text-page-title text-text">Modèle introuvable</h1>
+        <p className="mt-2 text-sm text-text-muted">
+          Ce lien ne correspond à aucun produit. Vérifie l&apos;adresse, ou contacte-nous.
+        </p>
+      </main>
+    );
+  }
+
+  const row = template as Template;
+  const [{ data: categories }, { data: skus }, { data: themes }, { data: mockups }] = await Promise.all([
+    admin.from("categories").select("*").eq("id", row.category_id),
+    row.sku_id ? admin.from("skus").select("*").eq("id", row.sku_id) : Promise.resolve({ data: [] }),
+    admin.from("themes").select("*").eq("template_id", row.id).order("name", { ascending: true }),
+    admin
+      .from("template_mockups")
+      .select("*")
+      .eq("template_id", row.id)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ]);
+
+  const themesWithUrls: ThemeWithOverlayUrl[] = await Promise.all(
+    ((themes as Theme[]) ?? []).map(async (t) => {
+      const { data } = await admin.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30);
+      return { ...t, overlayUrl: data?.signedUrl ?? null };
+    })
+  );
+
+  return (
+    <DesignTool
+      templates={[row]}
+      categories={(categories as Category[]) ?? []}
+      skus={(skus as Sku[]) ?? []}
+      visuals={[]}
+      themes={themesWithUrls}
+      mockups={(mockups as TemplateMockup[]) ?? []}
+      publicTemplateId={row.id}
+      grant={grant}
     />
   );
 }

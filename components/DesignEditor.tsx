@@ -288,6 +288,7 @@ export default function DesignEditor({
   selectedTheme,
   onChangeDesignType,
   onChangeModel,
+  grant,
   onReview,
 }: {
   category: Category;
@@ -319,7 +320,10 @@ export default function DesignEditor({
       theme?: ThemeWithOverlayUrl;
     },
   ) => void;
-  onChangeModel: () => void;
+  // Absent en mode public : il n'y a pas d'autre modèle à proposer.
+  onChangeModel?: () => void;
+  // Laissez-passer joint aux appels d'API quand il n'y a pas de session.
+  grant?: string;
   onReview: () => void;
 }) {
   const [activeSide, setActiveSide] = useState<"front" | "back">("front");
@@ -499,13 +503,15 @@ export default function DesignEditor({
               {template.two_sided ? " · Recto verso" : " · Recto"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onChangeModel}
-            className="ml-2 shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-muted"
-          >
-            Changer de modèle
-          </button>
+          {onChangeModel && (
+            <button
+              type="button"
+              onClick={onChangeModel}
+              className="ml-2 shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-muted"
+            >
+              Changer de modèle
+            </button>
+          )}
         </div>
 
         {template.two_sided && (
@@ -823,6 +829,7 @@ export default function DesignEditor({
                 key={`${side}-file`}
                 side={side}
                 template={template}
+                grant={grant}
                 rotated={rotated}
                 visuals={visuals}
                 value={activeValue}
@@ -1158,6 +1165,7 @@ export default function DesignEditor({
               key={side}
               side={side}
               template={template}
+              grant={grant}
               rotated={rotated}
               visuals={visuals}
               value={activeValue}

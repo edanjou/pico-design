@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
+import { grantAllows } from "@/lib/publicDesign";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
 import { loadLogoImage } from "@/lib/pdf/logo";
@@ -16,10 +17,13 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
-
   const formData = await request.formData();
   const templateId = formData.get("templateId");
+  // Voir /api/design/mockup : lien public accepté pour ce seul modèle.
+  if (!user && !grantAllows(formData.get("grant"), typeof templateId === "string" ? templateId : "")) {
+    return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+  const db = user ? supabase : createAdminSupabaseClient();
   const file = formData.get("image");
   // Page à afficher quand l'image est un PDF (le verso d'un PDF de deux pages est la page 2).
   const pdfPage = Math.max(1, Math.floor(Number(formData.get("pdfPage"))) || 1);
@@ -83,7 +87,7 @@ export async function POST(request: Request) {
   const clampedPositionX = parsePositionValue(positionX);
   const clampedPositionY = parsePositionValue(positionY);
 
-  const { data: rawTemplate, error: templateError } = await supabase
+  const { data: rawTemplate, error: templateError } = await db
     .from("templates")
     .select("*")
     .eq("id", templateId)
@@ -129,7 +133,7 @@ export async function POST(request: Request) {
 
   let resolved;
   try {
-    resolved = await resolveProductImage(supabase, {
+    resolved = await resolveProductImage(db, {
       templateId,
       file: file instanceof File && file.size > 0 ? file : null,
       pdfPage,

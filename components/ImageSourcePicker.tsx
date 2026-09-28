@@ -417,6 +417,8 @@ function ThemeSlotDropTarget({
 export default function ImageSourcePicker({
   side,
   template,
+  // Laissez-passer du mode public : remplace la session pour /api/products/preview.
+  grant,
   rotated,
   visuals,
   value,
@@ -443,6 +445,8 @@ export default function ImageSourcePicker({
 }: {
   side: "front" | "back";
   template: Template | null;
+  // Laissez-passer du mode public (voir lib/publicDesign.ts).
+  grant?: string;
   rotated: boolean;
   visuals: VisualWithUrl[];
   value: ImageSourceValue;
@@ -650,6 +654,7 @@ export default function ImageSourcePicker({
 
       const formData = new FormData();
       formData.append("templateId", template.id);
+      if (grant) formData.append("grant", grant);
       formData.append("mode", "frame");
       formData.append("side", side);
       formData.append("rotated", String(rotated));
@@ -729,6 +734,7 @@ export default function ImageSourcePicker({
 
       const formData = new FormData();
       formData.append("templateId", template.id);
+      if (grant) formData.append("grant", grant);
       if (isMosaic) {
         formData.append("mosaicCols", String(mosaicGrid.cols));
         formData.append("mosaicRows", String(mosaicGrid.rows));

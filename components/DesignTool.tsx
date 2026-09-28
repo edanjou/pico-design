@@ -62,6 +62,8 @@ export default function DesignTool({
   visuals,
   themes,
   mockups,
+  publicTemplateId,
+  grant,
 }: {
   templates: Template[];
   categories: Category[];
@@ -71,10 +73,20 @@ export default function DesignTool({
   // Mockups de TOUS les modèles — filtrés par modèle courant plus bas,
   // comme `themes`.
   mockups: TemplateMockup[];
+  // Entrée publique (lien Shopify, voir app/design/page.tsx) : un seul
+  // modèle, imposé — pas de galerie, pas de changement de modèle.
+  publicTemplateId?: string;
+  // Laissez-passer joint à chaque appel d'API à la place d'une session.
+  grant?: string;
 }) {
-  const [phase, setPhase] = useState<"pick" | "editor">("pick");
-  const [category, setCategory] = useState<Category | null>(null);
-  const [template, setTemplate] = useState<Template | null>(null);
+  const initialTemplate = publicTemplateId ? templates.find((t) => t.id === publicTemplateId) ?? null : null;
+  // En mode public on entre directement dans l'éditeur : il n'y a rien à
+  // choisir, et la galerie exposerait un catalogue qu'on ne veut pas montrer.
+  const [phase, setPhase] = useState<"pick" | "editor">(initialTemplate ? "editor" : "pick");
+  const [category, setCategory] = useState<Category | null>(
+    initialTemplate ? categories.find((c) => c.id === initialTemplate.category_id) ?? null : null
+  );
+  const [template, setTemplate] = useState<Template | null>(initialTemplate);
   const [rotated, setRotated] = useState(false);
   const [front, setFront] = useState<ImageSourceValue>(() => emptySource(visuals));
   const [back, setBack] = useState<ImageSourceValue>(() => emptySource(visuals));
@@ -265,7 +277,9 @@ export default function DesignTool({
           mosaicGrid={mosaicGrid}
           selectedTheme={selectedTheme}
           onChangeDesignType={handleSelectDesignType}
-          onChangeModel={() => setPhase("pick")}
+          // En mode public il n'y a pas d'autre modèle à proposer.
+          onChangeModel={publicTemplateId ? undefined : () => setPhase("pick")}
+          grant={grant}
           onReview={() => setReviewOpen(true)}
         />
       )}
@@ -284,6 +298,7 @@ export default function DesignTool({
           mosaicGrid={mosaicGrid}
           selectedTheme={selectedTheme}
           mockups={mockupsForTemplate}
+          grant={grant}
           onClose={() => setReviewOpen(false)}
           onRestart={handleRestart}
         />

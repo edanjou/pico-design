@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import { grantAllows } from "@/lib/publicDesign";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
 import { coverCropToBuffer, parsePositionValue } from "@/lib/pdf/crop";
@@ -76,11 +77,15 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return errorResponse("Non authentifié.", 401);
-
   const formData = await request.formData();
   const templateId = formData.get("templateId");
   if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
+  // Voir /api/design/mockup : lien public accepté, mais seulement pour le
+  // modèle que le laissez-passer désigne.
+  if (!user && !grantAllows(formData.get("grant"), templateId)) {
+    return errorResponse("Non authentifié.", 401);
+  }
+  const db = user ? supabase : createAdminSupabaseClient();
   const rotated = formData.get("rotated") === "true";
 
   // Optionnel : sans fichier, le recto se compose quand même — un canvas
@@ -102,7 +107,7 @@ export async function POST(request: Request) {
   const layers = await resolveLayersFromForm(formData, "front");
   const backLayers = await resolveLayersFromForm(formData, "back");
 
-  const { data: rawTemplate, error: templateError } = await supabase
+  const { data: rawTemplate, error: templateError } = await db
     .from("templates")
     .select("*")
     .eq("id", templateId)
@@ -115,7 +120,7 @@ export async function POST(request: Request) {
   // donc le fichier téléchargé porte le même nom.
   let skuCode: string | null = null;
   if (rawTemplate.sku_id) {
-    const { data: sku } = await supabase.from("skus").select("sku").eq("id", rawTemplate.sku_id).single<{ sku: string }>();
+    const { data: sku } = await db.from("skus").select("sku").eq("id", rawTemplate.sku_id).single<{ sku: string }>();
     skuCode = sku?.sku ?? null;
   }
 
@@ -130,7 +135,7 @@ export async function POST(request: Request) {
   let frontBuffer: Buffer | null = null;
   if (themeId) {
     try {
-      const front = await resolveProductImage(supabase, {
+      const front = await resolveProductImage(db, {
         templateId,
         file: null,
         visualId: null,
@@ -147,7 +152,7 @@ export async function POST(request: Request) {
     }
   } else if (frontMosaicFiles) {
     try {
-      const front = await resolveProductImage(supabase, {
+      const front = await resolveProductImage(db, {
         templateId,
         file: null,
         visualId: null,
@@ -164,7 +169,7 @@ export async function POST(request: Request) {
     }
   } else if (frontFile instanceof File && frontFile.size > 0) {
     try {
-      const front = await resolveProductImage(supabase, {
+      const front = await resolveProductImage(db, {
         templateId,
         file: frontFile,
         pdfPage: frontPdfPage,
@@ -183,7 +188,7 @@ export async function POST(request: Request) {
   if (rawTemplate.two_sided) {
     if (backMosaicFiles) {
       try {
-        const back = await resolveProductImage(supabase, {
+        const back = await resolveProductImage(db, {
           templateId,
           file: null,
           visualId: null,
@@ -200,7 +205,7 @@ export async function POST(request: Request) {
       }
     } else if (backFile instanceof File && backFile.size > 0) {
       try {
-        const back = await resolveProductImage(supabase, {
+        const back = await resolveProductImage(db, {
           templateId,
           file: backFile,
           pdfPage: backPdfPage,

@@ -5,6 +5,7 @@ import { generateProductMockupPng } from "@/lib/pdf/mockup";
 import { generateBeautyShotMockupPng } from "@/lib/pdf/beautyShot";
 import { loadBeautyShotBundle } from "@/lib/pdf/beautyShotBundle";
 import { resolveMockupBundle } from "@/lib/templateMockups";
+import { grantAllows } from "@/lib/publicDesign";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
@@ -55,11 +56,16 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return errorResponse("Non authentifié.", 401);
-
   const formData = await request.formData();
   const templateId = formData.get("templateId");
   if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
+  // Sans session, un laissez-passer valable POUR CE MODÈLE suffit (lien
+  // public, voir lib/publicDesign.ts). Les lectures passent alors par le
+  // client admin : la RLS n'aurait personne à autoriser.
+  if (!user && !grantAllows(formData.get("grant"), templateId)) {
+    return errorResponse("Non authentifié.", 401);
+  }
+  const db = user ? supabase : createAdminSupabaseClient();
   const rotated = formData.get("rotated") === "true";
   const side = formData.get("side") === "back" ? "back" : "front";
   // Quel mockup rendre, quand le modèle en a plusieurs (voir
@@ -106,7 +112,7 @@ export async function POST(request: Request) {
     return new NextResponse(null, { status: 204 });
   }
 
-  const { data: rawTemplate, error: templateError } = await supabase
+  const { data: rawTemplate, error: templateError } = await db
     .from("templates")
     .select("*")
     .eq("id", templateId)
@@ -116,7 +122,7 @@ export async function POST(request: Request) {
   // Le bundle peut venir de la table template_mockups (un modèle peut en
   // avoir plusieurs) ou, à défaut, des colonnes héritées du modèle — voir
   // resolveMockupBundle.
-  const bundle = await resolveMockupBundle(supabase, rawTemplate, mockupId);
+  const bundle = await resolveMockupBundle(db, rawTemplate, mockupId);
   if (mockupId && !bundle) return errorResponse("Mockup introuvable pour ce modèle.", 404);
   const hasRealisticBundle = Boolean(bundle || (rawTemplate.mask_path && rawTemplate.shading_path));
 
@@ -132,7 +138,7 @@ export async function POST(request: Request) {
   let resolvedBuffer: Buffer | null = null;
   if (themeId) {
     try {
-      const resolved = await resolveProductImage(supabase, {
+      const resolved = await resolveProductImage(db, {
         templateId,
         file: null,
         visualId: null,
@@ -149,7 +155,7 @@ export async function POST(request: Request) {
     }
   } else if (hasMosaic) {
     try {
-      const resolved = await resolveProductImage(supabase, {
+      const resolved = await resolveProductImage(db, {
         templateId,
         file: null,
         visualId: null,
@@ -166,7 +172,7 @@ export async function POST(request: Request) {
     }
   } else if (hasFile) {
     try {
-      const resolved = await resolveProductImage(supabase, {
+      const resolved = await resolveProductImage(db, {
         templateId,
         file,
         pdfPage,

@@ -64,6 +64,7 @@ export default function DesignTool({
   mockups,
   publicTemplateId,
   grant,
+  shopify,
 }: {
   templates: Template[];
   categories: Category[];
@@ -78,6 +79,9 @@ export default function DesignTool({
   publicTemplateId?: string;
   // Laissez-passer joint à chaque appel d'API à la place d'une session.
   grant?: string;
+  // Contexte de commande venu de Shopify : sa présence change la fin du
+  // parcours — enregistrer et repartir au panier, au lieu de télécharger.
+  shopify?: { variantId: string; quantity: number; returnUrl: string | null };
 }) {
   const initialTemplate = publicTemplateId ? templates.find((t) => t.id === publicTemplateId) ?? null : null;
   // En mode public on entre directement dans l'éditeur : il n'y a rien à
@@ -299,6 +303,7 @@ export default function DesignTool({
           selectedTheme={selectedTheme}
           mockups={mockupsForTemplate}
           grant={grant}
+          shopify={shopify}
           onClose={() => setReviewOpen(false)}
           onRestart={handleRestart}
         />

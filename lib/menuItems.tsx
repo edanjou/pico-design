@@ -11,6 +11,7 @@ export type MenuKey =
   | "design"
   | "skus"
   | "imposition"
+  | "orders"
   | "users"
   | "settings";
 
@@ -68,6 +69,12 @@ export const MENU_ITEMS: Record<
     icon: UsersIcon,
     gradient: "from-violet-400 to-purple-600",
   },
+  orders: {
+    href: "/orders",
+    title: "Commandes",
+    icon: TagIcon,
+    gradient: "from-amber-400 to-orange-600",
+  },
   settings: {
     href: "/settings",
     title: "Paramètres",
@@ -85,6 +92,7 @@ export const DEFAULT_MENU_ORDER: MenuKey[] = [
   "design",
   "skus",
   "imposition",
+  "orders",
   "users",
   "settings",
 ];

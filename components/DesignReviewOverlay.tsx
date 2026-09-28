@@ -99,6 +99,7 @@ export default function DesignReviewOverlay({
   selectedTheme,
   mockups,
   grant,
+  shopify,
   onClose,
   onRestart,
 }: {
@@ -120,6 +121,11 @@ export default function DesignReviewOverlay({
   // Laissez-passer du mode public (voir lib/publicDesign.ts) : il remplace
   // la session pour /api/design/pdf et /api/design/mockup.
   grant?: string;
+  // Contexte transmis par Shopify (voir app/design/page.tsx) : présent
+  // uniquement quand le client vient d'une fiche produit. Son design est
+  // alors enregistré et il repart vers le panier, au lieu de repartir avec
+  // un PDF.
+  shopify?: { variantId: string; quantity: number; returnUrl: string | null };
   onClose: () => void;
   onRestart: () => void;
 }) {
@@ -147,6 +153,44 @@ export default function DesignReviewOverlay({
   // Échap/clic la referme. Le mockup est l'élément qu'on vient vraiment
   // regarder dans ce résumé : il doit pouvoir être inspecté de près.
   const [zoomed, setZoomed] = useState<{ url: string; label: string } | null>(null);
+  const [ordering, setOrdering] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  /**
+   * Enregistre le design puis renvoie le client vers son panier Shopify.
+   * L'identifiant du design voyage en propriété de ligne « _design » : le
+   * préfixe « _ » est la convention Shopify pour une propriété masquée au
+   * client, et c'est cette valeur que le webhook lit pour rattacher la
+   * commande payée à son design.
+   */
+  async function handleOrder() {
+    if (!shopify) return;
+    setOrdering(true);
+    setOrderError(null);
+    try {
+      const body = buildPdfFormData();
+      body.append("variantId", shopify.variantId);
+      body.append("quantity", String(shopify.quantity));
+      const res = await fetch("/api/design/submit", { method: "POST", body });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Erreur lors de l'enregistrement du design.");
+      }
+      const { id } = await res.json();
+      // Sans URL de retour, on retombe sur la route de panier standard de
+      // Shopify, relative à la boutique d'origine.
+      const base = shopify.returnUrl ?? "/cart/add";
+      const params = new URLSearchParams({
+        id: shopify.variantId,
+        quantity: String(shopify.quantity),
+        "properties[_design]": id,
+      });
+      window.location.href = `${base}${base.includes("?") ? "&" : "?"}${params}`;
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : "Erreur lors de l'enregistrement.");
+      setOrdering(false);
+    }
+  }
 
   const sku = skus.find((s) => s.id === template.sku_id) ?? null;
 
@@ -159,46 +203,56 @@ export default function DesignReviewOverlay({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [zoomed]);
 
+  /**
+   * Le FormData du PDF — les ingrédients complets du design. Extrait ici
+   * parce qu'il sert DEUX fois : pour fabriquer le PDF à télécharger, et
+   * pour enregistrer le design quand le client repart commander sur Shopify.
+   * Une seconde construction finirait par diverger de celle-ci.
+   */
+  function buildPdfFormData(): FormData {
+      const body = new FormData();
+      body.append("templateId", template.id);
+      if (grant) body.append("grant", grant);
+      body.append("rotated", String(rotated));
+      if (front.sourceMode === "theme" && selectedTheme) {
+        appendThemeToForm(body, front, selectedTheme.id);
+      } else if (front.sourceMode === "mosaic") {
+        appendMosaicToForm(body, front, mosaicGrid, false);
+      } else if (front.file) {
+        body.append("image", front.file);
+      }
+      body.append("pdfPage", "1");
+      body.append("positionX", String(front.positionX));
+      body.append("positionY", String(front.positionY));
+      body.append("zoom", String(front.scale ?? 1));
+      body.append("imageRotation", String(front.rotation ?? 0));
+      appendLayersToForm(body, "front", frontLayers);
+      if (template.two_sided) {
+        if (back.sourceMode === "mosaic") {
+          appendMosaicToForm(body, back, mosaicGrid, true);
+        } else if (backFromPdf) {
+          body.append("backImage", backFromPdf.file);
+          body.append("backPdfPage", String(backFromPdf.page));
+        } else if (back.file) {
+          body.append("backImage", back.file);
+          body.append("backPdfPage", "1");
+        }
+        body.append("backPositionX", String(back.positionX));
+        body.append("backPositionY", String(back.positionY));
+        body.append("backZoom", String(back.scale ?? 1));
+        body.append("backImageRotation", String(back.rotation ?? 0));
+        appendLayersToForm(body, "back", backLayers);
+      }
+    return body;
+  }
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     (async () => {
       try {
-        const body = new FormData();
-        body.append("templateId", template.id);
-        if (grant) body.append("grant", grant);
-        body.append("rotated", String(rotated));
-        if (front.sourceMode === "theme" && selectedTheme) {
-          appendThemeToForm(body, front, selectedTheme.id);
-        } else if (front.sourceMode === "mosaic") {
-          appendMosaicToForm(body, front, mosaicGrid, false);
-        } else if (front.file) {
-          body.append("image", front.file);
-        }
-        body.append("pdfPage", "1");
-        body.append("positionX", String(front.positionX));
-        body.append("positionY", String(front.positionY));
-        body.append("zoom", String(front.scale ?? 1));
-        body.append("imageRotation", String(front.rotation ?? 0));
-        appendLayersToForm(body, "front", frontLayers);
-        if (template.two_sided) {
-          if (back.sourceMode === "mosaic") {
-            appendMosaicToForm(body, back, mosaicGrid, true);
-          } else if (backFromPdf) {
-            body.append("backImage", backFromPdf.file);
-            body.append("backPdfPage", String(backFromPdf.page));
-          } else if (back.file) {
-            body.append("backImage", back.file);
-            body.append("backPdfPage", "1");
-          }
-          body.append("backPositionX", String(back.positionX));
-          body.append("backPositionY", String(back.positionY));
-          body.append("backZoom", String(back.scale ?? 1));
-          body.append("backImageRotation", String(back.rotation ?? 0));
-          appendLayersToForm(body, "back", backLayers);
-        }
-
+        const body = buildPdfFormData();
         const res = await fetch("/api/design/pdf", { method: "POST", body });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -343,16 +397,35 @@ export default function DesignReviewOverlay({
             )}
             {error && <p className="text-sm text-danger">{error}</p>}
 
-            {pdf && (
+            {orderError && <p className="text-sm text-danger">{orderError}</p>}
+
+            {/* Venu d'une fiche produit Shopify : son design est enregistré
+                et il repart au panier. Sinon (usage interne, ou lien public
+                sans contexte de commande), le PDF se télécharge comme avant. */}
+            {shopify ? (
               <div className="flex justify-center lg:justify-start">
-                <a
-                  href={pdf.url}
-                  download={pdf.filename}
-                  className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-medium text-text-on-brand hover:bg-primary-hover"
+                <button
+                  type="button"
+                  onClick={handleOrder}
+                  disabled={ordering || loading}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-text-on-brand hover:bg-primary-hover disabled:opacity-50"
                 >
-                  Télécharger le PDF
-                </a>
+                  {ordering && <SpinnerIcon className="h-4 w-4" />}
+                  {ordering ? "Enregistrement..." : "Ajouter au panier"}
+                </button>
               </div>
+            ) : (
+              pdf && (
+                <div className="flex justify-center lg:justify-start">
+                  <a
+                    href={pdf.url}
+                    download={pdf.filename}
+                    className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-medium text-text-on-brand hover:bg-primary-hover"
+                  >
+                    Télécharger le PDF
+                  </a>
+                </div>
+              )
             )}
           </div>
 

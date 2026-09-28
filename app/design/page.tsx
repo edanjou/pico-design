@@ -21,7 +21,7 @@ import type { Category, Sku, Template, TemplateMockup, Theme, Visual } from "@/l
 export default async function DesignPage({
   searchParams,
 }: {
-  searchParams?: { template?: string; cle?: string; jeton?: string };
+  searchParams?: { template?: string; cle?: string; jeton?: string; variant?: string; quantity?: string; retour?: string };
 }) {
   const templateId = searchParams?.template;
 
@@ -29,13 +29,28 @@ export default async function DesignPage({
   // disparaît de l'adresse. Il ne traîne donc ni dans l'historique, ni dans
   // les en-têtes Referer, ni dans le code de la page — contrairement au
   // jeton, qui ne vaut que pour ce modèle et que douze heures.
+  // Contexte de commande transmis par la fiche produit Shopify : variante,
+  // quantité et adresse de retour. Conservé à travers l'échange clé →
+  // laissez-passer, sinon le client perdrait son panier en route.
+  const shopifyParams = new URLSearchParams();
+  if (searchParams?.variant) shopifyParams.set("variant", searchParams.variant);
+  if (searchParams?.quantity) shopifyParams.set("quantity", searchParams.quantity);
+  if (searchParams?.retour) shopifyParams.set("retour", searchParams.retour);
+  const suffix = shopifyParams.toString() ? `&${shopifyParams}` : "";
+
   if (templateId && isValidPublicKey(searchParams?.cle)) {
     const grant = createGrant(templateId);
-    if (grant) redirect(`/design?template=${encodeURIComponent(templateId)}&jeton=${encodeURIComponent(grant)}`);
+    if (grant) {
+      redirect(`/design?template=${encodeURIComponent(templateId)}&jeton=${encodeURIComponent(grant)}${suffix}`);
+    }
   }
 
   if (templateId && verifyGrant(searchParams?.jeton) === templateId) {
-    return publicTool(templateId, searchParams!.jeton!);
+    return publicTool(templateId, searchParams!.jeton!, {
+      variantId: searchParams?.variant ?? null,
+      quantity: Math.max(1, Math.floor(Number(searchParams?.quantity)) || 1),
+      returnUrl: searchParams?.retour ?? null,
+    });
   }
 
   await requireUser();
@@ -95,7 +110,11 @@ export default async function DesignPage({
  * visuels (commune à tous, elle fuirait bien au-delà du lien), ni le secret,
  * remplacé par un laissez-passer limité à ce modèle.
  */
-async function publicTool(templateId: string, grant: string) {
+async function publicTool(
+  templateId: string,
+  grant: string,
+  shopify: { variantId: string | null; quantity: number; returnUrl: string | null }
+) {
   const admin = createAdminSupabaseClient();
 
   const { data: template } = await admin.from("templates").select("*").eq("id", templateId).maybeSingle();
@@ -140,6 +159,7 @@ async function publicTool(templateId: string, grant: string) {
       mockups={(mockups as TemplateMockup[]) ?? []}
       publicTemplateId={row.id}
       grant={grant}
+      shopify={shopify.variantId ? { variantId: shopify.variantId, quantity: shopify.quantity, returnUrl: shopify.returnUrl } : undefined}
     />
   );
 }

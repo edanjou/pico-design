@@ -1,5 +1,9 @@
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
-import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  createAdminSupabaseClient,
+  createServerSupabaseClient,
+} from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
 import { renderPdfFromForm } from "@/lib/design/renderPdf";
 
@@ -29,11 +33,18 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   const formData = await request.formData();
   const templateId = formData.get("templateId");
-  if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
+  if (typeof templateId !== "string")
+    return errorResponse("Paramètre manquant (templateId).");
   // Voir /api/design/mockup : lien public accepté, mais seulement pour le
   // modèle que le laissez-passer désigne.
   if (!user && !grantAllows(formData.get("grant"), templateId)) {
     return errorResponse("Non authentifié.", 401);
+  }
+  // Appel public : compter et plafonner (voir lib/rateLimit.ts). Les
+  // utilisateurs connectés ne sont pas limités.
+  if (!user) {
+    const limit = await checkRateLimit("pdf", request);
+    if (!limit.allowed) return tooManyRequests("pdf");
   }
   const db = user ? supabase : createAdminSupabaseClient();
 
@@ -47,6 +58,10 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : "Erreur lors de la génération du PDF.");
+    return errorResponse(
+      err instanceof Error
+        ? err.message
+        : "Erreur lors de la génération du PDF.",
+    );
   }
 }

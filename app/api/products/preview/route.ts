@@ -1,6 +1,10 @@
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
 import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
-import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
+import {
+  createServerSupabaseClient,
+  createAdminSupabaseClient,
+} from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
@@ -20,8 +24,18 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const templateId = formData.get("templateId");
   // Voir /api/design/mockup : lien public accepté pour ce seul modèle.
-  if (!user && !grantAllows(formData.get("grant"), typeof templateId === "string" ? templateId : "")) {
+  if (
+    !user &&
+    !grantAllows(
+      formData.get("grant"),
+      typeof templateId === "string" ? templateId : "",
+    )
+  ) {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+  if (!user) {
+    const limit = await checkRateLimit("preview", request);
+    if (!limit.allowed) return tooManyRequests("preview");
   }
   const db = user ? supabase : createAdminSupabaseClient();
   const file = formData.get("image");
@@ -35,8 +49,10 @@ export async function POST(request: Request) {
   // mosaïque (comportement d'origine, aucun appelant existant n'envoie ça).
   const mosaicColsRaw = parseInt(String(formData.get("mosaicCols") ?? ""), 10);
   const mosaicRowsRaw = parseInt(String(formData.get("mosaicRows") ?? ""), 10);
-  const mosaicCols = Number.isFinite(mosaicColsRaw) && mosaicColsRaw > 0 ? mosaicColsRaw : null;
-  const mosaicRows = Number.isFinite(mosaicRowsRaw) && mosaicRowsRaw > 0 ? mosaicRowsRaw : null;
+  const mosaicCols =
+    Number.isFinite(mosaicColsRaw) && mosaicColsRaw > 0 ? mosaicColsRaw : null;
+  const mosaicRows =
+    Number.isFinite(mosaicRowsRaw) && mosaicRowsRaw > 0 ? mosaicRowsRaw : null;
   const mosaicFiles: (File | null)[] | null =
     mosaicCols && mosaicRows
       ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
@@ -50,12 +66,15 @@ export async function POST(request: Request) {
   // réel d'emplacements du thème (`theme.slots.length`), pas besoin de
   // connaître ce nombre ici pour construire le tableau.
   const themeIdRaw = formData.get("themeId");
-  const themeId = typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
+  const themeId =
+    typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
   const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
     const f = formData.get(`themeSlot${i}`);
     return f instanceof File && f.size > 0 ? f : null;
   });
-  const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
+  const themeSlotAdjust = parseThemeSlotAdjustField(
+    formData.get("themeSlotAdjust"),
+  );
   const logoShape = formData.get("logoShape");
   const logoColor = formData.get("logoColor");
   const logoSecondaryColor = formData.get("logoSecondaryColor");
@@ -81,7 +100,10 @@ export async function POST(request: Request) {
   const zoom = Number.isFinite(zoomValue) && zoomValue >= 0.1 ? zoomValue : 1;
 
   if (typeof templateId !== "string") {
-    return NextResponse.json({ error: "Paramètre manquant (templateId)." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Paramètre manquant (templateId)." },
+      { status: 400 },
+    );
   }
 
   const clampedPositionX = parsePositionValue(positionX);
@@ -104,16 +126,23 @@ export async function POST(request: Request) {
     let overlayBuffer: Buffer | null = null;
     const showLogo =
       logoEnabled &&
-      (side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back);
+      (side === "front"
+        ? template.logo_on_front
+        : template.two_sided && template.logo_on_back);
     if (showLogo) {
       const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
       const color = typeof logoColor === "string" ? logoColor : "#000000";
-      const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
+      const secondaryColor =
+        typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
       logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
     }
     if (side === "front" && template.overlay_path) {
-      const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
-      overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
+      const { data: overlayData } = await admin.storage
+        .from("overlays")
+        .download(template.overlay_path);
+      overlayBuffer = overlayData
+        ? Buffer.from(await overlayData.arrayBuffer())
+        : null;
     }
 
     const png = await generateTemplatePreviewPng(
@@ -124,10 +153,13 @@ export async function POST(request: Request) {
       0.5,
       0.5,
       true,
-      logoShadow
+      logoShadow,
     );
     return new NextResponse(new Uint8Array(png), {
-      headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "private, no-store",
+      },
     });
   }
 
@@ -138,8 +170,10 @@ export async function POST(request: Request) {
       file: file instanceof File && file.size > 0 ? file : null,
       pdfPage,
       visualId: typeof visualId === "string" ? visualId : null,
-      visualMode: typeof visualMode === "string" ? (visualMode as VisualMode) : null,
-      tileSizeMm: typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
+      visualMode:
+        typeof visualMode === "string" ? (visualMode as VisualMode) : null,
+      tileSizeMm:
+        typeof tileSizeMm === "string" ? parseFloat(tileSizeMm) : null,
       positionX: clampedPositionX,
       positionY: clampedPositionY,
       rotated,
@@ -151,31 +185,44 @@ export async function POST(request: Request) {
       themeSlotAdjust,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erreur lors du traitement de l'image.";
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Erreur lors du traitement de l'image.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
   if (mode === "background") {
     return new NextResponse(new Uint8Array(resolved.buffer), {
-      headers: { "Content-Type": resolved.contentType, "Cache-Control": "private, no-store" },
+      headers: {
+        "Content-Type": resolved.contentType,
+        "Cache-Control": "private, no-store",
+      },
     });
   }
 
   const showLogo =
     logoEnabled &&
-    (side === "front" ? template.logo_on_front : template.two_sided && template.logo_on_back);
+    (side === "front"
+      ? template.logo_on_front
+      : template.two_sided && template.logo_on_back);
   let logoBuffer: Buffer | null = null;
   if (showLogo) {
     const shape: LogoShape = logoShape === "pastille" ? "pastille" : "logo";
     const color = typeof logoColor === "string" ? logoColor : "#000000";
-    const secondaryColor = typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
+    const secondaryColor =
+      typeof logoSecondaryColor === "string" ? logoSecondaryColor : "#FFFFFF";
     logoBuffer = await loadLogoImage(admin, shape, color, secondaryColor);
   }
 
   let overlayBuffer: Buffer | null = null;
   if (template.overlay_path) {
-    const { data: overlayData } = await admin.storage.from("overlays").download(template.overlay_path);
-    overlayBuffer = overlayData ? Buffer.from(await overlayData.arrayBuffer()) : null;
+    const { data: overlayData } = await admin.storage
+      .from("overlays")
+      .download(template.overlay_path);
+    overlayBuffer = overlayData
+      ? Buffer.from(await overlayData.arrayBuffer())
+      : null;
   }
 
   const png = await generateTemplatePreviewPng(
@@ -188,7 +235,7 @@ export async function POST(request: Request) {
     false,
     logoShadow,
     guides,
-    zoom
+    zoom,
   );
 
   return new NextResponse(new Uint8Array(png), {

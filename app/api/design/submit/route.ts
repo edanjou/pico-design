@@ -1,6 +1,10 @@
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  createAdminSupabaseClient,
+  createServerSupabaseClient,
+} from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
 import { splitFormData } from "@/lib/design/submission";
 
@@ -31,9 +35,16 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const templateId = formData.get("templateId");
-  if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
+  if (typeof templateId !== "string")
+    return errorResponse("Paramètre manquant (templateId).");
   if (!user && !grantAllows(formData.get("grant"), templateId)) {
     return errorResponse("Non authentifié.", 401);
+  }
+  // Appel public : compter et plafonner (voir lib/rateLimit.ts). Les
+  // utilisateurs connectés ne sont pas limités.
+  if (!user) {
+    const limit = await checkRateLimit("submit", request);
+    if (!limit.allowed) return tooManyRequests("submit");
   }
 
   // Écriture par la clé de service : le client public n'a pas de session, et
@@ -42,7 +53,12 @@ export async function POST(request: Request) {
   const id = randomUUID();
   const { fields, files } = splitFormData(formData);
 
-  const sourcePaths: { field: string; path: string; name: string; type: string }[] = [];
+  const sourcePaths: {
+    field: string;
+    path: string;
+    name: string;
+    type: string;
+  }[] = [];
   for (const [index, entry] of files.entries()) {
     const extension = entry.file.name.split(".").pop()?.toLowerCase() ?? "bin";
     const path = `submissions/${id}/${index}-${entry.field}.${extension}`;
@@ -52,8 +68,17 @@ export async function POST(request: Request) {
         contentType: entry.file.type || "application/octet-stream",
         upsert: true,
       });
-    if (error) return errorResponse(`Impossible d'enregistrer le fichier : ${error.message}`, 500);
-    sourcePaths.push({ field: entry.field, path, name: entry.file.name, type: entry.file.type });
+    if (error)
+      return errorResponse(
+        `Impossible d'enregistrer le fichier : ${error.message}`,
+        500,
+      );
+    sourcePaths.push({
+      field: entry.field,
+      path,
+      name: entry.file.name,
+      type: entry.file.type,
+    });
   }
 
   const quantityRaw = Number(formData.get("quantity"));
@@ -67,8 +92,12 @@ export async function POST(request: Request) {
       rotated: formData.get("rotated") === "true",
       payload: fields,
       source_paths: sourcePaths,
-      shopify_variant_id: typeof variantId === "string" && variantId ? variantId : null,
-      quantity: Number.isFinite(quantityRaw) && quantityRaw > 0 ? Math.floor(quantityRaw) : 1,
+      shopify_variant_id:
+        typeof variantId === "string" && variantId ? variantId : null,
+      quantity:
+        Number.isFinite(quantityRaw) && quantityRaw > 0
+          ? Math.floor(quantityRaw)
+          : 1,
     })
     .select()
     .single();

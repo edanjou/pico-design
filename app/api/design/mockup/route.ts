@@ -1,5 +1,9 @@
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient, createAdminSupabaseClient } from "@/lib/supabase/server";
+import {
+  createServerSupabaseClient,
+  createAdminSupabaseClient,
+} from "@/lib/supabase/server";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateProductMockupPng } from "@/lib/pdf/mockup";
 import { generateBeautyShotMockupPng } from "@/lib/pdf/beautyShot";
@@ -58,12 +62,19 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   const formData = await request.formData();
   const templateId = formData.get("templateId");
-  if (typeof templateId !== "string") return errorResponse("Paramètre manquant (templateId).");
+  if (typeof templateId !== "string")
+    return errorResponse("Paramètre manquant (templateId).");
   // Sans session, un laissez-passer valable POUR CE MODÈLE suffit (lien
   // public, voir lib/publicDesign.ts). Les lectures passent alors par le
   // client admin : la RLS n'aurait personne à autoriser.
   if (!user && !grantAllows(formData.get("grant"), templateId)) {
     return errorResponse("Non authentifié.", 401);
+  }
+  // Appel public : compter et plafonner (voir lib/rateLimit.ts). Les
+  // utilisateurs connectés ne sont pas limités.
+  if (!user) {
+    const limit = await checkRateLimit("mockup", request);
+    if (!limit.allowed) return tooManyRequests("mockup");
   }
   const db = user ? supabase : createAdminSupabaseClient();
   const rotated = formData.get("rotated") === "true";
@@ -71,7 +82,8 @@ export async function POST(request: Request) {
   // Quel mockup rendre, quand le modèle en a plusieurs (voir
   // resolveMockupBundle) — absent = le premier.
   const mockupIdField = formData.get("mockupId");
-  const mockupId = typeof mockupIdField === "string" && mockupIdField ? mockupIdField : null;
+  const mockupId =
+    typeof mockupIdField === "string" && mockupIdField ? mockupIdField : null;
 
   // Optionnel : sans fichier, le mockup se compose quand même — un canvas
   // blanc (voir coverCropToBuffer), pour permettre un montage fait
@@ -88,7 +100,11 @@ export async function POST(request: Request) {
   // (`side`), donc champs non préfixés, comme "image"/"positionX".
   const mosaicCols = parseInt(String(formData.get("mosaicCols") ?? ""), 10);
   const mosaicRows = parseInt(String(formData.get("mosaicRows") ?? ""), 10);
-  const hasMosaicGrid = Number.isFinite(mosaicCols) && Number.isFinite(mosaicRows) && mosaicCols > 0 && mosaicRows > 0;
+  const hasMosaicGrid =
+    Number.isFinite(mosaicCols) &&
+    Number.isFinite(mosaicRows) &&
+    mosaicCols > 0 &&
+    mosaicRows > 0;
   const mosaicFiles: (File | null)[] | null = hasMosaicGrid
     ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
         const f = formData.get(`mosaicCell${i}`);
@@ -99,12 +115,17 @@ export async function POST(request: Request) {
   // Thème (étape « Type de design ») — recto seulement (voir DesignTool :
   // un thème n'a qu'un seul graphisme, il ne s'applique jamais au verso).
   const themeIdRaw = formData.get("themeId");
-  const themeId = side === "front" && typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
+  const themeId =
+    side === "front" && typeof themeIdRaw === "string" && themeIdRaw
+      ? themeIdRaw
+      : null;
   const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
     const f = formData.get(`themeSlot${i}`);
     return f instanceof File && f.size > 0 ? f : null;
   });
-  const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
+  const themeSlotAdjust = parseThemeSlotAdjustField(
+    formData.get("themeSlotAdjust"),
+  );
   const hasFile = file instanceof File && file.size > 0;
   // Rien à montrer pour ce côté (ni visuel, ni mosaïque, ni thème, ni
   // calque) : pas la peine de composer un mockup entièrement blanc.
@@ -117,14 +138,18 @@ export async function POST(request: Request) {
     .select("*")
     .eq("id", templateId)
     .single<Template>();
-  if (templateError || !rawTemplate) return errorResponse("Modèle introuvable.", 404);
+  if (templateError || !rawTemplate)
+    return errorResponse("Modèle introuvable.", 404);
 
   // Le bundle peut venir de la table template_mockups (un modèle peut en
   // avoir plusieurs) ou, à défaut, des colonnes héritées du modèle — voir
   // resolveMockupBundle.
   const bundle = await resolveMockupBundle(db, rawTemplate, mockupId);
-  if (mockupId && !bundle) return errorResponse("Mockup introuvable pour ce modèle.", 404);
-  const hasRealisticBundle = Boolean(bundle || (rawTemplate.mask_path && rawTemplate.shading_path));
+  if (mockupId && !bundle)
+    return errorResponse("Mockup introuvable pour ce modèle.", 404);
+  const hasRealisticBundle = Boolean(
+    bundle || (rawTemplate.mask_path && rawTemplate.shading_path),
+  );
 
   // Les modèles à bundle réaliste sont toujours à recto seul (aucun n'a de
   // second rendu "verso") — un appel side=back pour l'un d'eux n'a rien à
@@ -151,7 +176,11 @@ export async function POST(request: Request) {
       });
       resolvedBuffer = resolved.buffer;
     } catch (err) {
-      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement de l'image.");
+      return errorResponse(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors du traitement de l'image.",
+      );
     }
   } else if (hasMosaic) {
     try {
@@ -168,7 +197,11 @@ export async function POST(request: Request) {
       });
       resolvedBuffer = resolved.buffer;
     } catch (err) {
-      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement de l'image.");
+      return errorResponse(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors du traitement de l'image.",
+      );
     }
   } else if (hasFile) {
     try {
@@ -183,7 +216,11 @@ export async function POST(request: Request) {
       });
       resolvedBuffer = resolved.buffer;
     } catch (err) {
-      return errorResponse(err instanceof Error ? err.message : "Erreur lors du traitement de l'image.");
+      return errorResponse(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors du traitement de l'image.",
+      );
     }
   }
 
@@ -199,10 +236,18 @@ export async function POST(request: Request) {
         layers,
       });
       return new NextResponse(new Uint8Array(png), {
-        headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "private, no-store",
+        },
       });
     } catch (err) {
-      return errorResponse(err instanceof Error ? err.message : "Erreur lors de la génération du mockup.", 500);
+      return errorResponse(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la génération du mockup.",
+        500,
+      );
     }
   }
 
@@ -210,7 +255,10 @@ export async function POST(request: Request) {
 
   try {
     if (bundle) {
-      const { config, assets } = await loadBeautyShotBundle(admin.storage, bundle.xmlPath);
+      const { config, assets } = await loadBeautyShotBundle(
+        admin.storage,
+        bundle.xmlPath,
+      );
 
       // Deux cadrages distincts, à ne pas confondre (voir
       // buildDesignForZone) : celui du CLIENT place son visuel sur la page,
@@ -234,10 +282,13 @@ export async function POST(request: Request) {
         bundle.marginBottom,
         bundle.positionX ?? 0.5,
         bundle.positionY ?? 0.5,
-        bundle.zoom ?? 1
+        bundle.zoom ?? 1,
       );
       return new NextResponse(new Uint8Array(png), {
-        headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "private, no-store",
+        },
       });
     }
 
@@ -245,7 +296,11 @@ export async function POST(request: Request) {
       admin.storage.from("overlays").download(rawTemplate.mask_path!),
       admin.storage.from("overlays").download(rawTemplate.shading_path!),
     ]);
-    if (!maskRes.data || !shadingRes.data) return errorResponse("Impossible de charger les fichiers du mockup.", 500);
+    if (!maskRes.data || !shadingRes.data)
+      return errorResponse(
+        "Impossible de charger les fichiers du mockup.",
+        500,
+      );
 
     const png = await generateProductMockupPng(
       template,
@@ -258,12 +313,20 @@ export async function POST(request: Request) {
       null,
       zoom,
       imageRotation,
-      layers
+      layers,
     );
     return new NextResponse(new Uint8Array(png), {
-      headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store" },
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "private, no-store",
+      },
     });
   } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : "Erreur lors de la génération du mockup.", 500);
+    return errorResponse(
+      err instanceof Error
+        ? err.message
+        : "Erreur lors de la génération du mockup.",
+      500,
+    );
   }
 }

@@ -68,3 +68,26 @@ export function adminOrderUrl(shopifyOrderId: string): string | null {
   const domain = shopDomain();
   return domain ? `https://${domain}/admin/orders/${shopifyOrderId}` : null;
 }
+
+/**
+ * L'adresse de retour après personnalisation est-elle acceptable ?
+ *
+ * Deux exigences. Elle doit être ABSOLUE : une adresse relative se résoudrait
+ * sur le domaine de pico-design, et le client atterrirait ici au lieu de sa
+ * boutique. Et son domaine doit être une boutique Shopify (ou celui
+ * configuré en SHOPIFY_SHOP_DOMAIN) : sans ce filtre, n'importe qui pourrait se servir de
+ * cette page comme d'une redirection ouverte vers le site de son choix.
+ */
+export function isAllowedReturnUrl(value: unknown): boolean {
+  if (typeof value !== "string" || !value) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false; // relative, ou illisible
+  }
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname.toLowerCase();
+  const configured = shopDomain()?.toLowerCase();
+  return host.endsWith(".myshopify.com") || (configured ? host === configured : false);
+}

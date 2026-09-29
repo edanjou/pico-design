@@ -2,6 +2,7 @@ import { createAdminSupabaseClient, createServerSupabaseClient, requireUser } fr
 import DesignTool from "@/components/DesignTool";
 import { redirect } from "next/navigation";
 import { createGrant, isValidPublicKey, verifyGrant } from "@/lib/publicDesign";
+import { isAllowedReturnUrl } from "@/lib/shopify";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Sku, Template, TemplateMockup, Theme, Visual } from "@/lib/types";
@@ -49,7 +50,11 @@ export default async function DesignPage({
     return publicTool(templateId, searchParams!.jeton!, {
       variantId: searchParams?.variant ?? null,
       quantity: Math.max(1, Math.floor(Number(searchParams?.quantity)) || 1),
-      returnUrl: searchParams?.retour ?? null,
+      // Adresse de retour : seulement une URL ABSOLUE vers la boutique.
+      // Une adresse relative se résoudrait sur le domaine de pico-design (le
+      // client atterrissait sur /products_preview ici même), et accepter
+      // n'importe quel domaine ferait de cette page une redirection ouverte.
+      returnUrl: isAllowedReturnUrl(searchParams?.retour) ? searchParams!.retour! : null,
     });
   }
 
@@ -159,7 +164,14 @@ async function publicTool(
       mockups={(mockups as TemplateMockup[]) ?? []}
       publicTemplateId={row.id}
       grant={grant}
-      shopify={shopify.variantId ? { variantId: shopify.variantId, quantity: shopify.quantity, returnUrl: shopify.returnUrl } : undefined}
+      // Sans variante NI adresse de retour valable, pas de parcours de
+      // commande : on retombe sur le téléchargement du PDF, plutôt que de
+      // proposer un bouton qui mènerait nulle part.
+      shopify={
+        shopify.variantId && shopify.returnUrl
+          ? { variantId: shopify.variantId, quantity: shopify.quantity, returnUrl: shopify.returnUrl }
+          : undefined
+      }
     />
   );
 }

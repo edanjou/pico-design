@@ -177,13 +177,18 @@ export default function DesignReviewOverlay({
         throw new Error(data.error ?? "Erreur lors de l'enregistrement du design.");
       }
       const { id } = await res.json();
-      // Sans URL de retour, on retombe sur la route de panier standard de
-      // Shopify, relative à la boutique d'origine.
-      const base = shopify.returnUrl ?? "/cart/add";
+      // Retour vers la fiche produit avec le seul identifiant du design.
+      //
+      // On ne passe PAS par /cart/add en GET : cette route ne gère pas les
+      // propriétés de ligne, et Shopify répond « expected Array to be a
+      // Hash: properties ». Les propriétés doivent voyager dans le
+      // formulaire du thème, en POST — c'est lui qui ajoutera un champ
+      // caché à partir de ce paramètre (voir le bloc Liquid fourni).
+      const base = shopify.returnUrl ?? "/";
       const params = new URLSearchParams({
-        id: shopify.variantId,
+        pico_design: id,
+        variant: shopify.variantId,
         quantity: String(shopify.quantity),
-        "properties[_design]": id,
       });
       window.location.href = `${base}${base.includes("?") ? "&" : "?"}${params}`;
     } catch (err) {

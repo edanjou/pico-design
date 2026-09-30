@@ -1,4 +1,4 @@
-import { ImageIcon, LayoutGridIcon, PaintbrushVerticalIcon, PencilRulerIcon, PipetteIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { ImageIcon, LayoutGridIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -78,7 +78,7 @@ export const MENU_ITEMS: Record<
   settings: {
     href: "/settings",
     title: "Paramètres",
-    icon: PipetteIcon,
+    icon: MonitorCogIcon,
     gradient: "from-slate-400 to-slate-600",
   },
 };

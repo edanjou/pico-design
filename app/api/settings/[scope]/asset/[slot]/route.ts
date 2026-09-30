@@ -5,6 +5,7 @@ import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/sup
 import {
   ASSET_SLOTS,
   isSettingsScope,
+  isShopScope,
   assetPathFor,
   loadAppSettings,
   type AssetSlot,
@@ -47,19 +48,46 @@ function contentTypeOf(storagePath: string): string {
  * Le cache est long : l'URL porte un `?v=` tiré de `updated_at` (voir
  * assetUrl), donc elle change dès qu'un réglage change.
  */
-export async function GET(_request: Request, { params }: { params: { scope: string; slot: string } }) {
+export async function GET(request: Request, { params }: { params: { scope: string; slot: string } }) {
   const scope = params.scope as SettingsScope;
   const slot = params.slot as AssetSlot;
   if (!isSettingsScope(scope) || !ASSET_SLOTS.includes(slot)) {
     return NextResponse.json({ error: "Ressource inconnue." }, { status: 404 });
   }
 
-  // Lecture avec la session de l'utilisateur : les réglages ne sont pas
-  // secrets, mais la table est en RLS « authenticated ». Le favicon, lui, est
-  // demandé par le navigateur sans session — d'où le repli silencieux sur les
-  // valeurs par défaut (voir loadAppSettings).
-  const settings = await loadAppSettings(createServerSupabaseClient(), scope);
-  const storagePath = assetPathFor(settings, slot);
+  // Lecture par la clé de service quand il n'y a pas de session : la RLS de
+  // app_settings n'ouvre rien à l'anonyme, et un visiteur public du lien
+  // Shopify n'aurait donc JAMAIS le logo ni le favicon réglés — pas même
+  // ceux du jeu par défaut. Or c'est précisément lui que ces réglages
+  // habillent. Ce ne sont ni l'un ni l'autre des secrets : ils sont visibles
+  // de quiconque ouvre la page (même raisonnement que AppSettingsStyle).
+  const session = createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await session.auth.getUser();
+  const client = user ? session : createAdminSupabaseClient();
+
+  // Une boutique hérite du jeu « tool » pour ce qu'elle n'a pas défini —
+  // comme les couleurs, qui l'obtiennent par la cascade CSS. Un fichier n'a
+  // pas de cascade : l'URL désigne UN jeu, d'où ce repli explicite, sans
+  // lequel une boutique sans logo propre sauterait directement au fichier
+  // d'origine en ignorant celui de l'Outil Shopify.
+  const chain: SettingsScope[] = isShopScope(scope) ? [scope, "tool"] : [scope];
+  let storagePath: string | null = null;
+  for (const candidate of chain) {
+    const settings = await loadAppSettings(client, candidate);
+    storagePath = assetPathFor(settings, slot);
+    if (storagePath) break;
+  }
+
+  // Cache long seulement si l'URL porte le `?v=` d'assetUrl : elle change
+  // alors à chaque enregistrement. Sans lui (le logo de la barre de
+  // navigation, qui ne connaît pas `updated_at`), un cache immuable ferait
+  // resservir l'ancien fichier pendant un an après un remplacement.
+  const versioned = new URL(request.url).searchParams.has("v");
+  const cache = versioned
+    ? "public, max-age=31536000, immutable"
+    : "public, max-age=60, must-revalidate";
 
   if (storagePath) {
     const admin = createAdminSupabaseClient();
@@ -69,7 +97,7 @@ export async function GET(_request: Request, { params }: { params: { scope: stri
       return new NextResponse(new Uint8Array(buffer), {
         headers: {
           "Content-Type": contentTypeOf(storagePath),
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cache,
         },
       });
     }

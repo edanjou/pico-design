@@ -110,7 +110,17 @@ export async function PATCH(request: Request, { params }: { params: { scope: str
     update[upload.column] = storagePath;
   }
 
-  const { data, error } = await supabase.from("app_settings").update(update).eq("scope", scope).select().single();
+  // upsert et non update : seules les lignes « admin » et « tool » sont
+  // créées par la migration 0054. Une boutique n'en a aucune tant qu'on ne
+  // lui a rien enregistré, et l'update ne touchait alors AUCUNE ligne — d'où
+  // le « Cannot coerce the result to a single JSON object » du .single().
+  // Les colonnes absentes de `update` prennent leurs valeurs par défaut :
+  // une ligne vide rend exactement le jeu « tool », dont elle hérite.
+  const { data, error } = await supabase
+    .from("app_settings")
+    .upsert({ scope, ...update }, { onConflict: "scope" })
+    .select()
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ settings: data });
 }

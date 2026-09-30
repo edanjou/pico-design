@@ -41,6 +41,7 @@ export interface ShopifyLineItem {
 
 export interface ShopifyOrder {
   id: number | string;
+  order_status_url?: string;
   name?: string;
   order_number?: number;
   email?: string;
@@ -61,6 +62,19 @@ export function designIdOfLineItem(item: ShopifyLineItem): string | null {
   const value = property?.value?.trim();
   // On n'accepte qu'un UUID : la valeur vient du panier, donc du client.
   return value && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
+}
+
+/**
+ * Domaine de la boutique déduit de la charge utile, quand l'en-tête
+ * X-Shopify-Shop-Domain manque : l'adresse de suivi de la commande le porte.
+ */
+export function shopDomainOfOrder(order: ShopifyOrder): string | null {
+  if (!order.order_status_url) return null;
+  try {
+    return new URL(order.order_status_url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 /** URL de la commande dans l'admin Shopify, pour le lien du module. */

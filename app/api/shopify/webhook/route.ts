@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
-import { designIdOfLineItem, verifyWebhookSignature, type ShopifyOrder } from "@/lib/shopify";
+import { designIdOfLineItem, shopDomainOfOrder, verifyWebhookSignature, type ShopifyOrder } from "@/lib/shopify";
 
 export const runtime = "nodejs";
 
@@ -34,6 +34,11 @@ export async function POST(request: Request) {
 
   const admin = createAdminSupabaseClient();
   const shopifyOrderId = String(order.id);
+  // Boutique d'origine : l'en-tête dit laquelle a envoyé la commande, là où
+  // la variable d'environnement n'en décrit qu'une seule. À défaut d'en-tête
+  // (notification de test, relais qui le supprime), on le retrouve dans
+  // l'adresse de suivi de la commande.
+  const shop = request.headers.get("x-shopify-shop-domain") ?? shopDomainOfOrder(order);
 
   // upsert : `orders/updated` repasse sur la même commande, et Shopify peut
   // renvoyer deux fois le même événement (livraison au moins une fois).
@@ -46,6 +51,7 @@ export async function POST(request: Request) {
         customer_email: order.email ?? order.contact_email ?? null,
         financial_status: order.financial_status ?? null,
         fulfillment_status: order.fulfillment_status ?? null,
+        shop_domain: shop,
         raw: order,
         updated_at: new Date().toISOString(),
       },

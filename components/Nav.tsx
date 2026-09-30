@@ -1,12 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
 import { LogOutIcon, MenuIcon, XIcon } from "@/components/icons";
-import { DEFAULT_MENU_ORDER, MENU_ITEMS, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
+import { DEFAULT_MENU_ORDER, groupMenuOrder, MENU_ITEMS, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 import Modal from "@/components/Modal";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 
@@ -91,6 +91,10 @@ export default function Nav() {
     return () => window.removeEventListener("pico:menu-order-changed", onMenuOrderChanged);
   }, []);
 
+  // Les liens, répartis dans leurs groupes — l'ordre personnalisé continue
+  // de jouer à l'intérieur de chacun (voir groupMenuOrder).
+  const groupes = useMemo(() => groupMenuOrder(menuOrder), [menuOrder]);
+
   const initials = name
     ? name
         .split(/\s+/)
@@ -125,25 +129,33 @@ export default function Nav() {
         </div>
 
         {/* Écrans étroits : remplacée par le bouton burger et le panneau ci-dessous. */}
-        <nav className="hidden items-center gap-4 text-sm text-text-muted lg:flex">
-          {menuOrder.map((key, i) => {
-            const item = MENU_ITEMS[key];
-            return (
-              <Fragment key={key}>
-                {i > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}
-                <Link
-                  href={item.href}
-                  className="group flex items-center gap-1.5 transition-colors duration-200 hover:text-primary"
-                >
-                  {/* Seule l'icône bouge (secousse « jello », jouée une fois au survol) : le
-                      lien, lui, reste en place, donc la zone de survol ne change pas.
-                      `motion-safe` désactive le mouvement pour qui a demandé moins d'animations. */}
-                  <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
-                  {item.title}
-                </Link>
-              </Fragment>
-            );
-          })}
+        {/* Les liens d'un même groupe sont serrés (gap-4) et les groupes
+            séparés par un trait : c'est l'espacement qui porte le
+            regroupement, le trait ne fait que le souligner. */}
+        <nav className="hidden items-center gap-5 text-sm text-text-muted lg:flex">
+          {groupes.map((groupe, g) => (
+            <Fragment key={groupe.join("-")}>
+              {g > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}
+              <span className="flex items-center gap-4">
+                {groupe.map((key) => {
+                  const item = MENU_ITEMS[key];
+                  return (
+                    <Link
+                      key={key}
+                      href={item.href}
+                      className="group flex items-center gap-1.5 transition-colors duration-200 hover:text-primary"
+                    >
+                      {/* Seule l'icône bouge (secousse « jello », jouée une fois au survol) : le
+                          lien, lui, reste en place, donc la zone de survol ne change pas.
+                          `motion-safe` désactive le mouvement pour qui a demandé moins d'animations. */}
+                      <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
+                      {item.title}
+                    </Link>
+                  );
+                })}
+              </span>
+            </Fragment>
+          ))}
         </nav>
 
         {/* Groupe aligné à droite : menu burger (mobile/tablette), pastille du nom, déconnexion. */}
@@ -189,19 +201,25 @@ export default function Nav() {
       {/* Panneau du menu burger : liste verticale des mêmes liens, repliée par défaut. */}
       {mobileOpen && (
         <nav id="mobile-nav" className="border-t border-border px-4 py-2 lg:hidden">
-          {menuOrder.map((key) => {
-            const item = MENU_ITEMS[key];
-            return (
-              <Link
-                key={key}
-                href={item.href}
-                className="group flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm text-text-muted hover:bg-surface-muted hover:text-primary"
-              >
-                <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
-                {item.title}
-              </Link>
-            );
-          })}
+          {groupes.map((groupe, g) => (
+            // Mêmes groupes qu'en pleine largeur, séparés par un filet plutôt
+            // que par un trait vertical.
+            <div key={groupe.join("-")} className={g > 0 ? "mt-2 border-t border-border pt-2" : undefined}>
+              {groupe.map((key) => {
+                const item = MENU_ITEMS[key];
+                return (
+                  <Link
+                    key={key}
+                    href={item.href}
+                    className="group flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm text-text-muted hover:bg-surface-muted hover:text-primary"
+                  >
+                    <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
+                    {item.title}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       )}
 

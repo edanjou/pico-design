@@ -83,19 +83,23 @@ export const MENU_ITEMS: Record<
   },
 };
 
-// Ordre par défaut quand l'utilisateur n'a encore rien personnalisé.
-export const DEFAULT_MENU_ORDER: MenuKey[] = [
-  "templates",
-  "visuals",
-  "themes",
-  "products",
-  "design",
-  "skus",
-  "imposition",
-  "orders",
-  "users",
-  "settings",
+// Regroupement du menu, par nature de la tâche : ce qu'on fabrique, ce qui
+// touche à la vente, et l'administration des accès. Les séparateurs de la
+// barre ne tombent qu'entre ces groupes — avec un trait entre chaque lien,
+// dix entrées se lisaient comme une liste indifférenciée.
+//
+// Ce découpage prime sur l'ordre personnalisé (voir groupMenuOrder) : un
+// glisser-déposer déplace un lien À L'INTÉRIEUR de son groupe, jamais d'un
+// groupe à l'autre, sans quoi le regroupement ne tiendrait pas.
+export const MENU_GROUPS: MenuKey[][] = [
+  ["products", "templates", "themes", "visuals", "skus", "imposition"],
+  ["design", "orders", "settings"],
+  ["users"],
 ];
+
+// Ordre par défaut quand l'utilisateur n'a encore rien personnalisé : celui
+// des groupes, mis à plat.
+export const DEFAULT_MENU_ORDER: MenuKey[] = MENU_GROUPS.flat();
 
 function isMenuKey(value: string): value is MenuKey {
   return Object.prototype.hasOwnProperty.call(MENU_ITEMS, value);
@@ -111,4 +115,29 @@ export function resolveMenuOrder(saved: string[] | null | undefined, allowedKeys
   const fromSaved = (saved ?? []).filter((key): key is MenuKey => isMenuKey(key) && allowedSet.has(key));
   const missing = DEFAULT_MENU_ORDER.filter((key) => allowedSet.has(key) && !fromSaved.includes(key));
   return [...fromSaved, ...missing];
+}
+
+/**
+ * Répartit un ordre déjà résolu dans les groupes du menu, en conservant
+ * l'ordre choisi À L'INTÉRIEUR de chaque groupe.
+ *
+ * Les groupes vides disparaissent : sans ça, un non-administrateur — qui ne
+ * voit ni Utilisateurs ni Paramètres — hériterait d'un séparateur en fin de
+ * barre, suivi de rien.
+ *
+ * Une clé qui n'appartiendrait à aucun groupe (page ajoutée, oubliée dans
+ * MENU_GROUPS) rejoint le dernier groupe plutôt que de disparaître : mieux
+ * vaut un lien mal rangé qu'un lien introuvable.
+ */
+export function groupMenuOrder(order: MenuKey[]): MenuKey[][] {
+  const position = new Map(order.map((key, index) => [key, index]));
+  const groupes = MENU_GROUPS.map((groupe) =>
+    groupe.filter((key) => position.has(key)).sort((a, b) => position.get(a)! - position.get(b)!)
+  );
+
+  const rangées = new Set(MENU_GROUPS.flat());
+  const orphelines = order.filter((key) => !rangées.has(key));
+  if (orphelines.length > 0) groupes[groupes.length - 1].push(...orphelines);
+
+  return groupes.filter((groupe) => groupe.length > 0);
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminSupabaseClient, createServerSupabaseClient, getAuthorizedAdmin } from "@/lib/supabase/server";
 import {
   COLOR_FIELDS,
-  SETTINGS_SCOPES,
+  isSettingsScope,
   isHexColor,
   loadAppSettings,
   parseTypography,
@@ -23,7 +23,7 @@ const UPLOADS: { field: string; column: string; extensions: string[] }[] = [
 ];
 
 function validScope(scope: string): scope is SettingsScope {
-  return (SETTINGS_SCOPES as readonly string[]).includes(scope);
+  return isSettingsScope(scope);
 }
 
 export async function GET(_request: Request, { params }: { params: { scope: string } }) {

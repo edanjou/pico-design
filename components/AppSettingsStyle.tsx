@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   COLOR_FIELDS,
   TYPOGRAPHY_DEFAULTS,
@@ -22,8 +22,16 @@ import {
  * qu'aucun code n'ait à détecter la route.
  */
 export default async function AppSettingsStyle({ scope }: { scope: SettingsScope }) {
+  // Lecture par la clé de service quand il n'y a pas de session : la RLS de
+  // app_settings n'ouvre rien à l'anonyme, et un visiteur public du lien
+  // Shopify n'aurait donc AUCUN habillage — pas même le jeu par défaut.
+  // L'habillage n'est pas un secret : ce sont des couleurs et un logo, déjà
+  // visibles de quiconque ouvre la page.
   const supabase = createServerSupabaseClient();
-  const settings = await loadAppSettings(supabase, scope);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const settings = await loadAppSettings(user ? supabase : createAdminSupabaseClient(), scope);
 
   const declarations: string[] = [];
   for (const field of COLOR_FIELDS) {

@@ -4,7 +4,7 @@ import path from "path";
 import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   ASSET_SLOTS,
-  SETTINGS_SCOPES,
+  isSettingsScope,
   assetPathFor,
   loadAppSettings,
   type AssetSlot,
@@ -50,7 +50,7 @@ function contentTypeOf(storagePath: string): string {
 export async function GET(_request: Request, { params }: { params: { scope: string; slot: string } }) {
   const scope = params.scope as SettingsScope;
   const slot = params.slot as AssetSlot;
-  if (!SETTINGS_SCOPES.includes(scope) || !ASSET_SLOTS.includes(slot)) {
+  if (!isSettingsScope(scope) || !ASSET_SLOTS.includes(slot)) {
     return NextResponse.json({ error: "Ressource inconnue." }, { status: 404 });
   }
 

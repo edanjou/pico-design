@@ -9,13 +9,38 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * importable des deux côtés : le formulaire s'en sert pour ses valeurs par
  * défaut, le rendu pour composer sa feuille de style.
  */
-export const SETTINGS_SCOPES = ["admin", "tool"] as const;
-export type SettingsScope = (typeof SETTINGS_SCOPES)[number];
+/**
+ * Jeux de réglages. Les deux jeux historiques, plus un jeu facultatif par
+ * boutique : `scope` vaut alors son domaine (voir migration 0058).
+ *
+ * « tool » reste le défaut — une boutique sans réglages propres en hérite,
+ * il n'y a donc rien à créer pour chaque nouvelle boutique.
+ */
+export const BASE_SCOPES = ["admin", "tool"] as const;
+export type BaseScope = (typeof BASE_SCOPES)[number];
+export type SettingsScope = BaseScope | string;
 
-export const SCOPE_LABELS: Record<SettingsScope, string> = {
+// Conservé pour les appelants qui n'itèrent que sur les deux jeux de base.
+export const SETTINGS_SCOPES = BASE_SCOPES;
+
+export const SCOPE_LABELS: Record<BaseScope, string> = {
   admin: "Administration",
-  tool: "Outil Shopify",
+  tool: "Outil Shopify (par défaut)",
 };
+
+/** Un domaine de boutique, tel qu'accepté comme jeu de réglages. */
+export function isShopScope(value: string): boolean {
+  return /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(value);
+}
+
+export function isSettingsScope(value: unknown): value is SettingsScope {
+  return typeof value === "string" && ((BASE_SCOPES as readonly string[]).includes(value) || isShopScope(value));
+}
+
+/** Libellé d'un jeu : « Administration », « Outil Shopify », ou le domaine. */
+export function scopeLabel(scope: SettingsScope): string {
+  return (SCOPE_LABELS as Record<string, string>)[scope] ?? scope;
+}
 
 /**
  * Les 8 couleurs exposées — pas les 51 tokens de globals.css : tous les

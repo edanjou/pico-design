@@ -7,7 +7,9 @@ import { SpinnerIcon } from "@/components/icons";
 import { rangeFillStyle } from "@/components/ui/rangeFill";
 import {
   COLOR_FIELDS,
-  SCOPE_LABELS,
+  defaultAppSettings,
+  isShopScope,
+  scopeLabel,
   SETTINGS_SCOPES,
   BRAND_FONTS,
   TYPOGRAPHY_LIMITS,
@@ -28,12 +30,33 @@ type Uploads = {
   fontHeading: File | null;
 };
 
-const EMPTY_UPLOADS: Uploads = { logo: null, favicon: null, share: null, fontBody: null, fontHeading: null };
+const EMPTY_UPLOADS: Uploads = {
+  logo: null,
+  favicon: null,
+  share: null,
+  fontBody: null,
+  fontHeading: null,
+};
 
 const IMAGE_SLOTS = [
-  { field: "logo", label: "Logo de l'en-tête", accept: ".svg,.png,.webp,.jpg,.jpeg", slot: "logo" },
-  { field: "favicon", label: "Favicon (icône d'onglet)", accept: ".svg,.png,.ico", slot: "favicon" },
-  { field: "share", label: "Image de partage", accept: ".png,.jpg,.jpeg,.webp", slot: "share" },
+  {
+    field: "logo",
+    label: "Logo de l'en-tête",
+    accept: ".svg,.png,.webp,.jpg,.jpeg",
+    slot: "logo",
+  },
+  {
+    field: "favicon",
+    label: "Favicon (icône d'onglet)",
+    accept: ".svg,.png,.ico",
+    slot: "favicon",
+  },
+  {
+    field: "share",
+    label: "Image de partage",
+    accept: ".png,.jpg,.jpeg,.webp",
+    slot: "share",
+  },
 ] as const;
 
 const FONT_SLOTS = [
@@ -47,15 +70,32 @@ const FONT_SLOTS = [
  * s'enregistre séparément — changer l'administration ne touche pas à
  * l'Outil Shopify.
  */
-export default function SettingsForm({ initial }: { initial: Record<SettingsScope, AppSettings> }) {
+export default function SettingsForm({
+  initial,
+  boutiques,
+}: {
+  initial: Record<SettingsScope, AppSettings>;
+  // Domaines des boutiques déjà connues (réglages existants ou commandes
+  // reçues). Une boutique absente d'ici peut être ajoutée à la main.
+  boutiques: string[];
+}) {
   const [scope, setScope] = useState<SettingsScope>("admin");
+  const [shops, setShops] = useState(boutiques);
   const [settings, setSettings] = useState(initial);
-  const [uploads, setUploads] = useState<Record<SettingsScope, Uploads>>({
-    admin: { ...EMPTY_UPLOADS },
-    tool: { ...EMPTY_UPLOADS },
-  });
+  // Une entrée par jeu — y compris les boutiques. Un objet limité à
+  // « admin » et « tool » plantait dès qu'on sélectionnait une boutique, et
+  // planterait encore sur une boutique ajoutée en cours de route : d'où
+  // l'accès par `uploadsDe`, qui ne suppose jamais l'entrée présente.
+  const [uploads, setUploads] = useState<Record<string, Uploads>>(() =>
+    Object.fromEntries(Object.keys(initial).map((s) => [s, { ...EMPTY_UPLOADS }]))
+  );
+
+  const uploadsDe = (s: SettingsScope): Uploads => uploads[s] ?? EMPTY_UPLOADS;
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    kind: "ok" | "error";
+    text: string;
+  } | null>(null);
 
   const current = settings[scope];
 
@@ -78,7 +118,10 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
   }
 
   function setUpload(field: keyof Uploads, file: File | null) {
-    setUploads((all) => ({ ...all, [scope]: { ...all[scope], [field]: file } }));
+    setUploads((all) => ({
+      ...all,
+      [scope]: { ...(all[scope] ?? EMPTY_UPLOADS), [field]: file },
+    }));
   }
 
   async function handleSave() {
@@ -88,19 +131,28 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
     const body = new FormData();
     body.append("colors", JSON.stringify(current.colors));
     body.append("typography", JSON.stringify(current.typography));
-    for (const [field, file] of Object.entries(uploads[scope])) {
+    for (const [field, file] of Object.entries(uploadsDe(scope))) {
       if (file) body.append(field, file);
     }
 
-    const res = await fetch(`/api/settings/${scope}`, { method: "PATCH", body });
+    const res = await fetch(`/api/settings/${scope}`, {
+      method: "PATCH",
+      body,
+    });
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setMessage({ kind: "error", text: data.error ?? "Erreur lors de l'enregistrement." });
+      setMessage({
+        kind: "error",
+        text: data.error ?? "Erreur lors de l'enregistrement.",
+      });
       return;
     }
     setUploads((all) => ({ ...all, [scope]: { ...EMPTY_UPLOADS } }));
-    setMessage({ kind: "ok", text: "Enregistré. Recharge la page pour voir l'interface changer." });
+    setMessage({
+      kind: "ok",
+      text: "Enregistré. Recharge la page pour voir l'interface changer.",
+    });
   }
 
   return (
@@ -108,25 +160,63 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
       <div>
         <h1 className="font-display text-page-title text-text">Paramètres</h1>
         <p className="mt-1 text-sm text-text-muted">
-          L&apos;identité visuelle de l&apos;outil : couleurs, typographie et logos. Les deux jeux sont indépendants —
-          l&apos;écran vu par les clients peut différer de l&apos;administration.
+          L&apos;identité visuelle de l&apos;outil : couleurs, typographie et
+          logos. Les deux jeux sont indépendants — l&apos;écran vu par les
+          clients peut différer de l&apos;administration.
         </p>
       </div>
 
-      <div className="flex rounded-full border border-border bg-background p-0.5 text-sm">
-        {SETTINGS_SCOPES.map((key) => (
+      <div className="flex flex-wrap items-center gap-2">
+        {[...SETTINGS_SCOPES, ...shops].map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => setScope(key)}
-            className={`flex-1 rounded-full px-4 py-1.5 ${
-              scope === key ? "bg-primary text-text-on-brand" : "text-text-muted hover:bg-surface-muted"
+            className={`rounded-full border px-4 py-1.5 text-sm ${
+              scope === key
+                ? "border-primary bg-primary text-text-on-brand"
+                : "border-border text-text-muted hover:bg-surface-muted"
             }`}
           >
-            {SCOPE_LABELS[key]}
+            {scopeLabel(key)}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => {
+            const domaine = prompt(
+              "Domaine de la boutique (ex. ma-boutique.myshopify.com)",
+            )
+              ?.trim()
+              .toLowerCase();
+            if (!domaine) return;
+            if (!isShopScope(domaine)) {
+              setMessage({
+                kind: "error",
+                text: "Ce domaine n'est pas valide.",
+              });
+              return;
+            }
+            if (!shops.includes(domaine))
+              setShops((all) => [...all, domaine].sort());
+            setSettings((all) => ({
+              ...all,
+              [domaine]: all[domaine] ?? defaultAppSettings(domaine),
+            }));
+            setScope(domaine);
+          }}
+          className="rounded-full border border-dashed border-border px-3 py-1.5 text-sm text-text-subtle hover:text-text"
+        >
+          + Boutique
+        </button>
       </div>
+
+      {isShopScope(String(scope)) && (
+        <p className="text-xs text-text-subtle">
+          Réglages propres à cette boutique. Ce qui n&apos;est pas défini ici
+          reprend « Outil Shopify (par défaut) ».
+        </p>
+      )}
 
       {message && (
         <p
@@ -143,7 +233,8 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
       <section className="rounded-xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text">Couleurs</h2>
         <p className="mt-0.5 text-xs text-text-subtle">
-          Huit réglages seulement : toutes les autres teintes de l&apos;interface en découlent.
+          Huit réglages seulement : toutes les autres teintes de
+          l&apos;interface en découlent.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {COLOR_FIELDS.map((field) => {
@@ -151,8 +242,14 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
             const custom = current.colors[field.key] !== undefined;
             return (
               <div key={field.key} className="flex items-center gap-2">
-                <ColorPickerButton value={value} onChange={(hex) => setColor(field.key, hex)} label={field.label} />
-                <span className="min-w-0 flex-1 truncate text-sm text-text">{field.label}</span>
+                <ColorPickerButton
+                  value={value}
+                  onChange={(hex) => setColor(field.key, hex)}
+                  label={field.label}
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-text">
+                  {field.label}
+                </span>
                 {custom && (
                   <button
                     type="button"
@@ -176,13 +273,18 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
             label="Police du texte"
             value={current.typography.bodyFont}
             onChange={(bodyFont) => setTypography({ bodyFont })}
-            disabled={Boolean(current.fontBodyPath) || Boolean(uploads[scope].fontBody)}
+            disabled={
+              Boolean(current.fontBodyPath) || Boolean(uploadsDe(scope).fontBody)
+            }
           />
           <FontSelect
             label="Police des titres"
             value={current.typography.headingFont}
             onChange={(headingFont) => setTypography({ headingFont })}
-            disabled={Boolean(current.fontHeadingPath) || Boolean(uploads[scope].fontHeading)}
+            disabled={
+              Boolean(current.fontHeadingPath) ||
+              Boolean(uploadsDe(scope).fontHeading)
+            }
           />
         </div>
 
@@ -194,10 +296,14 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
           <div className="mt-3 grid gap-4 sm:grid-cols-2">
             {FONT_SLOTS.map((slot) => (
               <div key={slot.field}>
-                <label className="block text-sm font-medium text-text">{slot.label}</label>
-                <p className="mb-1 text-xs text-text-subtle">.woff2, .woff, .otf ou .ttf</p>
+                <label className="block text-sm font-medium text-text">
+                  {slot.label}
+                </label>
+                <p className="mb-1 text-xs text-text-subtle">
+                  .woff2, .woff, .otf ou .ttf
+                </p>
                 <FileDropZone
-                  file={uploads[scope][slot.field]}
+                  file={uploadsDe(scope)[slot.field]}
                   onFileChange={(file) => setUpload(slot.field, file)}
                   accept=".woff2,.woff,.otf,.ttf"
                 />
@@ -241,16 +347,22 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
         <div className="mt-3 grid gap-4 sm:grid-cols-3">
           {IMAGE_SLOTS.map((slot) => (
             <div key={slot.field}>
-              <label className="block text-sm font-medium text-text">{slot.label}</label>
+              <label className="block text-sm font-medium text-text">
+                {slot.label}
+              </label>
               <div className="mt-1">
                 <FileDropZone
-                  file={uploads[scope][slot.field]}
+                  file={uploadsDe(scope)[slot.field]}
                   onFileChange={(file) => setUpload(slot.field, file)}
                   accept={slot.accept}
                   previewUrl={
-                    uploads[scope][slot.field]
+                    uploadsDe(scope)[slot.field]
                       ? null
-                      : assetUrl(scope, slot.slot as "logo" | "favicon" | "share", current.updatedAt)
+                      : assetUrl(
+                          scope,
+                          slot.slot as "logo" | "favicon" | "share",
+                          current.updatedAt,
+                        )
                   }
                 />
               </div>
@@ -270,7 +382,10 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
           fontSize: `${current.typography.baseSizePx}px`,
         }}
       >
-        <h2 className="text-sm font-semibold" style={{ color: current.colors.text ?? COLOR_FIELDS[6].default }}>
+        <h2
+          className="text-sm font-semibold"
+          style={{ color: current.colors.text ?? COLOR_FIELDS[6].default }}
+        >
           Aperçu
         </h2>
         <div
@@ -303,13 +418,21 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
           <div className="mt-3 flex gap-2">
             <span
               className="rounded-lg px-3 py-1.5 text-sm"
-              style={{ backgroundColor: current.colors.primary ?? COLOR_FIELDS[0].default, color: "#fff" }}
+              style={{
+                backgroundColor:
+                  current.colors.primary ?? COLOR_FIELDS[0].default,
+                color: "#fff",
+              }}
             >
               Bouton principal
             </span>
             <span
               className="rounded-lg px-3 py-1.5 text-sm"
-              style={{ backgroundColor: current.colors.accent ?? COLOR_FIELDS[2].default, color: "#fff" }}
+              style={{
+                backgroundColor:
+                  current.colors.accent ?? COLOR_FIELDS[2].default,
+                color: "#fff",
+              }}
             >
               Accent
             </span>
@@ -324,7 +447,7 @@ export default function SettingsForm({ initial }: { initial: Record<SettingsScop
         className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-text-on-brand hover:bg-primary-hover disabled:opacity-40"
       >
         {busy && <SpinnerIcon className="h-4 w-4" />}
-        Enregistrer « {SCOPE_LABELS[scope]} »
+        Enregistrer « {scopeLabel(scope)} »
       </button>
     </div>
   );
@@ -352,7 +475,9 @@ function FontSelect({
       <label className="block text-sm font-medium text-text">{label}</label>
       <select
         value={value ?? ""}
-        onChange={(e) => onChange((e.target.value || null) as FontChoice | null)}
+        onChange={(e) =>
+          onChange((e.target.value || null) as FontChoice | null)
+        }
         disabled={disabled}
         className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
       >
@@ -373,7 +498,9 @@ function FontSelect({
         </optgroup>
       </select>
       {disabled && (
-        <p className="mt-0.5 text-[11px] text-text-subtle">Un fichier de police est en place : il a la priorité.</p>
+        <p className="mt-0.5 text-[11px] text-text-subtle">
+          Un fichier de police est en place : il a la priorité.
+        </p>
       )}
     </div>
   );

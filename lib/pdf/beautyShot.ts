@@ -15,6 +15,14 @@ import type { Template } from "../types";
  * dessiné à la main pour chaque modèle — le XML et les images qu'il
  * référence sont fournis ensemble par le graphiste.
  *
+ * Ordre de montage, du bas vers le haut :
+ *   underlay* → fond → design découpé par le masque → overlay*
+ *
+ * `underlay` est une extension au schéma Mediaclip, qui ne prévoit qu'un
+ * fond unique. Une ombre portée livrée en image séparée déborde du produit
+ * et doit passer derrière lui : sans cet élément, elle n'avait aucune place
+ * dans la pile et l'asset restait déclaré mais jamais dessiné.
+ *
  * Le mesh peut en théorie décrire un maillage de déformation (perspective)
  * — pour l'instant on ne gère que le cas rectangle (le plus courant), en
  * prenant le rectangle englobant des points du mesh. Un vrai mesh de
@@ -48,6 +56,11 @@ export interface BeautyShotConfig {
   width: number;
   height: number;
   zones: BeautyShotZone[];
+  // Couches posées SOUS le fond, dans l'ordre du XML. Extension au schéma
+  // Mediaclip, qui ne connaît qu'un fond unique : une ombre portée est une
+  // image à part, qui déborde du produit et doit passer derrière lui. Sans
+  // ça, elle n'avait aucune place dans la pile et restait inutilisée.
+  underlays: BeautyShotOverlay[];
   overlays: BeautyShotOverlay[];
 }
 
@@ -114,6 +127,7 @@ export function parseBeautyShotXml(xml: string): BeautyShotConfig {
       width: 0,
       height: 0,
       zones: [],
+      underlays: [],
       overlays: [],
     };
   }
@@ -128,13 +142,19 @@ export function parseBeautyShotXml(xml: string): BeautyShotConfig {
     return { id: String(z["@_id"] ?? ""), ...bounds };
   });
 
-  const overlayKey = findKey(beautyShot, "overlay");
-  const overlays: BeautyShotOverlay[] = asArray(
-    beautyShot[overlayKey ?? "overlay"] as Record<string, unknown> | Record<string, unknown>[]
-  ).map((o) => ({
-    assetName: assetNameFromUrl(String(o["@_url"] ?? "")) ?? "",
-    blendMode: String(o["@_blendMode"] ?? "over"),
-  }));
+  // `underlay` et `overlay` se lisent pareil : mêmes attributs, seule la
+  // place dans la pile change. `findKey` cherche par suffixe, donc
+  // « overlay » ne peut pas capter « underlay ».
+  const couches = (suffix: string): BeautyShotOverlay[] =>
+    asArray(
+      beautyShot[findKey(beautyShot, suffix) ?? suffix] as Record<string, unknown> | Record<string, unknown>[]
+    ).map((o) => ({
+      assetName: assetNameFromUrl(String(o["@_url"] ?? "")) ?? "",
+      blendMode: String(o["@_blendMode"] ?? "over"),
+    }));
+
+  const underlays = couches("underlay");
+  const overlays = couches("overlay");
 
   return {
     assets,
@@ -144,6 +164,7 @@ export function parseBeautyShotXml(xml: string): BeautyShotConfig {
     width: parseInt(String(beautyShot["@_width"] ?? "0"), 10),
     height: parseInt(String(beautyShot["@_height"] ?? "0"), 10),
     zones,
+    underlays,
     overlays,
   };
 }
@@ -184,13 +205,15 @@ export function mockupFolder(mockupId: string): string {
   return `mockups/${mockupId}`;
 }
 
-// Noms d'assets réellement utilisés par le rendu (fond, masque, overlays) —
-// les autres entrées de <assets> peuvent être ignorées.
+// Noms d'assets réellement utilisés par le rendu (fond, masque, couches du
+// dessous et du dessus) — les autres entrées de <assets> peuvent être
+// ignorées. Cette liste décide de ce qui est téléversé ET de ce qui est
+// chargé au rendu : un asset absent d'ici n'existe nulle part.
 export function usedAssetNames(config: BeautyShotConfig): string[] {
   const names = new Set<string>();
   if (config.backgroundAssetName) names.add(config.backgroundAssetName);
   if (config.maskAssetName) names.add(config.maskAssetName);
-  for (const overlay of config.overlays) names.add(overlay.assetName);
+  for (const couche of [...config.underlays, ...config.overlays]) names.add(couche.assetName);
   return Array.from(names);
 }
 
@@ -528,16 +551,50 @@ export async function generateBeautyShotMockupPng(
         .toBuffer()
     : design;
 
-  const backgroundBuffer = config.backgroundAssetName ? assets.get(config.backgroundAssetName) : null;
-  const base = backgroundBuffer
-    ? await sharp(backgroundBuffer).resize(canvasWidth, canvasHeight, { fit: "cover" }).ensureAlpha().png().toBuffer()
-    : await sharp({
-        create: { width: canvasWidth, height: canvasHeight, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } },
-      })
-        .png()
-        .toBuffer();
+  // La scène se monte du bas vers le haut : couches du dessous (une ombre
+  // portée, typiquement), puis le fond, puis le design découpé, puis les
+  // surcouches. Le fond n'est donc plus forcément la couche la plus basse.
+  let composed = await sharp({
+    create: { width: canvasWidth, height: canvasHeight, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } },
+  })
+    .png()
+    .toBuffer();
 
-  let composed = await sharp(base)
+  for (const underlay of config.underlays) {
+    const buffer = assets.get(underlay.assetName);
+    if (!buffer) continue;
+    composed = await sharp(composed)
+      .composite([
+        {
+          input: await sharp(buffer)
+            .resize(canvasWidth, canvasHeight, { fit: "cover" })
+            .ensureAlpha()
+            .png()
+            .toBuffer(),
+          blend: underlay.blendMode as sharp.Blend,
+        },
+      ])
+      .png()
+      .toBuffer();
+  }
+
+  const backgroundBuffer = config.backgroundAssetName ? assets.get(config.backgroundAssetName) : null;
+  if (backgroundBuffer) {
+    composed = await sharp(composed)
+      .composite([
+        {
+          input: await sharp(backgroundBuffer)
+            .resize(canvasWidth, canvasHeight, { fit: "cover" })
+            .ensureAlpha()
+            .png()
+            .toBuffer(),
+        },
+      ])
+      .png()
+      .toBuffer();
+  }
+
+  composed = await sharp(composed)
     .composite([{ input: maskedDesign, left: Math.round(zone.left), top: Math.round(zone.top) }])
     .png()
     .toBuffer();

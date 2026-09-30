@@ -37,6 +37,33 @@ export function isSettingsScope(value: unknown): value is SettingsScope {
   return typeof value === "string" && ((BASE_SCOPES as readonly string[]).includes(value) || isShopScope(value));
 }
 
+/**
+ * Boutique d'origine du visiteur, déduite de l'adresse de retour Shopify.
+ * C'est le seul signal dont dispose l'Outil Shopify : le client arrive par
+ * un lien, sans session ni en-tête qui dise d'où il vient.
+ *
+ * Ici plutôt que dans lib/shopify.ts, qui importe `crypto` et ne peut donc
+ * pas être chargé côté navigateur : la barre de navigation en a besoin pour
+ * afficher le bon logo, et elle est un composant client.
+ *
+ * Cette fonction dit seulement « à quel jeu de réglages regarder ». Ce qui
+ * est acceptable comme adresse de RETOUR — là où on renvoie réellement le
+ * client, et donc une redirection ouverte si on se trompe — reste jugé par
+ * isAllowedReturnUrl, côté serveur uniquement. Un domaine inventé ne donne
+ * ici qu'un jeu inexistant, donc l'habillage par défaut.
+ */
+export function shopScopeOfReturnUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase();
+    return isShopScope(host) ? host : null;
+  } catch {
+    return null; // relative, ou illisible
+  }
+}
+
 /** Libellé d'un jeu : « Administration », « Outil Shopify », ou le domaine. */
 export function scopeLabel(scope: SettingsScope): string {
   return (SCOPE_LABELS as Record<string, string>)[scope] ?? scope;

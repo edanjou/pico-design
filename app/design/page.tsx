@@ -8,6 +8,12 @@ import { redirect } from "next/navigation";
 import { createGrant, isValidPublicKey, verifyGrant } from "@/lib/publicDesign";
 import { isAllowedReturnUrl } from "@/lib/shopify";
 import AppSettingsStyle from "@/components/AppSettingsStyle";
+import {
+  assetUrl,
+  loadAppSettings,
+  shopScopeOfReturnUrl,
+} from "@/lib/appSettings";
+import type { Metadata } from "next";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type {
@@ -25,6 +31,33 @@ import type {
 // collection) ici, l'outil ne fait que préparer un design (aperçu +
 // téléchargement), il n'enregistre rien.
 //
+/**
+ * Favicon de l'onglet. app/layout.tsx pose celui de l'administration pour
+ * tout le site ; l'Outil Shopify le remplace ici, par celui de la boutique
+ * d'où vient le client — et à défaut par celui du jeu « tool », comme le
+ * logo de la barre de navigation le fait déjà.
+ *
+ * Lecture par le client admin : le visiteur public n'a pas de session, et la
+ * RLS de app_settings ne lui ouvre rien. Seul `updated_at` est utilisé, pour
+ * le `?v=` qui invalide le cache du navigateur quand le fichier change.
+ *
+ * Même contrôle strict que l'habillage plus bas : une adresse de retour
+ * forgée retombe sur « tool », pour que les deux décisions prises ici
+ * s'accordent. La barre de navigation, elle, est un composant client et ne
+ * peut pas lire SHOPIFY_SHOP_DOMAIN — elle s'arrête à la forme du domaine.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams?: { retour?: string };
+}): Promise<Metadata> {
+  const scope = isAllowedReturnUrl(searchParams?.retour)
+    ? (shopScopeOfReturnUrl(searchParams?.retour) ?? "tool")
+    : "tool";
+  const settings = await loadAppSettings(createAdminSupabaseClient(), scope);
+  return { icons: { icon: assetUrl(scope, "favicon", settings.updatedAt) } };
+}
+
 // Deux entrées possibles :
 // - interne, avec une session : tout le catalogue, galerie de modèles ;
 // - publique, par un lien `?template=<id>&cle=<secret>` venant de Shopify :
@@ -208,18 +241,12 @@ async function publicTool(
     }),
   );
 
-  // Boutique d'origine du visiteur, lue sur l'adresse de retour — le seul
-  // signal dont on dispose, et déjà validé plus haut. Ses réglages priment
-  // sur le jeu « tool » posé par app/design/layout.tsx : ce bloc de style
-  // vient plus loin dans le document, il l'emporte. Sans réglages propres à
-  // cette boutique, il ne produit rien et le jeu par défaut s'applique.
-  let boutique: string | null = null;
-  try {
-    if (shopify.returnUrl)
-      boutique = new URL(shopify.returnUrl).hostname.toLowerCase();
-  } catch {
-    boutique = null;
-  }
+  // Boutique d'origine du visiteur, lue sur l'adresse de retour — déjà
+  // validée plus haut par isAllowedReturnUrl. Ses réglages priment sur le
+  // jeu « tool » posé par app/design/layout.tsx : ce bloc de style vient plus
+  // loin dans le document, il l'emporte. Sans réglages propres à cette
+  // boutique, il ne produit rien et le jeu par défaut s'applique.
+  const boutique = shopScopeOfReturnUrl(shopify.returnUrl);
 
   return (
     <>

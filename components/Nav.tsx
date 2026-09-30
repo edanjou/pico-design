@@ -2,7 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
 import { LogOutIcon, MenuIcon, XIcon } from "@/components/icons";
 import { DEFAULT_MENU_ORDER, MENU_ITEMS, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
@@ -26,7 +27,21 @@ const DEFAULT_ORDER_NO_ADMIN = DEFAULT_MENU_ORDER.filter((k) => !ADMIN_ONLY.incl
 export default function Nav() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  // Jeu de réglages dont vient le logo. Sur l'Outil Shopify, celui de la
+  // boutique d'origine quand on en vient, sinon le jeu « tool ».
+  //
+  // La boutique est relue de l'URL plutôt que reçue en prop : cette barre
+  // vit dans app/layout.tsx, donc AU-DESSUS de la page qui la connaît —
+  // l'information ne peut pas remonter (même contrainte que
+  // ChromeVisibility.tsx). Un `retour` forgé ne donne ici qu'un jeu
+  // inexistant, donc le logo par défaut ; ce qui est acceptable comme
+  // adresse de retour reste jugé côté serveur.
+  const logoScope = pathname.startsWith("/design")
+    ? (shopScopeOfReturnUrl(searchParams.get("retour")) ?? "tool")
+    : "admin";
   const [name, setName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   // Menu burger (mobile et tablette — voir le <nav> masqué en `lg:flex`
@@ -98,11 +113,11 @@ export default function Nav() {
           <Link href="/">
             {/* Logo réglable (module Paramètres). Le jeu suit la surface :
                 l'Outil Shopify peut porter un autre logo que
-                l'administration. La route renvoie le logo d'origine tant
-                que rien n'est téléversé. */}
+                l'administration, et une boutique le sien. La route renvoie
+                le logo d'origine tant que rien n'est téléversé. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`/api/settings/${pathname.startsWith("/design") ? "tool" : "admin"}/asset/logo`}
+              src={`/api/settings/${logoScope}/asset/logo`}
               alt="Pico Design"
               className="h-6 w-auto"
             />

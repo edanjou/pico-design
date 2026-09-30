@@ -65,6 +65,7 @@ export default function DesignTool({
   publicTemplateId,
   grant,
   shopify,
+  brandScope = "tool",
 }: {
   templates: Template[];
   categories: Category[];
@@ -82,6 +83,11 @@ export default function DesignTool({
   // Contexte de commande venu de Shopify : sa présence change la fin du
   // parcours — enregistrer et repartir au panier, au lieu de télécharger.
   shopify?: { variantId: string; quantity: number; returnUrl: string | null };
+  // Jeu de réglages dont vient le logo de l'éditeur : celui de la boutique
+  // d'origine quand on en vient, sinon « tool ». Passé depuis la page, qui
+  // seule peut valider la provenance — contrairement à la barre du haut de
+  // l'administration, qui doit le relire dans l'URL (voir Nav.tsx).
+  brandScope?: string;
 }) {
   const initialTemplate = publicTemplateId ? templates.find((t) => t.id === publicTemplateId) ?? null : null;
   // En mode public on entre directement dans l'éditeur : il n'y a rien à
@@ -284,6 +290,7 @@ export default function DesignTool({
           // En mode public il n'y a pas d'autre modèle à proposer.
           onChangeModel={publicTemplateId ? undefined : () => setPhase("pick")}
           grant={grant}
+          brandScope={brandScope}
           onReview={() => setReviewOpen(true)}
         />
       )}

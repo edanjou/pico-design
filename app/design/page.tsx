@@ -260,6 +260,7 @@ async function publicTool(
         mockups={(mockups as TemplateMockup[]) ?? []}
         publicTemplateId={row.id}
         grant={grant}
+        brandScope={boutique ?? "tool"}
         // Sans variante NI adresse de retour valable, pas de parcours de
         // commande : on retombe sur le téléchargement du PDF, plutôt que de
         // proposer un bouton qui mènerait nulle part.

@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient, createServerSupabaseClient, getAuthorizedAdmin } from "@/lib/supabase/server";
 import {
+  ASSET_SLOTS,
+  assetPathFor,
+  BASE_SCOPES,
   COLOR_FIELDS,
+  fromRow,
   isSettingsScope,
   isHexColor,
   loadAppSettings,
   parseTypography,
+  type AppSettingsRow,
   type ColorKey,
   type SettingsScope,
 } from "@/lib/appSettings";
@@ -123,4 +128,82 @@ export async function PATCH(request: Request, { params }: { params: { scope: str
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ settings: data });
+}
+
+/**
+ * Retire le jeu de réglages d'une boutique (voir la migration 0060).
+ *
+ * Seulement une boutique : « admin » et « tool » sont les deux jeux de
+ * l'outil lui-même, et l'interface n'aurait plus de quoi se peindre.
+ *
+ * Les fichiers téléversés partent avec la ligne. Sans ça, chaque suppression
+ * laisserait derrière elle un logo et un favicon que plus rien ne référence,
+ * dans un bucket que personne ne regarde.
+ *
+ * La boutique peut réapparaître dans la liste au rechargement si des
+ * commandes en proviennent : elle est alors une boutique connue, simplement
+ * revenue à l'habillage par défaut. C'est voulu — le module Paramètres ne
+ * décide pas de quelles boutiques existent.
+ */
+export async function DELETE(_request: Request, { params }: { params: { scope: string } }) {
+  if (!validScope(params.scope)) return NextResponse.json({ error: "Jeu inconnu." }, { status: 404 });
+  const scope = params.scope;
+
+  // L'authentification d'abord : un appelant non connecté n'a aucune raison
+  // d'apprendre quels jeux existent, ni d'obtenir autre chose qu'un 401.
+  const supabase = createServerSupabaseClient();
+  const { user, isAdmin } = await getAuthorizedAdmin(supabase);
+  if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  if (!isAdmin) return NextResponse.json({ error: "Réservé aux administrateurs." }, { status: 403 });
+
+  if ((BASE_SCOPES as readonly string[]).includes(scope)) {
+    return NextResponse.json(
+      { error: "Les jeux « Administration » et « Outil Shopify » ne peuvent pas être supprimés." },
+      { status: 400 }
+    );
+  }
+
+  // Une boutique ajoutée dans l'interface mais jamais enregistrée n'a pas de
+  // ligne. Il n'y a alors rien à supprimer, et surtout rien d'anormal : sans
+  // cette distinction, le contrôle plus bas accuserait à tort la migration.
+  const { data: existante } = await supabase
+    .from("app_settings")
+    .select("*")
+    .eq("scope", scope)
+    .maybeSingle();
+  if (!existante) return NextResponse.json({ ok: true, fichiersSupprimés: 0 });
+
+  const settings = fromRow(existante as AppSettingsRow);
+  const fichiers = ASSET_SLOTS.map((slot) => assetPathFor(settings, slot)).filter(
+    (p): p is string => Boolean(p)
+  );
+
+  // La ligne d'abord : si la suppression des fichiers échoue, il reste des
+  // orphelins dans le bucket, ce qui est sans conséquence. L'inverse — des
+  // réglages pointant sur des fichiers disparus — casserait l'affichage.
+  //
+  // `.select()` n'est pas décoratif : un refus de la RLS ne lève PAS d'erreur
+  // sur un delete, il ne touche simplement aucune ligne. Sans cette
+  // vérification, une migration 0060 non exécutée ferait répondre « supprimé »
+  // à une suppression qui n'a rien fait.
+  const { data: supprimées, error } = await supabase
+    .from("app_settings")
+    .delete()
+    .eq("scope", scope)
+    .select("scope");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!supprimées || supprimées.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Suppression refusée par la base : la migration 0060 n'a probablement pas été exécutée.",
+      },
+      { status: 500 }
+    );
+  }
+  if (fichiers.length > 0) {
+    await createAdminSupabaseClient().storage.from("assets").remove(fichiers);
+  }
+
+  return NextResponse.json({ ok: true, fichiersSupprimés: fichiers.length });
 }

@@ -155,6 +155,55 @@ export default function SettingsForm({
     });
   }
 
+  /**
+   * Retire une boutique de la liste. Action destructive : la confirmation
+   * nomme la boutique, une liste d'onglets se cliquant vite.
+   *
+   * La boutique peut revenir au rechargement si des commandes en proviennent
+   * (voir app/settings/page.tsx) — elle est alors connue, mais revenue à
+   * l'habillage par défaut. Le message le dit plutôt que de laisser croire à
+   * un échec.
+   */
+  async function handleDeleteShop() {
+    if (
+      !confirm(
+        `Supprimer les réglages de ${scope} ?\n\nLes couleurs, la typographie et les fichiers de cette boutique seront perdus. Elle reprendra l'habillage « Outil Shopify (par défaut) ».`,
+      )
+    )
+      return;
+
+    setBusy(true);
+    setMessage(null);
+    const res = await fetch(`/api/settings/${scope}`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setMessage({
+        kind: "error",
+        text: data.error ?? "Erreur lors de la suppression.",
+      });
+      return;
+    }
+
+    const supprimée = scope;
+    setShops((all) => all.filter((s) => s !== supprimée));
+    setSettings((all) => {
+      const reste = { ...all };
+      delete reste[supprimée];
+      return reste;
+    });
+    setUploads((all) => {
+      const reste = { ...all };
+      delete reste[supprimée];
+      return reste;
+    });
+    setScope("tool");
+    setMessage({
+      kind: "ok",
+      text: `${supprimée} supprimée. Si des commandes en proviennent, elle restera proposée au rechargement, avec l'habillage par défaut.`,
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -212,10 +261,20 @@ export default function SettingsForm({
       </div>
 
       {isShopScope(String(scope)) && (
-        <p className="text-xs text-text-subtle">
-          Réglages propres à cette boutique. Ce qui n&apos;est pas défini ici
-          reprend « Outil Shopify (par défaut) ».
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-text-subtle">
+            Réglages propres à cette boutique. Ce qui n&apos;est pas défini ici
+            reprend « Outil Shopify (par défaut) ».
+          </p>
+          <button
+            type="button"
+            onClick={handleDeleteShop}
+            disabled={busy}
+            className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs text-danger hover:bg-surface-muted disabled:opacity-50"
+          >
+            Supprimer cette boutique
+          </button>
+        </div>
       )}
 
       {message && (

@@ -42,19 +42,18 @@ const nextConfig = {
   // faire cliquer un utilisateur connecté sur des commandes qu'il ne voit
   // pas (détournement de clic).
   //
-  // Pas de Content-Security-Policy complète ici : l'app charge des polices
-  // Google, des URL signées Supabase et injecte un <style> pour l'habillage
-  // (voir AppSettingsStyle). Une CSP écrite sans éprouver chaque page
-  // casserait la production plus sûrement qu'elle ne protégerait. Seule
-  // `frame-ancestors` est posée, qui ne restreint rien d'autre.
+  // La Content-Security-Policy n'est PLUS ici : elle porte un nonce tiré à
+  // chaque requête, ce qu'un en-tête statique ne peut pas faire. Elle vit
+  // dans middleware.ts, et `frame-ancestors` y a été reprise — deux en-têtes
+  // CSP s'additionnent, et en laisser une ici rendrait la règle réelle
+  // impossible à lire.
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
-          // Les deux disent la même chose : frame-ancestors pour les
-          // navigateurs modernes, X-Frame-Options pour les plus anciens.
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          // Doublon assumé de `frame-ancestors` (voir middleware.ts), pour
+          // les navigateurs trop anciens pour la connaître.
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           // Empêche un navigateur de « deviner » un type différent de celui
           // annoncé — ce qui transformerait un fichier déposé en page HTML.

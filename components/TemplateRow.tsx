@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Template } from "@/lib/types";
 import type { TemplateWithOverlayUrl } from "@/components/TemplatesTable";
 import { formatIn } from "@/lib/pdf/units";
-import { CopyIcon, EyeIcon, FilePenIcon, LayersIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, CopyIcon, EyeIcon, FilePenIcon, LayersIcon, ShopifyIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function TemplateRow({
   template,
@@ -27,6 +27,19 @@ export default function TemplateRow({
 }) {
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  // L'identifiant à coller dans le produit Shopify pour le lier à ce modèle.
+  async function handleCopyId() {
+    try {
+      await navigator.clipboard.writeText(template.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 1500);
+    } catch {
+      // Presse-papiers indisponible (permissions navigateur) : l'id reste
+      // lisible dans l'infobulle du bouton.
+    }
+  }
 
   async function handleDelete() {
     if (!confirm(`Supprimer le modèle « ${template.name} » ?`)) return;
@@ -86,14 +99,6 @@ export default function TemplateRow({
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => onEdit(template)}
-            title="Modifier"
-            aria-label="Modifier"
-            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
-          >
-            <FilePenIcon className="h-4 w-4" />
-          </button>
-          <button
             onClick={() => onManageMockups(template)}
             title="Mockups"
             aria-label="Mockups"
@@ -103,6 +108,15 @@ export default function TemplateRow({
                 mockup se reconnaît partout au même symbole. */}
             <LayersIcon className="h-4 w-4" />
           </button>
+          {/* Pas l'icône « copier » : elle sert déjà à Dupliquer, juste à côté. */}
+          <button
+            onClick={handleCopyId}
+            title={copiedId ? "Id copié" : `Copier l'id pour Shopify (${template.id})`}
+            aria-label="Copier l'id pour Shopify"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+          >
+            {copiedId ? <CheckIcon className="h-4 w-4 text-green-600" /> : <ShopifyIcon className="h-4 w-4" />}
+          </button>
           <button
             onClick={handleDuplicate}
             disabled={duplicating}
@@ -111,6 +125,14 @@ export default function TemplateRow({
             className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black disabled:opacity-50"
           >
             {duplicating ? <SpinnerIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={() => onEdit(template)}
+            title="Modifier"
+            aria-label="Modifier"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+          >
+            <FilePenIcon className="h-4 w-4" />
           </button>
           <button
             onClick={handleDelete}

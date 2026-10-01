@@ -217,6 +217,54 @@ export function usedAssetNames(config: BeautyShotConfig): string[] {
   return Array.from(names);
 }
 
+// Modes de fusion que sharp accepte. Un nom inconnu — une majuscule, ou un
+// mode Photoshop comme « linearBurn » — ne faisait rien à l'import et
+// provoquait une erreur opaque au premier mockup.
+const BLEND_MODES = new Set([
+  "clear", "source", "over", "in", "out", "atop", "dest", "dest-over", "dest-in",
+  "dest-out", "dest-atop", "xor", "add", "saturate", "multiply", "screen",
+  "overlay", "darken", "lighten", "colour-dodge", "color-dodge", "colour-burn",
+  "color-burn", "hard-light", "soft-light", "difference", "exclusion",
+]);
+
+/**
+ * Ce qui empêcherait ce bundle de produire un mockup. Renvoie un message, ou
+ * null si tout va bien.
+ *
+ * Appelé À L'IMPORT (voir lib/templateBeautyShotUpload.ts) et non seulement
+ * au rendu : un XML amputé de son `width`, de son `height` ou de son `mesh`
+ * s'enregistrait sans broncher, et n'échouait qu'au premier mockup, sur un
+ * message qui ne disait pas quel fichier reprendre. Les mêmes règles que
+ * generateBeautyShotMockupPng, mais énoncées au moment où on peut encore
+ * corriger le fichier.
+ */
+export function beautyShotXmlError(config: BeautyShotConfig): string | null {
+  if (config.width <= 0 || config.height <= 0) {
+    return "Le XML ne déclare pas la taille de la scène : il manque width et height sur <beautyShot>.";
+  }
+  const zone = config.zones.find((z) => z.id === "front") ?? config.zones[0];
+  if (!zone) return "Le XML ne contient aucune <imageZone> : rien n'indique où poser le visuel.";
+  if (zone.width <= 0 || zone.height <= 0) {
+    return `La zone « ${zone.id || "front"} » est vide : son <mesh> ne donne pas deux points distincts.`;
+  }
+  if (zone.left < 0 || zone.top < 0 || zone.left + zone.width > config.width || zone.top + zone.height > config.height) {
+    return (
+      `La zone d'image (${Math.round(zone.width)}×${Math.round(zone.height)} px à ` +
+      `${Math.round(zone.left)},${Math.round(zone.top)}) sort de la scène ` +
+      `(${config.width}×${config.height} px) : le mesh ne correspond pas à ce produit.`
+    );
+  }
+  if (!config.backgroundAssetName) return "Le XML ne déclare pas de backgroundUrl : le mockup n'aurait pas de fond.";
+
+  for (const couche of [...config.underlays, ...config.overlays]) {
+    if (!couche.assetName) return "Une couche (underlay/overlay) n'a pas d'attribut url.";
+    if (!BLEND_MODES.has(couche.blendMode)) {
+      return `Mode de fusion inconnu pour « ${couche.assetName} » : « ${couche.blendMode} ». Attendu par exemple multiply, overlay, screen.`;
+    }
+  }
+  return null;
+}
+
 export function mimeTypeForAsset(config: BeautyShotConfig, assetName: string): string {
   return config.assets.find((a) => a.name === assetName)?.mimeType ?? "image/png";
 }

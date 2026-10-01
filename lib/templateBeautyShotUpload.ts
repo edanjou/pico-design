@@ -1,6 +1,7 @@
 import type { createServerSupabaseClient } from "./supabase/server";
 import {
   beautyShotAssetPath,
+  beautyShotXmlError,
   beautyShotFolderOf,
   beautyShotXmlPath,
   mimeTypeForAsset,
@@ -73,6 +74,13 @@ export async function uploadBeautyShotBundle(
   }
 
   const config = parseBeautyShotXml(xmlText);
+
+  // Refusé tout de suite si le XML ne peut pas produire de mockup : sinon le
+  // bundle s'enregistre, et l'erreur ne tombe qu'au premier rendu, loin du
+  // fichier à corriger.
+  const problème = beautyShotXmlError(config);
+  if (problème) throw new Error(`XML du bundle mockup inutilisable. ${problème}`);
+
   const usedFiles = new Set<File>();
 
   const missing: string[] = [];

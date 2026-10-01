@@ -52,6 +52,10 @@ export function middleware(request: NextRequest) {
     // fichiers déposés par des URL d'objet, sans jamais les envoyer.
     `img-src 'self' blob: data:${supabase ? ` ${supabase}` : ""}`,
     `connect-src 'self'${supabase ? ` ${supabase}` : ""}`,
+    // Le PDF imposé est affiché dans une <iframe> par URL d'objet (blob:).
+    // Sans cette ligne, frame-src retombe sur default-src 'self', qui
+    // n'admet pas blob:, et l'aperçu reste vide.
+    `frame-src 'self' blob:`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,

@@ -65,6 +65,25 @@ export async function GET(request: Request, { params }: { params: { scope: strin
   const {
     data: { user },
   } = await session.auth.getUser();
+
+  // Ce que l'anonyme peut lire, et rien de plus.
+  //
+  // L'Outil Shopify a besoin de TOUT son habillage (logo, favicon, mais
+  // aussi les polices téléversées, sans quoi la typographie de la boutique
+  // ne s'applique pas) — d'où l'ouverture complète des jeux « tool » et des
+  // boutiques. Le jeu « admin », lui, n'habille que l'administration : seuls
+  // son logo et son favicon sortent, parce que la page de connexion les
+  // affiche avant toute session. Le reste — image de partage, polices —
+  // reste derrière la connexion : une police sous licence commerciale n'a
+  // pas à être téléchargeable par n'importe qui.
+  //
+  // L'image de partage n'y perd rien : app/opengraph-image.tsx lit le
+  // fichier directement, sans passer par ici.
+  const PUBLIC_POUR_ADMIN: AssetSlot[] = ["logo", "favicon"];
+  if (!user && scope === "admin" && !PUBLIC_POUR_ADMIN.includes(slot)) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const client = user ? session : createAdminSupabaseClient();
 
   // Une boutique hérite du jeu « tool » pour ce qu'elle n'a pas défini —

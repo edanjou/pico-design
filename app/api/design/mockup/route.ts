@@ -10,6 +10,7 @@ import { generateBeautyShotMockupPng } from "@/lib/pdf/beautyShot";
 import { loadBeautyShotBundle } from "@/lib/pdf/beautyShotBundle";
 import { resolveMockupBundle } from "@/lib/templateMockups";
 import { grantAllows } from "@/lib/publicDesign";
+import { publicUploadError } from "@/lib/uploadLimits";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
@@ -75,6 +76,9 @@ export async function POST(request: Request) {
   if (!user) {
     const limit = await checkRateLimit("mockup", request);
     if (!limit.allowed) return tooManyRequests("mockup");
+    // Le débit plafonne les APPELS, pas les octets (voir lib/uploadLimits.ts).
+    const tropLourd = publicUploadError(formData);
+    if (tropLourd) return errorResponse(tropLourd, 413);
   }
   const db = user ? supabase : createAdminSupabaseClient();
   const rotated = formData.get("rotated") === "true";

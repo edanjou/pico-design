@@ -7,6 +7,7 @@ import {
 } from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
 import { splitFormData } from "@/lib/design/submission";
+import { publicUploadError } from "@/lib/uploadLimits";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -45,6 +46,11 @@ export async function POST(request: Request) {
   if (!user) {
     const limit = await checkRateLimit("submit", request);
     if (!limit.allowed) return tooManyRequests("submit");
+    // Le débit plafonne les APPELS, pas les octets : sans ça, vingt envois
+    // par heure suffisent à écrire plusieurs gigaoctets (voir
+    // lib/uploadLimits.ts).
+    const tropLourd = publicUploadError(formData);
+    if (tropLourd) return errorResponse(tropLourd, 413);
   }
 
   // Écriture par la clé de service : le client public n'a pas de session, et

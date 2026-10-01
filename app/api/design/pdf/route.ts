@@ -5,6 +5,7 @@ import {
   createServerSupabaseClient,
 } from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
+import { publicUploadError } from "@/lib/uploadLimits";
 import { renderPdfFromForm } from "@/lib/design/renderPdf";
 
 export const runtime = "nodejs"; // sharp/pdf-lib ont besoin du runtime Node, pas Edge.
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
   if (!user) {
     const limit = await checkRateLimit("pdf", request);
     if (!limit.allowed) return tooManyRequests("pdf");
+    // Le débit plafonne les APPELS, pas les octets (voir lib/uploadLimits.ts).
+    const tropLourd = publicUploadError(formData);
+    if (tropLourd) return errorResponse(tropLourd, 413);
   }
   const db = user ? supabase : createAdminSupabaseClient();
 

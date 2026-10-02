@@ -5,8 +5,13 @@ import {
   PDFName,
   PDFOperator,
   PDFOperatorNames,
+  clip,
   cmyk,
   degrees,
+  endPath,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
   type PDFEmbeddedPage,
   type PDFPage,
   type PDFRef,
@@ -172,6 +177,25 @@ function drawInCell(
     y = cell.y + cell.height;
   } else if (rotation === 270) y = cell.y + cell.height;
   sheetPage.drawPage(page, { x, y, width: page.width, height: page.height, rotate: degrees(rotation) });
+}
+
+// Pose une pièce dans sa cellule, rognée à sa zone `clip` s'il y en a une
+// (fonds perdus de deux voisines qui se chevauchent, voir computeLayout).
+function drawPiece(
+  sheetPage: PDFPage,
+  page: PDFEmbeddedPage,
+  cell: Cell,
+  sheetHeight: number,
+  rotation: Rotation
+) {
+  if (!cell.clip) {
+    drawInCell(sheetPage, page, toPdfRect(cell, sheetHeight), rotation);
+    return;
+  }
+  const c = toPdfRect({ ...cell, ...cell.clip }, sheetHeight);
+  sheetPage.pushOperators(pushGraphicsState(), rectangle(c.x, c.y, c.width, c.height), clip(), endPath());
+  drawInCell(sheetPage, page, toPdfRect(cell, sheetHeight), rotation);
+  sheetPage.pushOperators(popGraphicsState());
 }
 
 function toPdfRect(cell: Cell, sheetHeight: number) {
@@ -398,7 +422,8 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   // Premier calque (en bas) : le code-barres et les repères. Les visuels passent
   // par-dessus, un calque par visuel, aussi bien au recto qu'au verso.
   if (input.marks || input.barcode || input.regMark) {
-    await inLayer(front, layers.add("Marques (code-barres et repère REG)"), async () => {
+    const marksLayer = input.barcode || input.regMark ? "Marques (code-barres et repère REG)" : "Marques de découpe";
+    await inLayer(front, layers.add(marksLayer), async () => {
       if (input.marks) await drawMarks(out, front, input.marks, sheetWidthPt, sheetHeightPt);
       if (input.barcode) await drawBarcode(out, front, input.barcode, input.sheetWidth, input.sheetHeight);
       if (input.regMark) drawRegMark(front, input.regMark, input.sheetWidth, input.sheetHeight);
@@ -413,7 +438,7 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
       layout.cells.forEach((cell, i) => {
         if (assignment[i] !== index) return;
         const source = prepared[index];
-        drawInCell(front, source.front, toPdfRect(cell, input.sheetHeight), frontRotationFor(source, cell));
+        drawPiece(front, source.front, cell, input.sheetHeight, frontRotationFor(source, cell));
       });
     });
   }
@@ -439,7 +464,7 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
           const backRotation = ((frontTotal + (cardAxisVertical === verticalAxis ? 0 : 180)) %
             360) as Rotation;
           const mirrored = mirrorCell(cell, input.sheetWidth, input.sheetHeight, verticalAxis);
-          drawInCell(back, sourceBack, toPdfRect(mirrored, input.sheetHeight), backRotation);
+          drawPiece(back, sourceBack, mirrored, input.sheetHeight, backRotation);
         });
       });
     }

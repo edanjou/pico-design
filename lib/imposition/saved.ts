@@ -25,6 +25,9 @@ export interface ImpositionConfig {
   sheetId: string;
   machine: CutterMachine;
   duploJobId: string;
+  // Profil de découpe Graphtec ("" pour la Duplo, et pour les impositions
+  // enregistrées avant les profils).
+  cutterId: string;
   // Format du catalogue (id du modèle) ou "custom" avec les dimensions ci-dessous.
   formatId: string;
   custom: { widthMm: number; heightMm: number; bleedMm: number };

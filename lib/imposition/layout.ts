@@ -19,7 +19,8 @@ export interface LayoutInput {
   sheetWidth: number;
   sheetHeight: number;
   margins: SheetMargins;
-  // Espace entre deux pièces voisines (bord de fond perdu à bord de fond perdu).
+  // Espace entre deux pièces voisines (bord de fond perdu à bord de fond perdu,
+  // ou trait de coupe à trait de coupe avec `trimBleed`).
   gutterX: number;
   gutterY: number;
   // Décalage de calibration de la découpeuse, appliqué à toute la grille
@@ -32,6 +33,15 @@ export interface LayoutInput {
   pieceWidth: number;
   pieceHeight: number;
   orientation: PieceOrientation;
+  // Grille imposée (profil Graphtec) : exactement `cols` × `rows` pièces, ou
+  // aucune si elles ne tiennent pas dans la zone utile. Absente = autant de
+  // pièces que la zone en contient.
+  grid?: { cols: number; rows: number } | null;
+  // Fond perdu par côté, quand les marges et l'espacement se mesurent depuis la
+  // PIÈCE FINIE (trait de coupe) et non depuis le bord du fond perdu : c'est le
+  // cas de la Graphtec, qui découpe au contour. Le fond perdu déborde alors
+  // dans l'espacement et les marges. Absent = mesures au bord du fond perdu.
+  trimBleed?: number | null;
 }
 
 export interface Cell {
@@ -41,6 +51,10 @@ export interface Cell {
   y: number;
   width: number;
   height: number;
+  // Zone où la pièce peut s'imprimer, quand son fond perdu chevaucherait celui
+  // d'une voisine (espacement plus petit que deux fonds perdus) : la pièce est
+  // rognée au milieu de l'espacement de ce côté-là. Absente = la cellule entière.
+  clip?: { x: number; y: number; width: number; height: number };
 }
 
 export interface Layout {
@@ -74,11 +88,20 @@ export function computeLayout(input: LayoutInput): Layout {
     height: input.sheetHeight - margins.top - margins.bottom,
   };
 
+  // Ce qui se mesure entre les marges et l'espacement : la pièce entière, ou la
+  // pièce finie (fond perdu retiré) si les mesures partent du trait de coupe.
+  const trim = Math.max(0, input.trimBleed ?? 0);
+
   function candidate(rotated: boolean) {
     const cellWidth = rotated ? input.pieceHeight : input.pieceWidth;
     const cellHeight = rotated ? input.pieceWidth : input.pieceHeight;
-    const cols = fitCount(usable.width, cellWidth, input.gutterX);
-    const rows = fitCount(usable.height, cellHeight, input.gutterY);
+    const fitCols = fitCount(usable.width, cellWidth - 2 * trim, input.gutterX);
+    const fitRows = fitCount(usable.height, cellHeight - 2 * trim, input.gutterY);
+    // Grille imposée : tout ou rien. Une grille partielle décalerait les pièces
+    // par rapport au fichier de coupe, qui attend chacune à sa place.
+    const fits = !input.grid || (input.grid.cols <= fitCols && input.grid.rows <= fitRows);
+    const cols = !fits ? 0 : input.grid ? input.grid.cols : fitCols;
+    const rows = !fits ? 0 : input.grid ? input.grid.rows : fitRows;
     return { rotated, cellWidth, cellHeight, cols, rows, count: cols * rows };
   }
 
@@ -86,27 +109,43 @@ export function computeLayout(input: LayoutInput): Layout {
   const turned = candidate(true);
   let chosen = normal;
   if (input.orientation === "rotated") chosen = turned;
+  // Avec une grille imposée, les deux sens donnent le même nombre ou zéro : le
+  // sens pivoté n'est donc retenu que si lui seul tient.
   else if (input.orientation === "auto" && turned.count > normal.count) chosen = turned;
 
   const { cols, rows, cellWidth, cellHeight, rotated } = chosen;
-  const gridWidth = cols * cellWidth + Math.max(cols - 1, 0) * input.gutterX;
-  const gridHeight = rows * cellHeight + Math.max(rows - 1, 0) * input.gutterY;
+  // Pas d'une pièce à la suivante, et taille de la grille, mesurés sur ce que
+  // séparent les marges et l'espacement (voir `trim`).
+  const stepX = cellWidth - 2 * trim + input.gutterX;
+  const stepY = cellHeight - 2 * trim + input.gutterY;
+  const gridWidth = cols * (cellWidth - 2 * trim) + Math.max(cols - 1, 0) * input.gutterX;
+  const gridHeight = rows * (cellHeight - 2 * trim) + Math.max(rows - 1, 0) * input.gutterY;
   const originX =
     usable.x + (input.centerGrid ? (usable.width - gridWidth) / 2 : 0) + input.offsetX;
   const originY =
     usable.y + (input.centerGrid ? (usable.height - gridHeight) / 2 : 0) + input.offsetY;
 
+  // Fond perdu de trop entre deux voisines : ce qui dépasse le milieu de l'espacement.
+  const overlapX = Math.max(0, trim - input.gutterX / 2);
+  const overlapY = Math.max(0, trim - input.gutterY / 2);
+
   const cells: Cell[] = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      cells.push({
-        col,
-        row,
-        x: originX + col * (cellWidth + input.gutterX),
-        y: originY + row * (cellHeight + input.gutterY),
-        width: cellWidth,
-        height: cellHeight,
-      });
+      const x = originX + col * stepX - trim;
+      const y = originY + row * stepY - trim;
+      const cell: Cell = { col, row, x, y, width: cellWidth, height: cellHeight };
+      if (overlapX > 0 || overlapY > 0) {
+        // Rogné seulement du côté d'une voisine : en bordure de grille, le fond perdu reste entier.
+        const left = col > 0 ? overlapX : 0;
+        const right = col < cols - 1 ? overlapX : 0;
+        const top = row > 0 ? overlapY : 0;
+        const bottom = row < rows - 1 ? overlapY : 0;
+        if (left || right || top || bottom) {
+          cell.clip = { x: x + left, y: y + top, width: cellWidth - left - right, height: cellHeight - top - bottom };
+        }
+      }
+      cells.push(cell);
     }
   }
 
@@ -177,7 +216,17 @@ export function mirrorCell(
   sheetHeight: number,
   verticalAxis: boolean
 ): Cell {
+  // La zone de rognage suit la pièce dans son miroir.
+  const clip = cell.clip;
   return verticalAxis
-    ? { ...cell, x: sheetWidth - cell.x - cell.width }
-    : { ...cell, y: sheetHeight - cell.y - cell.height };
+    ? {
+        ...cell,
+        x: sheetWidth - cell.x - cell.width,
+        ...(clip && { clip: { ...clip, x: sheetWidth - clip.x - clip.width } }),
+      }
+    : {
+        ...cell,
+        y: sheetHeight - cell.y - cell.height,
+        ...(clip && { clip: { ...clip, y: sheetHeight - clip.y - clip.height } }),
+      };
 }

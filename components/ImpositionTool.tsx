@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import MeasureField, { UnitToggle, type Unit } from "@/components/MeasureField";
 import { SheetsManager } from "@/components/ImpositionPresets";
 import DuploJobsManager from "@/components/DuploJobsManager";
+import GraphtecProfilesManager from "@/components/GraphtecProfilesManager";
 import { DownloadIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import UpdatingBadge from "@/components/UpdatingBadge";
 import {
   assignCells,
+  computeLayout,
   cutLines,
   flipAxisIsVertical,
   type FlipEdge,
@@ -23,7 +25,7 @@ import { formatInches, sheetLabel } from "@/lib/imposition/presets";
 import { MM_TO_PT, formatIn } from "@/lib/pdf/units";
 import { MACHINES, MACHINE_LABELS, type CutterMachine } from "@/lib/imposition/machines";
 import type { SavedImposition } from "@/lib/imposition/saved";
-import type { ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
+import type { ImpositionCutter, ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
 
 // Taille de page (fond perdu inclus) d'un format du catalogue.
 export interface FormatOption {
@@ -94,12 +96,14 @@ async function readPdfPageSizeMm(file: File): Promise<{ widthMm: number; heightM
 type ModalState =
   | { mode: "sheets" }
   | { mode: "duplo-jobs" }
+  | { mode: "graphtec-profiles" }
   | { mode: "result"; url: string }
   | null;
 
 export default function ImpositionTool({
   sheets,
   duploJobs,
+  cutters,
   barcodeJobNos,
   formats,
   products,
@@ -107,6 +111,8 @@ export default function ImpositionTool({
 }: {
   sheets: ImpositionSheet[];
   duploJobs: ImpositionDuploJob[];
+  // Profils de découpe de la Graphtec.
+  cutters: ImpositionCutter[];
   // Numéros de job dont le code-barres (PDF) est importé.
   barcodeJobNos: number[];
   formats: FormatOption[];
@@ -132,10 +138,16 @@ export default function ImpositionTool({
   const [sheetId, setSheetId] = useState(
     cfg && sheets.some((sh) => sh.id === cfg.sheetId) ? cfg.sheetId : (sheets[0]?.id ?? "")
   );
-  // Deux machines, sans profils : l'outil ne les règle pas, il utilise ce
-  // qu'elles fournissent (pour la Duplo, son catalogue de jobs).
+  // La Duplo n'est pas réglée par l'outil (sa grille vient d'un job de son
+  // catalogue) ; la Graphtec l'est, par un profil de découpe.
   const [machine, setMachine] = useState<CutterMachine>(cfg?.machine ?? "duplo");
   const [duploJobId, setDuploJobId] = useState(cfg?.duploJobId ?? "");
+  const [cutterId, setCutterId] = useState(cfg?.cutterId ?? "");
+  const [showMarks, setShowMarks] = useState(true);
+  const [showGuide, setShowGuide] = useState(true);
+  // Change à chaque mise à jour des profils : l'aperçu recharge alors leurs
+  // fichiers, qu'un remplacement laisse à la même adresse.
+  const [assetVersion, setAssetVersion] = useState(0);
   const [orientation, setOrientation] = useState<PieceOrientation>(cfg?.orientation ?? "auto");
   const [flip, setFlip] = useState<FlipEdge>(cfg?.flip ?? "long");
   const [items, setItems] = useState<SourceItem[]>(() =>
@@ -200,7 +212,12 @@ export default function ImpositionTool({
     return () => URL.revokeObjectURL(url);
   }, [modal]);
 
-  const sheet = sheets.find((s) => s.id === sheetId) ?? null;
+  const isDuplo = machine === "duplo";
+  const activeCutter = isDuplo ? null : (cutters.find((c) => c.id === cutterId) ?? null);
+  // La Graphtec imprime sur la feuille de son profil : ses marques et son gabarit y sont dessinés.
+  const sheet = isDuplo
+    ? (sheets.find((s) => s.id === sheetId) ?? null)
+    : (sheets.find((s) => s.id === activeCutter?.sheet_id) ?? null);
   const format = formats.find((f) => f.id === formatId) ?? null;
   const piece =
     formatId === CUSTOM || !format
@@ -209,7 +226,6 @@ export default function ImpositionTool({
 
   // Jobs de la Duplo qui conviennent à la feuille et au format choisis (avec la
   // grille qu'ils donnent), les plus remplis d'abord.
-  const isDuplo = machine === "duplo";
   const duploCandidates = useMemo(() => {
     if (!sheet || !isDuplo) return [];
     return duploJobs
@@ -231,8 +247,32 @@ export default function ImpositionTool({
   }, [duploJobs, isDuplo, sheet, piece.widthMm, piece.heightMm, piece.bleedMm, orientation]);
   // Un job qui ne convient plus (autre feuille, autre format) est simplement ignoré.
   const activeDuplo = duploCandidates.find((c) => c.job.id === duploJobId) ?? null;
-  // La grille vient uniquement du job choisi (l'outil ne règle pas la Duplo).
-  const layout = activeDuplo?.layout ?? null;
+  // Grille de la Graphtec : celle du profil, fixe (colonnes × rangées, marges, espacement).
+  const cutterLayout = useMemo(() => {
+    if (!activeCutter || !sheet) return null;
+    return computeLayout({
+      sheetWidth: sheet.width_mm,
+      sheetHeight: sheet.height_mm,
+      margins: {
+        top: activeCutter.margin_top_mm,
+        right: activeCutter.margin_right_mm,
+        bottom: activeCutter.margin_bottom_mm,
+        left: activeCutter.margin_left_mm,
+      },
+      gutterX: activeCutter.gutter_x_mm,
+      gutterY: activeCutter.gutter_y_mm,
+      offsetX: activeCutter.offset_x_mm,
+      offsetY: activeCutter.offset_y_mm,
+      centerGrid: activeCutter.center_grid,
+      pieceWidth: piece.widthMm,
+      pieceHeight: piece.heightMm,
+      orientation,
+      grid: { cols: activeCutter.grid_cols, rows: activeCutter.grid_rows },
+      trimBleed: piece.bleedMm,
+    });
+  }, [activeCutter, sheet, piece.widthMm, piece.heightMm, piece.bleedMm, orientation]);
+  // La grille vient du job Duplo choisi, ou du profil Graphtec.
+  const layout = isDuplo ? (activeDuplo?.layout ?? null) : cutterLayout;
 
   const cellCount = layout?.cells.length ?? 0;
   const { assignment, overflow } = useMemo(
@@ -252,6 +292,7 @@ export default function ImpositionTool({
   const availableProducts = products.filter((p) => formatId === CUSTOM || p.templateId === formatId);
 
   function refreshPresets() {
+    setAssetVersion((v) => v + 1);
     startTransition(() => router.refresh());
   }
 
@@ -305,18 +346,29 @@ export default function ImpositionTool({
   }
 
   const mismatched = items.filter((i) => !matchesPiece(i, piece.widthMm, piece.heightMm));
-  const problem = !sheet
-    ? "Créez une feuille pour commencer."
-    : !isDuplo
-      ? `${MACHINE_LABELS[machine]} : paramètres à venir.`
+  const machineProblem = isDuplo
+    ? !sheet
+      ? "Créez une feuille pour commencer."
       : !activeDuplo
         ? duploJobs.length === 0
           ? "Importez le catalogue de jobs de la Duplo (Job Duplo > Gérer)."
           : duploCandidates.length === 0
             ? "Aucun job Duplo ne convient à cette feuille et à ce format : créez-le sur la Duplo, puis réimportez l'AllJobs."
             : "Choisissez un job Duplo."
-        : !layout || cellCount === 0
-        ? "Ce format ne rentre pas dans la zone utile de la feuille."
+        : null
+    : !activeCutter
+      ? cutters.length === 0
+        ? "Créez un profil de découpe Graphtec (Profil de découpe > Gérer)."
+        : "Choisissez un profil de découpe."
+      : !sheet
+        ? `Le profil « ${activeCutter.name} » n'a plus de format de papier : modifiez-le.`
+        : null;
+  const problem = machineProblem
+    ? machineProblem
+    : !layout || cellCount === 0
+        ? activeCutter
+          ? `La grille du profil (${activeCutter.grid_cols} × ${activeCutter.grid_rows}) ne rentre pas sur la feuille avec ce format, ces marges et cet espacement.`
+          : "Ce format ne rentre pas dans la zone utile de la feuille."
         : items.length === 0
           ? "Ajoutez au moins un fichier."
           : overflow > 0
@@ -328,11 +380,12 @@ export default function ImpositionTool({
 
   // Requête commune à l'aperçu et à l'enregistrement.
   function buildBody(): FormData | null {
-    if (!sheet || !activeDuplo) return null;
+    if (!sheet || (!activeDuplo && !activeCutter)) return null;
     const body = new FormData();
     body.append("sheetId", sheet.id);
     body.append("machine", machine);
-    body.append("duploJobId", activeDuplo.job.id);
+    if (activeDuplo) body.append("duploJobId", activeDuplo.job.id);
+    if (activeCutter) body.append("cutterId", activeCutter.id);
     body.append("pieceWidthMm", String(piece.widthMm));
     body.append("pieceHeightMm", String(piece.heightMm));
     body.append("orientation", orientation);
@@ -345,7 +398,8 @@ export default function ImpositionTool({
         version: 1,
         sheetId: sheet.id,
         machine,
-        duploJobId: activeDuplo.job.id,
+        duploJobId: activeDuplo?.job.id ?? "",
+        cutterId: activeCutter?.id ?? "",
         formatId,
         custom: { widthMm: customWidth, heightMm: customHeight, bleedMm: customBleed },
         orientation,
@@ -500,26 +554,28 @@ export default function ImpositionTool({
               )}
             </div>
 
-            <div>
-              <div className="flex items-center justify-between">
-                <label className={labelClass}>Feuille</label>
-                <button
-                  type="button"
-                  onClick={() => setModal({ mode: "sheets" })}
-                  className="text-xs text-neutral-500 underline hover:text-pico-black"
-                >
-                  Gérer
-                </button>
+            {isDuplo && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Feuille</label>
+                  <button
+                    type="button"
+                    onClick={() => setModal({ mode: "sheets" })}
+                    className="text-xs text-neutral-500 underline hover:text-pico-black"
+                  >
+                    Gérer
+                  </button>
+                </div>
+                <select value={sheetId} onChange={(e) => setSheetId(e.target.value)} className={selectClass}>
+                  {sheets.length === 0 && <option value="">— Aucune feuille —</option>}
+                  {sheets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {sheetLabel(s.width_mm, s.height_mm)}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <select value={sheetId} onChange={(e) => setSheetId(e.target.value)} className={selectClass}>
-                {sheets.length === 0 && <option value="">— Aucune feuille —</option>}
-                {sheets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {sheetLabel(s.width_mm, s.height_mm)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            )}
 
             <div>
               <label className={labelClass}>Découpeuse</label>
@@ -534,12 +590,41 @@ export default function ImpositionTool({
                   </option>
                 ))}
               </select>
-              {!isDuplo && (
-                <p className="mt-1 text-xs text-neutral-500">
-                  Les paramètres de la {MACHINE_LABELS[machine]} seront ajoutés plus tard.
-                </p>
-              )}
             </div>
+
+            {!isDuplo && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Profil de découpe</label>
+                  <button
+                    type="button"
+                    onClick={() => setModal({ mode: "graphtec-profiles" })}
+                    className="text-xs text-neutral-500 underline hover:text-pico-black"
+                  >
+                    Gérer
+                  </button>
+                </div>
+                <select value={activeCutter?.id ?? ""} onChange={(e) => setCutterId(e.target.value)} className={selectClass}>
+                  <option value="">{cutters.length === 0 ? "— Aucun profil —" : "— Choisir un profil —"}</option>
+                  {cutters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {c.grid_cols} × {c.grid_rows} pièces
+                    </option>
+                  ))}
+                </select>
+                {activeCutter && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {sheet ? `Feuille ${sheetLabel(sheet.width_mm, sheet.height_mm)}` : "Aucun format de papier"} ·
+                    marges {[activeCutter.margin_top_mm, activeCutter.margin_right_mm, activeCutter.margin_bottom_mm, activeCutter.margin_left_mm]
+                      .map((v) => formatIn(v))
+                      .join(" / ")}{" "}
+                    (haut / droite / bas / gauche) · espacement {formatIn(activeCutter.gutter_x_mm)} ×{" "}
+                    {formatIn(activeCutter.gutter_y_mm)}
+                    {activeCutter.marks_path ? " · codes et marques imprimés au recto" : " · sans fichier de marques"}
+                  </p>
+                )}
+              </div>
+            )}
 
             {isDuplo && (
               <div>
@@ -717,6 +802,18 @@ export default function ImpositionTool({
                 <span className="inline-block h-0.5 w-4" style={{ backgroundColor: CUT_COLOR }} />
                 Coupes de la découpeuse
               </label>
+              {activeCutter?.marks_path && (
+                <label className="flex items-center gap-1.5 text-xs text-neutral-600">
+                  <input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} />
+                  Marques
+                </label>
+              )}
+              {activeCutter?.guide_path && (
+                <label className="flex items-center gap-1.5 text-xs text-neutral-600">
+                  <input type="checkbox" checked={showGuide} onChange={(e) => setShowGuide(e.target.checked)} />
+                  Gabarit de guidage
+                </label>
+              )}
               {layout && cellCount > 0 && (
                 <p className="text-sm text-neutral-600">
                   <strong>{cellCount}</strong> pièces par feuille ({layout.cols} × {layout.rows}
@@ -749,21 +846,39 @@ export default function ImpositionTool({
                     : null
                 }
                 bleedMm={showCuts ? piece.bleedMm : null}
+                cutStyle={isDuplo ? "guillotine" : "contour"}
+                marksUrl={
+                  activeCutter?.marks_path && showMarks
+                    ? `/api/imposition/cutters/${activeCutter.id}/asset/marks?v=${assetVersion}`
+                    : null
+                }
+                guideUrl={
+                  activeCutter?.guide_path && showGuide
+                    ? `/api/imposition/cutters/${activeCutter.id}/asset/guide?v=${assetVersion}`
+                    : null
+                }
               />
             ) : (
               <p className="text-sm text-neutral-500">
-                {!sheet
-                  ? "Choisissez une feuille."
-                  : isDuplo
-                    ? "Choisissez un job Duplo pour voir la grille."
-                    : `${MACHINE_LABELS[machine]} : paramètres à venir.`}
+                {machineProblem ??
+                  (isDuplo ? "Choisissez un job Duplo pour voir la grille." : "Choisissez un profil de découpe.")}
               </p>
             )}
             <p className="mt-3 text-xs text-neutral-500">
-              L&apos;aperçu montre la grille ; les marques de la découpeuse et le verso apparaissent dans le PDF
-              généré. Pointillés gris = zone utile (feuille moins marges). Traits orange = coupes de la
-              découpeuse, de bord à bord de la feuille, au bord de chaque pièce finie (à l&apos;intérieur du fond
-              perdu) : visibles ici seulement, jamais dans le PDF.
+              {isDuplo ? (
+                <>
+                  L&apos;aperçu montre la grille ; les marques de la découpeuse et le verso apparaissent dans le PDF
+                  généré. Pointillés gris = zone utile (feuille moins marges). Traits orange = coupes de la
+                  découpeuse, de bord à bord de la feuille, au bord de chaque pièce finie (à l&apos;intérieur du
+                  fond perdu) : visibles ici seulement, jamais dans le PDF.
+                </>
+              ) : (
+                <>
+                  Pointillés gris = zone utile (feuille moins marges). Contours orange = coupe de la Graphtec autour
+                  de chaque pièce finie (à l&apos;intérieur du fond perdu). Les marques sont imprimées au recto ; le
+                  gabarit de guidage et les contours orange sont visibles ici seulement, jamais dans le PDF.
+                </>
+              )}
             </p>
           </div>
 
@@ -803,6 +918,11 @@ export default function ImpositionTool({
           <DuploJobsManager jobs={duploJobs} barcodeJobNos={barcodeJobNos} onChanged={refreshPresets} />
         </Modal>
       )}
+      {modal?.mode === "graphtec-profiles" && (
+        <Modal title="Profils de découpe Graphtec" onClose={() => setModal(null)} wide>
+          <GraphtecProfilesManager profiles={cutters} sheets={sheets} onChanged={refreshPresets} />
+        </Modal>
+      )}
       {modal?.mode === "result" && (
         <Modal title="Aperçu du PDF imposé" onClose={() => setModal(null)} wide>
           <iframe src={modal.url} title="PDF imposé" className="h-[65vh] w-full rounded border border-neutral-200" />
@@ -829,6 +949,9 @@ function SheetPreview({
   hasBarcode,
   regRects,
   bleedMm,
+  cutStyle,
+  marksUrl,
+  guideUrl,
 }: {
   sheet: ImpositionSheet;
   layout: Layout;
@@ -841,11 +964,24 @@ function SheetPreview({
   regRects: MmRect[] | null;
   // Fond perdu par côté ; null = lignes de coupe masquées.
   bleedMm: number | null;
+  // Duplo : traits de bord à bord de la feuille. Graphtec : contour de chaque pièce.
+  cutStyle: "guillotine" | "contour";
+  // Marques imprimées (sous les pièces, comme dans le PDF) et gabarit de guidage
+  // (par-dessus, en transparence), de la taille de la feuille. Null = masqués.
+  marksUrl: string | null;
+  guideUrl: string | null;
 }) {
   const { usable } = layout;
+  const clipPrefix = useId();
   const stroke = sheet.width_mm / 500;
   const fontSize = Math.min(layout.cellWidth, layout.cellHeight) * 0.4;
-  const { xs: cutXs, ys: cutYs } = bleedMm === null ? { xs: [], ys: [] } : cutLines(layout, bleedMm);
+  const { xs: cutXs, ys: cutYs } =
+    bleedMm === null || cutStyle !== "guillotine" ? { xs: [], ys: [] } : cutLines(layout, bleedMm);
+  // Contour de coupe : la pièce finie, à `bleed` du bord de la cellule (borné comme dans cutLines).
+  const contourInset =
+    bleedMm === null || cutStyle !== "contour"
+      ? null
+      : Math.max(0, Math.min(bleedMm, Math.min(layout.cellWidth, layout.cellHeight) / 2));
   return (
     <svg
       viewBox={`0 0 ${sheet.width_mm} ${sheet.height_mm}`}
@@ -854,6 +990,9 @@ function SheetPreview({
       role="img"
       aria-label="Aperçu de l'imposition"
     >
+      {marksUrl && (
+        <image href={marksUrl} x={0} y={0} width={sheet.width_mm} height={sheet.height_mm} preserveAspectRatio="none" />
+      )}
       <rect
         x={usable.x}
         y={usable.y}
@@ -877,34 +1016,45 @@ function SheetPreview({
           !(Math.abs(image.widthMm - cell.width) <= 0.5 && Math.abs(image.heightMm - cell.height) <= 0.5);
         const cx = cell.x + cell.width / 2;
         const cy = cell.y + cell.height / 2;
+        // Comme dans le PDF : une pièce dont le fond perdu chevauche une voisine
+        // est rognée au milieu de l'espacement (voir computeLayout).
+        const box = cell.clip ?? cell;
+        const clipId = cell.clip ? `${clipPrefix}-clip-${i}` : null;
         return (
           <g key={`${cell.row}-${cell.col}`}>
-            {image &&
-              (sideways ? (
-                <image
-                  href={image.url}
-                  x={cx - cell.height / 2}
-                  y={cy - cell.width / 2}
-                  width={cell.height}
-                  height={cell.width}
-                  preserveAspectRatio="none"
-                  transform={`rotate(-90 ${cx} ${cy})`}
-                />
-              ) : (
-                <image
-                  href={image.url}
-                  x={cell.x}
-                  y={cell.y}
-                  width={cell.width}
-                  height={cell.height}
-                  preserveAspectRatio="none"
-                />
-              ))}
+            {clipId && (
+              <clipPath id={clipId}>
+                <rect x={box.x} y={box.y} width={box.width} height={box.height} />
+              </clipPath>
+            )}
+            <g clipPath={clipId ? `url(#${clipId})` : undefined}>
+              {image &&
+                (sideways ? (
+                  <image
+                    href={image.url}
+                    x={cx - cell.height / 2}
+                    y={cy - cell.width / 2}
+                    width={cell.height}
+                    height={cell.width}
+                    preserveAspectRatio="none"
+                    transform={`rotate(-90 ${cx} ${cy})`}
+                  />
+                ) : (
+                  <image
+                    href={image.url}
+                    x={cell.x}
+                    y={cell.y}
+                    width={cell.width}
+                    height={cell.height}
+                    preserveAspectRatio="none"
+                  />
+                ))}
+            </g>
             <rect
-              x={cell.x}
-              y={cell.y}
-              width={cell.width}
-              height={cell.height}
+              x={box.x}
+              y={box.y}
+              width={box.width}
+              height={box.height}
               fill={image ? "none" : color ?? "none"}
               fillOpacity={0.35}
               stroke={color ?? "#a99e8e"}
@@ -927,6 +1077,19 @@ function SheetPreview({
           </g>
         );
       })}
+      {contourInset !== null &&
+        layout.cells.map((cell) => (
+          <rect
+            key={`cut-${cell.row}-${cell.col}`}
+            x={cell.x + contourInset}
+            y={cell.y + contourInset}
+            width={cell.width - contourInset * 2}
+            height={cell.height - contourInset * 2}
+            fill="none"
+            stroke={CUT_COLOR}
+            strokeWidth={stroke * 1.2}
+          />
+        ))}
       {cutXs.map((x) => (
         <line key={`cx-${x}`} x1={x} y1={0} x2={x} y2={sheet.height_mm} stroke={CUT_COLOR} strokeWidth={stroke * 1.2} />
       ))}
@@ -936,6 +1099,19 @@ function SheetPreview({
       {regRects?.map((r, i) => (
         <rect key={`reg-${i}`} x={r.x} y={r.y} width={r.width} height={r.height} fill="#1a1613" />
       ))}
+      {guideUrl && (
+        // Tout au-dessus, opaque, pour lire les coupes sur les visuels ;
+        // « multiply » rend le blanc du gabarit transparent : seuls ses traits recouvrent les pièces.
+        <image
+          href={guideUrl}
+          x={0}
+          y={0}
+          width={sheet.width_mm}
+          height={sheet.height_mm}
+          preserveAspectRatio="none"
+          style={{ mixBlendMode: "multiply" }}
+        />
+      )}
       {(hasBarcode || regRects) && (
         <text x={sheet.width_mm / 2} y={sheet.height_mm - 2} fontSize={sheet.width_mm / 45} textAnchor="middle" fill="#7d7364">
           + {[hasBarcode && "code-barres du job", regRects && "repère REG"]

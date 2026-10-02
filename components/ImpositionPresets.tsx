@@ -12,7 +12,7 @@ function mmLabel(mm: number): string {
   return `${Math.round(mm * 100) / 100} mm`;
 }
 
-function RowActions({ onEdit, onDelete, busy }: { onEdit: () => void; onDelete: () => void; busy: boolean }) {
+export function RowActions({ onEdit, onDelete, busy }: { onEdit: () => void; onDelete: () => void; busy: boolean }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
       <button
@@ -36,7 +36,7 @@ function RowActions({ onEdit, onDelete, busy }: { onEdit: () => void; onDelete: 
   );
 }
 
-function SubmitButton({ loading, children }: { loading: boolean; children: React.ReactNode }) {
+export function SubmitButton({ loading, children }: { loading: boolean; children: React.ReactNode }) {
   return (
     <button
       type="submit"

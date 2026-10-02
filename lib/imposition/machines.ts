@@ -1,6 +1,6 @@
-// Les deux machines de découpe. L'outil ne les configure pas : il utilise les
-// paramètres qu'elles fournissent (pour la Duplo, son catalogue de jobs ; ceux
-// de la Graphtec seront ajoutés plus tard).
+// Les deux machines de découpe. La Duplo n'est pas réglée par l'outil : sa
+// grille vient de son catalogue de jobs. La Graphtec l'est, par des profils de
+// découpe (feuille, grille, marges, espacement, marques, gabarit).
 
 export const MACHINES = ["duplo", "graphtec"] as const;
 export type CutterMachine = (typeof MACHINES)[number];

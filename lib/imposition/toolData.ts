@@ -3,7 +3,7 @@ import type { FormatOption, ProductOption } from "@/components/ImpositionTool";
 import { templateLabel } from "@/lib/templateLabel";
 import { productDisplayName } from "@/lib/imposition/productLabel";
 import { BARCODE_DIR, jobNosFromStoredNames } from "@/lib/imposition/barcodes";
-import type { Category, ImpositionDuploJob, ImpositionSheet, Template } from "@/lib/types";
+import type { Category, ImpositionCutter, ImpositionDuploJob, ImpositionSheet, Template } from "@/lib/types";
 
 interface ProductRow {
   id: string;
@@ -14,12 +14,13 @@ interface ProductRow {
   visual_id: string | null;
 }
 
-// Données dont l'écran d'imposition a besoin (feuilles, jobs Duplo, formats, produits).
+// Données dont l'écran d'imposition a besoin (feuilles, jobs Duplo, profils Graphtec, formats, produits).
 export async function loadImpositionToolData() {
   const supabase = createServerSupabaseClient();
   const [
     { data: sheets },
     { data: duploJobs },
+    { data: cutters },
     { data: templates },
     { data: categories },
     { data: products },
@@ -32,6 +33,11 @@ export async function loadImpositionToolData() {
         .order("width_mm", { ascending: true })
         .order("height_mm", { ascending: true }),
       supabase.from("imposition_duplo_jobs").select("*").order("job_no", { ascending: true }),
+      supabase
+        .from("imposition_cutters")
+        .select("*")
+        .eq("machine", "graphtec")
+        .order("name", { ascending: true }),
       supabase.from("templates").select("*").order("name", { ascending: true }),
       supabase.from("categories").select("*").order("sort_order", { ascending: true }),
       // Seuls les produits dont le PDF a déjà été généré peuvent être imposés.
@@ -82,6 +88,7 @@ export async function loadImpositionToolData() {
   return {
     sheets: (sheets as ImpositionSheet[]) ?? [],
     duploJobs: (duploJobs as ImpositionDuploJob[]) ?? [],
+    cutters: (cutters as ImpositionCutter[]) ?? [],
     barcodeJobNos,
     formats,
     products: productOptions,

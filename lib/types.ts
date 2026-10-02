@@ -204,6 +204,31 @@ export interface ImpositionSheet {
   created_by: string | null;
 }
 
+// Profil de découpe de la Graphtec : feuille, grille fixe, marges, espacement,
+// calibration, marques imprimées et gabarit de guidage (aperçu seulement).
+export interface ImpositionCutter {
+  id: string;
+  name: string;
+  machine: "duplo" | "graphtec";
+  // Null si la feuille du profil a été supprimée.
+  sheet_id: string | null;
+  grid_cols: number;
+  grid_rows: number;
+  margin_top_mm: number;
+  margin_right_mm: number;
+  margin_bottom_mm: number;
+  margin_left_mm: number;
+  gutter_x_mm: number;
+  gutter_y_mm: number;
+  offset_x_mm: number;
+  offset_y_mm: number;
+  center_grid: boolean;
+  marks_path: string | null;
+  guide_path: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface ImpositionDuploJob {
   id: string;
   job_no: number;

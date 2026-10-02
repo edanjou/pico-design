@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVerticalIcon } from "@/components/icons";
-import { MENU_ITEMS, type MenuKey } from "@/lib/menuItems";
+import { MENU_ITEMS, groupMenuOrder, menuGroupLabel, type MenuKey } from "@/lib/menuItems";
 
 function SortableTile({ menuKey }: { menuKey: MenuKey }) {
   const item = MENU_ITEMS[menuKey];
@@ -71,6 +71,8 @@ function SortableTile({ menuKey }: { menuKey: MenuKey }) {
 
 export default function DashboardTiles({ initialOrder }: { initialOrder: MenuKey[] }) {
   const [order, setOrder] = useState<MenuKey[]>(initialOrder);
+  // Mêmes groupes que la barre du haut, chacun en section (voir groupMenuOrder).
+  const groupes = useMemo(() => groupMenuOrder(order), [order]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -80,35 +82,47 @@ export default function DashboardTiles({ initialOrder }: { initialOrder: MenuKey
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setOrder((current) => {
-      const oldIndex = current.indexOf(active.id as MenuKey);
-      const newIndex = current.indexOf(over.id as MenuKey);
-      const next = arrayMove(current, oldIndex, newIndex);
-      // Diffuse le nouvel ordre pour que la nav (composant séparé, monté une
-      // seule fois dans le layout) se resynchronise sans attendre un
-      // rechargement complet de la page.
-      window.dispatchEvent(new CustomEvent<MenuKey[]>("pico:menu-order-changed", { detail: next }));
-      fetch("/api/profile/menu-order", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order: next }),
-      }).catch(() => {
-        // Best-effort : un échec réseau laisse l'ordre correct pour cette
-        // session ; il sera simplement réécrit au prochain glisser-déposer.
-      });
-      return next;
+    const from = groupes.findIndex((g) => g.includes(active.id as MenuKey));
+    const to = groupes.findIndex((g) => g.includes(over.id as MenuKey));
+    // Une tuile se déplace à l'intérieur de son groupe, jamais vers un autre :
+    // le regroupement prime sur l'ordre personnalisé (voir MENU_GROUPS).
+    if (from === -1 || from !== to) return;
+    const groupe = groupes[from];
+    const moved = arrayMove(groupe, groupe.indexOf(active.id as MenuKey), groupe.indexOf(over.id as MenuKey));
+    const next = groupes.flatMap((g, i) => (i === from ? moved : g));
+    setOrder(next);
+    // Diffuse le nouvel ordre pour que la nav (composant séparé, monté une
+    // seule fois dans le layout) se resynchronise sans attendre un
+    // rechargement complet de la page.
+    window.dispatchEvent(new CustomEvent<MenuKey[]>("pico:menu-order-changed", { detail: next }));
+    fetch("/api/profile/menu-order", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: next }),
+    }).catch(() => {
+      // Best-effort : un échec réseau laisse l'ordre correct pour cette
+      // session ; il sera simplement réécrit au prochain glisser-déposer.
     });
   }
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={order} strategy={rectSortingStrategy}>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {order.map((key) => (
-            <SortableTile key={key} menuKey={key} />
-          ))}
-        </div>
-      </SortableContext>
+      <div className="space-y-8">
+        {groupes.map((groupe) => (
+          <section key={groupe.join("-")}>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+              {menuGroupLabel(groupe)}
+            </h2>
+            <SortableContext items={groupe} strategy={rectSortingStrategy}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {groupe.map((key) => (
+                  <SortableTile key={key} menuKey={key} />
+                ))}
+              </div>
+            </SortableContext>
+          </section>
+        ))}
+      </div>
     </DndContext>
   );
 }

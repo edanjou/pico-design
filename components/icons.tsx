@@ -255,6 +255,26 @@ export function TagIcon({ className }: { className?: string }) {
   );
 }
 
+export function BarcodeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 5v14" />
+      <path d="M8 5v14" />
+      <path d="M12 5v14" />
+      <path d="M17 5v14" />
+      <path d="M21 5v14" />
+    </svg>
+  );
+}
+
 export function LayoutGridIcon({ className }: { className?: string }) {
   return (
     <svg

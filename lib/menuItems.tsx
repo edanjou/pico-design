@@ -1,4 +1,4 @@
-import { ImageIcon, LayoutGridIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { BarcodeIcon, ImageIcon, LayoutGridIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -54,7 +54,7 @@ export const MENU_ITEMS: Record<
   skus: {
     href: "/skus",
     title: "SKU",
-    icon: TagIcon,
+    icon: BarcodeIcon,
     gradient: "from-sky-400 to-blue-600",
   },
   imposition: {
@@ -96,6 +96,18 @@ export const MENU_GROUPS: MenuKey[][] = [
   ["design", "orders", "settings"],
   ["users"],
 ];
+
+// Titre de chaque groupe, dans l'ordre de MENU_GROUPS. La barre n'en affiche
+// pas (le trait suffit), le tableau de bord, si : ses groupes sont des
+// sections, l'une sous l'autre.
+const MENU_GROUP_LABELS = ["Fabrication", "Vente", "Administration"] as const;
+
+// Titre d'un groupe tel que le rend groupMenuOrder (qui retire les groupes
+// vides : on ne peut donc pas se fier à sa position), lu d'après son premier lien.
+export function menuGroupLabel(groupe: MenuKey[]): string {
+  const index = MENU_GROUPS.findIndex((g) => groupe[0] !== undefined && g.includes(groupe[0]));
+  return MENU_GROUP_LABELS[index] ?? MENU_GROUP_LABELS[MENU_GROUP_LABELS.length - 1];
+}
 
 // Ordre par défaut quand l'utilisateur n'a encore rien personnalisé : celui
 // des groupes, mis à plat.

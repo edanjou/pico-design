@@ -32,8 +32,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <p className="mb-3 mt-8 text-xs font-semibold tracking-widest text-neutral-500">PAGES</p>
-      <DashboardTiles initialOrder={order} />
+      {/* Les tuiles sont groupées comme la barre du haut, chaque groupe sous son titre. */}
+      <div className="mt-8">
+        <DashboardTiles initialOrder={order} />
+      </div>
     </div>
   );
 }

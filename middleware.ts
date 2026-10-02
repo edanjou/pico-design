@@ -39,10 +39,15 @@ function supabaseOrigin(): string {
 export function middleware(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const supabase = supabaseOrigin();
+  // En développement (`next dev`) seulement, le code de chaque page est
+  // emballé dans des eval(...) : sans 'unsafe-eval', le navigateur n'en
+  // exécute rien et aucun bouton ne répond. Le build de production n'en
+  // contient pas, et n'a donc pas cette exception.
+  const devEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
 
   const csp = [
     `default-src 'self'`,
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
     // Google Fonts sert la feuille de style depuis fonts.googleapis.com.
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
     // Les polices : les nôtres (/api/settings/…/asset/font-*) et celles de

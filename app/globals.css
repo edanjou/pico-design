@@ -526,3 +526,20 @@ h4 {
   font-style: italic;
   font-display: swap;
 }
+
+/* Menus déroulants : flèche dessinée par l'app plutôt que celle du navigateur.
+   La flèche native se pose dans la marge intérieure (px-3, 12 px) : avec les
+   coins de 16 px (rounded-lg), elle venait toucher le bord. Celle-ci est à
+   0,75rem du bord, et le texte s'arrête avant elle (padding-right). Hors de
+   tout @layer et avec :not([multiple]) (spécificité d'une classe + un
+   élément), cette règle passe devant les utilitaires px-* de Tailwind. Gris
+   moyen, lisible sur les deux thèmes. */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c8172' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1em;
+  padding-right: 2.25rem;
+}

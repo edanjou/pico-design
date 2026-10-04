@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
-import { LayoutDashboardIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
+import { LayoutGridIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
 import { groupMenuOrder, hasSidebar, MENU_ITEMS, menuKeysForRole, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 import Modal from "@/components/Modal";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -169,7 +169,7 @@ export default function Nav() {
   // tête, puis chaque groupe séparé du précédent par un filet.
   const links = (iconOnly: boolean) => (
     <>
-      {navLink("/", "Tableau de bord", LayoutDashboardIcon, iconOnly)}
+      {navLink("/", "Tableau de bord", LayoutGridIcon, iconOnly)}
       {groupes.map((groupe) => (
         <div key={groupe.join("-")} className="mt-2 space-y-0.5 border-t border-border pt-2">
           {groupe.map((key) => navLink(MENU_ITEMS[key].href, MENU_ITEMS[key].title, MENU_ITEMS[key].icon, iconOnly))}
@@ -202,7 +202,7 @@ export default function Nav() {
             aria-label="Tableau de bord"
             className="group mr-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text"
           >
-            <LayoutDashboardIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
+            <LayoutGridIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
           </Link>
           <div className="flex items-center gap-1">
             <button

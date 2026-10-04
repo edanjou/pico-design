@@ -1,4 +1,4 @@
-import { BarcodeIcon, ImageIcon, LayoutGridIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { BarcodeIcon, Grid3x3Icon, ImageIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -60,7 +60,7 @@ export const MENU_ITEMS: Record<
   imposition: {
     href: "/imposition",
     title: "Imposition",
-    icon: LayoutGridIcon,
+    icon: Grid3x3Icon,
     gradient: "from-orange-400 to-red-500",
   },
   users: {

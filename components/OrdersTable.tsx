@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DownloadIcon, SpinnerIcon } from "@/components/icons";
+import { DownloadIcon, RefreshCcwIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export interface OrderRow {
   id: string;
@@ -12,6 +12,8 @@ export interface OrderRow {
   fulfillment_status: string | null;
   pico_status: string;
   shop_domain: string | null;
+  // Date du retrait de l'outil (null = commande visible), voir 0063_orders_archived.sql.
+  archived_at: string | null;
   created_at: string;
   order_items: {
     id: string;
@@ -125,6 +127,8 @@ export default function OrdersTable({
   const [paiement, setPaiement] = useState("tous");
   const [periode, setPeriode] = useState("toutes");
   const [recherche, setRecherche] = useState("");
+  // Commandes retirées de l'outil : masquées, consultables à part pour les y remettre.
+  const [voirRetirees, setVoirRetirees] = useState(false);
   // Par défaut, les plus récentes d'abord — l'ordre utile au quotidien.
   const [tri, setTri] = useState<{
     champ: "date" | "numero";
@@ -155,7 +159,11 @@ export default function OrdersTable({
     { value: "90", label: "3 derniers mois", jours: 90 },
   ];
 
-  const visibles = rows.filter((o) => {
+  // Les commandes de la vue courante (dans l'outil, ou retirées), avant les filtres.
+  const deLaVue = rows.filter((o) => Boolean(o.archived_at) === voirRetirees);
+  const nbRetirees = rows.filter((o) => o.archived_at).length;
+
+  const visibles = deLaVue.filter((o) => {
     if (boutique !== "toutes" && boutiqueDe(o) !== boutique) return false;
     if (suivi !== "tous" && o.pico_status !== suivi) return false;
     if (paiement !== "tous" && o.financial_status !== paiement) return false;
@@ -216,6 +224,31 @@ export default function OrdersTable({
     setRecherche("");
   }
 
+  async function archiver(order: OrderRow, archived: boolean) {
+    const numero = order.order_number ?? order.shopify_order_id;
+    if (
+      archived &&
+      !confirm(
+        `Retirer la commande ${numero} de l'outil ?\n\nElle reste dans Shopify, et vous pourrez la remettre depuis « Commandes retirées ».`,
+      )
+    ) {
+      return;
+    }
+    const before = order.archived_at;
+    const now = archived ? new Date().toISOString() : null;
+    setRows((all) => all.map((o) => (o.id === order.id ? { ...o, archived_at: now } : o)));
+    const res = await fetch(`/api/orders/${order.id}/archive`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      setRows((all) => all.map((o) => (o.id === order.id ? { ...o, archived_at: before } : o)));
+      const data = res ? await res.json().catch(() => ({})) : {};
+      alert(data.error ?? "L'opération a échoué.");
+    }
+  }
+
   async function changeStatus(orderId: string, picoStatus: string) {
     setRows((all) =>
       all.map((o) =>
@@ -244,7 +277,20 @@ export default function OrdersTable({
 
   return (
     <div>
-      <h1 className="font-display text-page-title text-text">Commandes</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-display text-page-title text-text">
+          {voirRetirees ? "Commandes retirées" : "Commandes"}
+        </h1>
+        {(voirRetirees || nbRetirees > 0) && (
+          <button
+            type="button"
+            onClick={() => setVoirRetirees((v) => !v)}
+            className="text-xs text-text-subtle underline hover:text-text"
+          >
+            {voirRetirees ? "← Retour aux commandes" : `Commandes retirées (${nbRetirees})`}
+          </button>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <input
@@ -293,7 +339,7 @@ export default function OrdersTable({
 
         <span className="text-text-subtle">
           {visibles.length} commande{visibles.length > 1 ? "s" : ""}
-          {filtresActifs && ` sur ${rows.length}`}
+          {filtresActifs && ` sur ${deLaVue.length}`}
         </span>
 
         {filtresActifs && (
@@ -346,6 +392,9 @@ export default function OrdersTable({
               <th className="px-4 py-3">Paiement</th>
               <th className="px-4 py-3">Suivi Pico</th>
               <th className="px-4 py-3">Designs</th>
+              <th className="px-4 py-3">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -432,8 +481,38 @@ export default function OrdersTable({
                     ))}
                   </div>
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  {order.archived_at ? (
+                    <button
+                      type="button"
+                      onClick={() => archiver(order, false)}
+                      title="Remettre la commande dans l'outil"
+                      aria-label="Remettre la commande dans l'outil"
+                      className="inline-flex rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-text"
+                    >
+                      <RefreshCcwIcon className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => archiver(order, true)}
+                      title="Retirer la commande de l'outil"
+                      aria-label="Retirer la commande de l'outil"
+                      className="inline-flex rounded-lg p-1.5 text-text-muted hover:bg-danger-subtle hover:text-danger"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
+            {visibles.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-6 text-center text-sm text-text-subtle">
+                  {voirRetirees ? "Aucune commande retirée." : "Aucune commande ne correspond."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

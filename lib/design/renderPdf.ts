@@ -1,4 +1,5 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
+import { MAX_MOSAIC_SIDE, isValidMosaicSide } from "@/lib/design/mosaicGrid";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generatePrintReadyPdf } from "@/lib/pdf/generate";
 import { coverCropToBuffer, parsePositionValue } from "@/lib/pdf/crop";
@@ -47,6 +48,11 @@ function mosaicFromForm(formData: FormData, side: "front" | "back"): (File | nul
   const cols = parseInt(String(formData.get(colsField) ?? ""), 10);
   const rows = parseInt(String(formData.get(rowsField) ?? ""), 10);
   if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) return null;
+  // Plafond imposé ici et pas seulement à l'écran : une grille forgée ferait
+  // construire des millions de cases (voir lib/design/mosaicGrid.ts).
+  if (!isValidMosaicSide(cols) || !isValidMosaicSide(rows)) {
+    throw new Error(`Grille de mosaïque invalide : ${MAX_MOSAIC_SIDE} colonnes et ${MAX_MOSAIC_SIDE} rangées au maximum.`);
+  }
   const files = Array.from({ length: cols * rows }, (_, i) => {
     const f = formData.get(cellField(i));
     return f instanceof File && f.size > 0 ? f : null;
@@ -119,6 +125,9 @@ export async function renderPdfFromForm(db: Db, formData: FormData, templateId: 
   const themeId = themeIdFromForm(formData);
   const themeSlotFiles = themeIdFromForm(formData) ? themeSlotFilesFromForm(formData) : null;
   const themeSlotAdjust = parseThemeSlotAdjustField(formData.get("themeSlotAdjust"));
+  // Cadrage des cases de mosaïque, un jeu par côté (même format que themeSlotAdjust).
+  const frontMosaicAdjust = parseThemeSlotAdjustField(formData.get("mosaicCellAdjust"));
+  const backMosaicAdjust = parseThemeSlotAdjustField(formData.get("backMosaicCellAdjust"));
 
   let frontBuffer: Buffer | null = null;
   if (themeId) {
@@ -150,6 +159,7 @@ export async function renderPdfFromForm(db: Db, formData: FormData, templateId: 
         mosaicFiles: frontMosaicFiles,
         mosaicCols,
         mosaicRows,
+        mosaicCellAdjust: frontMosaicAdjust,
       });
       frontBuffer = front.buffer;
     } catch (err) {
@@ -186,6 +196,7 @@ export async function renderPdfFromForm(db: Db, formData: FormData, templateId: 
           mosaicFiles: backMosaicFiles,
           mosaicCols,
           mosaicRows,
+          mosaicCellAdjust: backMosaicAdjust,
         });
         backBuffer = back.buffer;
       } catch (err) {

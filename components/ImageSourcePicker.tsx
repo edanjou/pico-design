@@ -78,6 +78,9 @@ export interface ImageSourceValue {
   // ses dimensions (cols/rows), partagées entre recto et verso. `null` =
   // case vide (laisse un blanc à cet endroit, voir composeMosaicImage).
   mosaicFiles?: (File | null)[];
+  // Cadrage (position/zoom) de la photo de chaque case, dans le même ordre
+  // que `mosaicFiles` — même mécanique que `themeSlotAdjust` pour un thème.
+  mosaicCellAdjust?: ThemeSlotAdjust[];
   // Thème (sourceMode "theme") : une photo par emplacement, dans le même
   // ordre que `theme.slots` — voir `themeSlots`/`themeOverlayUrl` sur
   // ImageSourcePicker. `null` = emplacement vide (voir composeThemeImage).
@@ -786,6 +789,26 @@ export default function ImageSourcePicker({
   const isPdfUpload = sourceMode === "upload" && isPdfFile(file);
   const isMosaic = sourceMode === "mosaic";
   const isTheme = sourceMode === "theme";
+  const mosaicCellAdjust = value.mosaicCellAdjust ?? [];
+  // Cases cadrables de l'aperçu : les emplacements du thème, ou les cases de
+  // la mosaïque, qui sont des emplacements comme les autres, simplement tirés
+  // de la grille. Même affichage, même glisser, même zoom pour les deux ; le
+  // serveur recadre ensuite de la même façon (composeThemeImage /
+  // composeMosaicImage).
+  const slots: ThemeSlot[] = isTheme
+    ? themeSlots
+    : isMosaic
+    ? Array.from({ length: mosaicGrid.cols * mosaicGrid.rows }, (_, i) => ({
+        positionX: ((i % mosaicGrid.cols) + 0.5) / mosaicGrid.cols,
+        positionY: (Math.floor(i / mosaicGrid.cols) + 0.5) / mosaicGrid.rows,
+        widthRatio: 1 / mosaicGrid.cols,
+        heightRatio: 1 / mosaicGrid.rows,
+      }))
+    : [];
+  const slotFiles = isTheme ? themeSlotFiles : isMosaic ? mosaicFiles : [];
+  const slotAdjust = isTheme ? themeSlotAdjust : mosaicCellAdjust;
+  // Le champ d'ImageSourceValue qui garde le cadrage des cases affichées.
+  const slotAdjustField = isTheme ? "themeSlotAdjust" : "mosaicCellAdjust";
   // Clé stable des fichiers de mosaïque/thème (par nom+taille, comme
   // imageLayerFilesKey plus bas) : `mosaicFiles`/`themeSlotFiles` sont de
   // nouveaux tableaux à chaque patch, une dépendance d'effet sur leur
@@ -793,6 +816,7 @@ export default function ImageSourcePicker({
   // réellement changé.
   const mosaicFilesKey = mosaicFiles.map((f) => (f ? `${f.name}:${f.size}` : "")).join("|");
   const themeSlotFilesKey = themeSlotFiles.map((f) => (f ? `${f.name}:${f.size}` : "")).join("|");
+  const slotFilesKey = isTheme ? `theme:${themeSlotFilesKey}` : isMosaic ? `mosaic:${mosaicFilesKey}` : "";
 
   useEffect(() => {
     // Un thème n'a plus besoin de ce rendu serveur : chaque photo s'affiche
@@ -800,7 +824,8 @@ export default function ImageSourcePicker({
     // emplacement côté client — voir le bloc de rendu dédié plus bas. Seul
     // le graphisme final (recto imprimé, mockup) repasse par le serveur
     // (composeThemeImage), avec l'ajustement du client (themeSlotAdjust).
-    if (!((sourceMode === "tile" || isMosaic || isPdfUpload) && canPosition && template)) {
+    // La mosaïque, pareil : ses cases sont cadrées côté client.
+    if (!((sourceMode === "tile" || isPdfUpload) && canPosition && template)) {
       setRenderedBackgroundUrl((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
@@ -935,22 +960,22 @@ export default function ImageSourcePicker({
     // vitesse "relative" qu'une grande, pas à la même vitesse en pixels).
     // Sans emplacement sélectionné, rien à glisser en mode thème — pas de
     // fond à recadrer (voir composeThemeImage, toujours du blanc).
-    if (isTheme) {
-      if (selectedThemeSlot !== null && themeSlots[selectedThemeSlot]) {
-        const slot = themeSlots[selectedThemeSlot];
+    if (isTheme || isMosaic) {
+      if (selectedThemeSlot !== null && slots[selectedThemeSlot]) {
+        const slot = slots[selectedThemeSlot];
         const slotWidthPx = slot.widthRatio * rect.width;
         const slotHeightPx = slot.heightRatio * rect.height;
         const slotDx = dxPx / slotWidthPx;
         const slotDy = dyPx / slotHeightPx;
-        const current = themeSlotAdjust[selectedThemeSlot] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
-        const next = themeSlotAdjust.slice();
+        const current = slotAdjust[selectedThemeSlot] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
+        const next = slotAdjust.slice();
         while (next.length <= selectedThemeSlot) next.push({ positionX: 0.5, positionY: 0.5, scale: 1 });
         next[selectedThemeSlot] = {
           ...current,
           positionX: Math.min(1, Math.max(0, current.positionX - slotDx)),
           positionY: Math.min(1, Math.max(0, current.positionY - slotDy)),
         };
-        onChange({ themeSlotAdjust: next });
+        onChange({ [slotAdjustField]: next });
       }
       return;
     }
@@ -992,13 +1017,13 @@ export default function ImageSourcePicker({
   // fichiers change (themeSlotFilesKey, déjà dérivé plus haut).
   const [themeSlotPreviewUrls, setThemeSlotPreviewUrls] = useState<(string | null)[]>([]);
   useEffect(() => {
-    const urls = themeSlotFiles.map((f) => (f ? URL.createObjectURL(f) : null));
+    const urls = slotFiles.map((f) => (f ? URL.createObjectURL(f) : null));
     setThemeSlotPreviewUrls(urls);
     return () => {
       urls.forEach((u) => u && URL.revokeObjectURL(u));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themeSlotFilesKey]);
+  }, [slotFilesKey]);
 
   // Taille naturelle de chaque photo de thème (indispensable au calcul de
   // cadrage "cover" par emplacement, voir themeSlotGeometry) — remise à zéro
@@ -1009,20 +1034,20 @@ export default function ImageSourcePicker({
   );
   useEffect(() => {
     setThemeSlotNaturalSizes({});
-  }, [themeSlotFilesKey]);
+  }, [slotFilesKey]);
 
   // Géométrie (position/taille en px, dans la boîte d'aperçu) de chaque
   // emplacement — même formule que backgroundGeometry, mais sa "boîte" est
   // le rectangle de l'emplacement (voir ThemeSlot), pas toute la page.
   function themeSlotGeometry(index: number) {
-    const slot = themeSlots[index];
+    const slot = slots[index];
     const natural = themeSlotNaturalSizes[index];
     if (!slot || !natural || boxSize.width === 0 || boxSize.height === 0) return null;
     const slotWidthPx = slot.widthRatio * boxSize.width;
     const slotHeightPx = slot.heightRatio * boxSize.height;
     const slotLeftPx = slot.positionX * boxSize.width - slotWidthPx / 2;
     const slotTopPx = slot.positionY * boxSize.height - slotHeightPx / 2;
-    const adjust = themeSlotAdjust[index] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
+    const adjust = slotAdjust[index] ?? { positionX: 0.5, positionY: 0.5, scale: 1 };
     const coverScale = Math.max(slotWidthPx / natural.width, slotHeightPx / natural.height);
     const scale = coverScale * Math.max(0.1, adjust.scale);
     const boundingWidth = natural.width * scale;
@@ -1057,9 +1082,9 @@ export default function ImageSourcePicker({
       ? selectedVisual?.fileUrl ?? null
       : null;
   const backgroundUrl =
-    sourceMode === "tile" || isMosaic || isPdfUpload ? renderedBackgroundUrl ?? rawBackgroundUrl : rawBackgroundUrl;
-  const previewLoading = frameLoading || ((sourceMode === "tile" || isMosaic || isPdfUpload) && renderedBgLoading);
-  const previewError = frameError ?? (sourceMode === "tile" || isMosaic || isPdfUpload ? renderedBgError : null);
+    sourceMode === "tile" || isPdfUpload ? renderedBackgroundUrl ?? rawBackgroundUrl : rawBackgroundUrl;
+  const previewLoading = frameLoading || ((sourceMode === "tile" || isPdfUpload) && renderedBgLoading);
+  const previewError = frameError ?? (sourceMode === "tile" || isPdfUpload ? renderedBgError : null);
 
   // Nouvelle image : la taille naturelle connue ne vaut plus rien tant que
   // la nouvelle n'a pas fini de charger (onLoad, plus bas).
@@ -1426,9 +1451,9 @@ export default function ImageSourcePicker({
                   sélectionné (cadre plein) capte le glisser (voir
                   handlePointerMove) ; le graphisme (avec transparence)
                   vient par-dessus toutes les photos, fixe. */}
-              {isTheme &&
+              {(isTheme || isMosaic) &&
                 boxSize.width > 0 &&
-                themeSlots.map((slot, i) => {
+                slots.map((slot, i) => {
                   const geometry = themeSlotGeometry(i);
                   const url = themeSlotPreviewUrls[i];
                   const isSelected = selectedThemeSlot === i;
@@ -1448,15 +1473,23 @@ export default function ImageSourcePicker({
                       // petits emplacements de la barre latérale, voir
                       // ThemeSlotDropTarget) — même mécanique (drag-and-drop
                       // natif depuis ThemeBankThumbnail).
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "copy";
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const bankIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-                        if (Number.isFinite(bankIndex)) assignBankFileToSlot(bankIndex, i);
-                      }}
+                      onDragOver={
+                        isTheme
+                          ? (e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "copy";
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        isTheme
+                          ? (e) => {
+                              e.preventDefault();
+                              const bankIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+                              if (Number.isFinite(bankIndex)) assignBankFileToSlot(bankIndex, i);
+                            }
+                          : undefined
+                      }
                       className="absolute cursor-move overflow-hidden"
                       style={{
                         left: slotLeftPx,
@@ -1706,7 +1739,7 @@ export default function ImageSourcePicker({
                   ? "Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection."
                   : isTheme
                   ? "Le graphisme du thème s'affiche par-dessus tes photos — ajoute/change-les dans la liste ci-contre."
-                  : "Chaque photo remplit sa case — ajoute/change-les dans la liste ci-contre."
+                  : "Clique une case puis glisse sa photo pour la cadrer — ajoute/change les photos dans la liste ci-contre."
                 : showGuides
                 ? "Ligne magenta = coupe (fond perdu) · pointillés bleus = marge de protection · glisse l'image pour la repositionner."
                 : "Glisse l'image pour la repositionner."}

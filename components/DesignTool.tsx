@@ -164,6 +164,9 @@ export default function DesignTool({
         type === "mosaic" && f.mosaicFiles?.length === mosaicCellCount
           ? f.mosaicFiles
           : Array.from({ length: mosaicCellCount }, () => null),
+      // Le cadrage suit les cases : même grille, on le garde ; sinon, repart centré.
+      mosaicCellAdjust:
+        type === "mosaic" && f.mosaicFiles?.length === mosaicCellCount ? f.mosaicCellAdjust : [],
       themeSlotFiles:
         sameThemeAsBefore && f.themeSlotFiles?.length === themeSlotCount
           ? f.themeSlotFiles
@@ -186,6 +189,8 @@ export default function DesignTool({
             ? b.mosaicFiles
             : Array.from({ length: mosaicCellCount }, () => null)
           : b.mosaicFiles,
+      mosaicCellAdjust:
+        type === "mosaic" && b.mosaicFiles?.length !== mosaicCellCount ? [] : b.mosaicCellAdjust,
     }));
   }
 

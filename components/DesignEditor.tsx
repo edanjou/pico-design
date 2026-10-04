@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { MAX_MOSAIC_SIDE } from "@/lib/design/mosaicGrid";
 import Link from "next/link";
 import ImageSourcePicker, {
   type ImageSourceValue,
@@ -53,8 +54,8 @@ const COVERAGE_ZOOM_THRESHOLD = 0.999;
 // l'écran. Les suivants se rejoignent par les flèches.
 const THEMES_PER_PAGE = 8;
 
-// Cinq dispositions fixes (masonry — cases de tailles différentes —
-// reportée à plus tard, voir la conversation).
+// Cinq dispositions prédéfinies, plus une grille libre (« Personnalisé »).
+// Masonry (cases de tailles différentes) reportée à plus tard.
 const GRID_PRESETS: { cols: number; rows: number }[] = [
   { cols: 1, rows: 2 },
   { cols: 1, rows: 3 },
@@ -63,18 +64,24 @@ const GRID_PRESETS: { cols: number; rows: number }[] = [
   { cols: 2, rows: 2 },
 ];
 
-function themeSlotCovers(value: ImageSourceValue, index: number): boolean {
-  if (!value.themeSlotFiles?.[index]) return true;
-  return (
-    (value.themeSlotAdjust?.[index]?.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD
-  );
+// Une case cadrable (emplacement de thème ou case de mosaïque) couvre-t-elle
+// tout son rectangle ? Une case vide compte comme couverte (blanc voulu).
+function slotCovers(value: ImageSourceValue, index: number): boolean {
+  const mosaic = value.sourceMode === "mosaic";
+  const file = mosaic ? value.mosaicFiles?.[index] : value.themeSlotFiles?.[index];
+  if (!file) return true;
+  const adjust = mosaic ? value.mosaicCellAdjust?.[index] : value.themeSlotAdjust?.[index];
+  return (adjust?.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
 }
 
 function coversPrintArea(value: ImageSourceValue): boolean {
   if (value.sourceMode === "theme") {
     return (value.themeSlotFiles ?? []).every((_, i) =>
-      themeSlotCovers(value, i),
+      slotCovers(value, i),
     );
+  }
+  if (value.sourceMode === "mosaic") {
+    return (value.mosaicFiles ?? []).every((_, i) => slotCovers(value, i));
   }
   if (value.sourceMode !== "upload") return true;
   return (value.scale ?? 1) >= COVERAGE_ZOOM_THRESHOLD;
@@ -334,6 +341,14 @@ export default function DesignEditor({
   const [selectedThemeSlot, setSelectedThemeSlot] = useState<number | null>(
     null,
   );
+  // Mosaïque en grille libre (bouton « Personnalisé ») : ouvert d'office si
+  // la grille courante n'est aucune des dispositions prédéfinies.
+  const [customGrid, setCustomGrid] = useState(
+    () =>
+      !GRID_PRESETS.some(
+        (p) => p.cols === mosaicGrid.cols && p.rows === mosaicGrid.rows,
+      ),
+  );
   const [confirmingCoverage, setConfirmingCoverage] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [themePage, setThemePage] = useState(0);
@@ -401,6 +416,12 @@ export default function DesignEditor({
     template.dpi,
   );
 
+  // Nouvelle grille ou nouveau type de design : la case sélectionnée peut ne
+  // plus exister (une 2×2 passée en 3×1), on repart sans sélection.
+  useEffect(() => {
+    setSelectedThemeSlot(null);
+  }, [designType, mosaicGrid.cols, mosaicGrid.rows]);
+
   function switchSide(next: "front" | "back") {
     setActiveSide(next);
     setSelectedLayerId(null);
@@ -435,16 +456,26 @@ export default function DesignEditor({
     positionY: 0.5,
     scale: 1,
   };
+  // Cases cadrables du côté affiché : les emplacements du thème (recto
+  // seulement) ou les cases de la mosaïque (recto comme verso). Même zoom,
+  // mêmes boutons pour les deux ; seul le champ du réglage change.
+  const isMosaicSide = activeValue.sourceMode === "mosaic";
+  const slotCount = isMosaicSide
+    ? mosaicGrid.cols * mosaicGrid.rows
+    : activeValue.sourceMode === "theme"
+      ? themeSlotCount
+      : 0;
+  const slotAdjustField = isMosaicSide ? "mosaicCellAdjust" : "themeSlotAdjust";
   function themeAdjust(index: number): ThemeSlotAdjust {
-    return front.themeSlotAdjust?.[index] ?? DEFAULT_THEME_ADJUST;
+    return activeValue[slotAdjustField]?.[index] ?? DEFAULT_THEME_ADJUST;
   }
   function updateThemeAdjust(index: number, patch: Partial<ThemeSlotAdjust>) {
     const next = Array.from(
-      { length: themeSlotCount },
-      (_, i) => front.themeSlotAdjust?.[i] ?? DEFAULT_THEME_ADJUST,
+      { length: slotCount },
+      (_, i) => activeValue[slotAdjustField]?.[i] ?? DEFAULT_THEME_ADJUST,
     );
     next[index] = { ...next[index], ...patch };
-    onChangeFront({ themeSlotAdjust: next });
+    activeOnChange({ [slotAdjustField]: next });
   }
 
   // Barre de texte flottante (police/taille/gras/italique/couleur puis
@@ -695,23 +726,65 @@ export default function DesignEditor({
 
             {/* Mosaïque : disposition (toujours modifiable) + grille de cases. */}
             {side === "front" && designType === "mosaic" && (
-              <div className="flex flex-wrap gap-1.5">
-                {GRID_PRESETS.map(({ cols, rows }) => (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {GRID_PRESETS.map(({ cols, rows }) => (
+                    <button
+                      key={`${cols}x${rows}`}
+                      type="button"
+                      onClick={() => {
+                        setCustomGrid(false);
+                        onChangeDesignType("mosaic", { grid: { cols, rows } });
+                      }}
+                      className={`rounded-lg border px-2.5 py-1 text-xs ${
+                        !customGrid &&
+                        mosaicGrid.cols === cols &&
+                        mosaicGrid.rows === rows
+                          ? "border-primary bg-primary text-text-on-brand"
+                          : "border-border text-text-muted hover:bg-surface-muted"
+                      }`}
+                    >
+                      {cols}×{rows}
+                    </button>
+                  ))}
                   <button
-                    key={`${cols}x${rows}`}
                     type="button"
-                    onClick={() =>
-                      onChangeDesignType("mosaic", { grid: { cols, rows } })
-                    }
+                    onClick={() => setCustomGrid(true)}
                     className={`rounded-lg border px-2.5 py-1 text-xs ${
-                      mosaicGrid.cols === cols && mosaicGrid.rows === rows
+                      customGrid
                         ? "border-primary bg-primary text-text-on-brand"
                         : "border-border text-text-muted hover:bg-surface-muted"
                     }`}
                   >
-                    {cols}×{rows}
+                    Personnalisé
                   </button>
-                ))}
+                </div>
+                {/* Grille libre, jusqu'à MAX_MOSAIC_SIDE de chaque côté (le
+                    serveur impose le même plafond, voir lib/design/mosaicGrid.ts). */}
+                {customGrid && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["cols", "rows"] as const).map((dim) => (
+                      <label key={dim} className="flex flex-col gap-1 text-xs text-text-muted">
+                        {dim === "cols" ? "Colonnes" : "Rangées"}
+                        <select
+                          value={mosaicGrid[dim]}
+                          onChange={(e) =>
+                            onChangeDesignType("mosaic", {
+                              grid: { ...mosaicGrid, [dim]: Number(e.target.value) },
+                            })
+                          }
+                          className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text"
+                        >
+                          {Array.from({ length: MAX_MOSAIC_SIDE }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -922,10 +995,18 @@ export default function DesignEditor({
               </>
             )}
 
-            {activeValue.sourceMode === "theme" && themeSlotCount > 0 && (
+            {slotCount > 0 && (
               <>
-                <div className="flex gap-1">
-                  {Array.from({ length: themeSlotCount }, (_, i) => (
+                <div
+                  className={isMosaicSide ? "grid gap-1" : "flex gap-1"}
+                  // La mosaïque reprend la disposition de sa grille.
+                  style={
+                    isMosaicSide
+                      ? { gridTemplateColumns: `repeat(${mosaicGrid.cols}, minmax(0, 1fr))` }
+                      : undefined
+                  }
+                >
+                  {Array.from({ length: slotCount }, (_, i) => (
                     <button
                       key={i}
                       type="button"
@@ -936,8 +1017,9 @@ export default function DesignEditor({
                           : "border-border text-text-muted hover:bg-surface-muted hover:text-text"
                       }`}
                     >
-                      Photo {i + 1}
-                      {!themeSlotCovers(front, i) && (
+                      {/* Mosaïque : le numéro seul, pour tenir à 6 cases par rangée. */}
+                      {isMosaicSide ? i + 1 : `Photo ${i + 1}`}
+                      {!slotCovers(activeValue, i) && (
                         <span
                           className={`absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${
                             selectedThemeSlot === i
@@ -951,9 +1033,10 @@ export default function DesignEditor({
                 </div>
                 {selectedThemeSlot !== null ? (
                   <>
-                    {!themeSlotCovers(front, selectedThemeSlot) && (
+                    {!slotCovers(activeValue, selectedThemeSlot) && (
                       <p className="rounded-lg border border-warning bg-warning-subtle p-2 text-xs text-text">
-                        ⚠ Cette photo ne couvre pas tout l&apos;emplacement.
+                        ⚠ Cette photo ne couvre pas toute{" "}
+                        {isMosaicSide ? "sa case" : "l\u2019emplacement"}.
                       </p>
                     )}
                     <div className="flex flex-col gap-2">
@@ -1199,9 +1282,15 @@ export default function DesignEditor({
               themeOverlayUrl={
                 side === "front" ? (selectedTheme?.overlayUrl ?? null) : null
               }
-              selectedThemeSlot={side === "front" ? selectedThemeSlot : null}
+              // Case sélectionnée : emplacement de thème (recto) ou case de
+              // mosaïque (les deux côtés).
+              selectedThemeSlot={
+                side === "front" || isMosaicSide ? selectedThemeSlot : null
+              }
               onSelectThemeSlot={
-                side === "front" ? setSelectedThemeSlot : undefined
+                side === "front" || isMosaicSide
+                  ? setSelectedThemeSlot
+                  : undefined
               }
             />
           </div>

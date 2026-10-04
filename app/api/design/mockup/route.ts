@@ -11,6 +11,7 @@ import { loadBeautyShotBundle } from "@/lib/pdf/beautyShotBundle";
 import { resolveMockupBundle } from "@/lib/templateMockups";
 import { grantAllows } from "@/lib/publicDesign";
 import { publicUploadError } from "@/lib/uploadLimits";
+import { MAX_MOSAIC_SIDE, isValidMosaicSide } from "@/lib/design/mosaicGrid";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
@@ -109,6 +110,10 @@ export async function POST(request: Request) {
     Number.isFinite(mosaicRows) &&
     mosaicCols > 0 &&
     mosaicRows > 0;
+  // Plafond imposé ici et pas seulement à l'écran (voir lib/design/mosaicGrid.ts).
+  if (hasMosaicGrid && (!isValidMosaicSide(mosaicCols) || !isValidMosaicSide(mosaicRows))) {
+    return errorResponse(`Grille de mosaïque invalide : ${MAX_MOSAIC_SIDE} colonnes et ${MAX_MOSAIC_SIDE} rangées au maximum.`);
+  }
   const mosaicFiles: (File | null)[] | null = hasMosaicGrid
     ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
         const f = formData.get(`mosaicCell${i}`);
@@ -127,6 +132,8 @@ export async function POST(request: Request) {
     const f = formData.get(`themeSlot${i}`);
     return f instanceof File && f.size > 0 ? f : null;
   });
+  // Cadrage des cases de mosaïque du côté rendu (un seul côté par appel).
+  const mosaicCellAdjust = parseThemeSlotAdjustField(formData.get("mosaicCellAdjust"));
   const themeSlotAdjust = parseThemeSlotAdjustField(
     formData.get("themeSlotAdjust"),
   );
@@ -198,6 +205,7 @@ export async function POST(request: Request) {
         mosaicFiles,
         mosaicCols,
         mosaicRows,
+        mosaicCellAdjust,
       });
       resolvedBuffer = resolved.buffer;
     } catch (err) {

@@ -27,6 +27,9 @@ export interface ResolveProductImageInput {
   mosaicFiles?: (File | null)[] | null;
   mosaicCols?: number | null;
   mosaicRows?: number | null;
+  // Cadrage de chaque case de la mosaïque (position/zoom), dans l'ordre des
+  // cases — voir composeMosaicImage. Absent = photos centrées.
+  mosaicCellAdjust?: ThemeSlotAdjust[] | null;
   // Thème (Design Shopify, étape « Type de design ») : un graphisme préfait
   // attribué au modèle, avec 1 à 3 emplacements où les photos du client sont
   // recadrées — voir composeThemeImage. Prioritaire sur mosaic/file/visualId.
@@ -138,7 +141,8 @@ export async function resolveProductImage(
       input.mosaicCols ?? 1,
       input.mosaicRows ?? 1,
       targetWidthPx,
-      targetHeightPx
+      targetHeightPx,
+      input.mosaicCellAdjust ?? []
     );
     return { buffer, contentType: "image/jpeg", filename: "mosaic.jpg" };
   }

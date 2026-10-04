@@ -6,6 +6,7 @@ import {
   createAdminSupabaseClient,
 } from "@/lib/supabase/server";
 import { grantAllows } from "@/lib/publicDesign";
+import { MAX_MOSAIC_SIDE, isValidMosaicSide } from "@/lib/design/mosaicGrid";
 import { resolveProductImage } from "@/lib/pdf/productSource";
 import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
 import { loadLogoImage } from "@/lib/pdf/logo";
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
     Number.isFinite(mosaicColsRaw) && mosaicColsRaw > 0 ? mosaicColsRaw : null;
   const mosaicRows =
     Number.isFinite(mosaicRowsRaw) && mosaicRowsRaw > 0 ? mosaicRowsRaw : null;
+  // Plafond imposé ici et pas seulement à l'écran (voir lib/design/mosaicGrid.ts).
+  if ((mosaicCols && !isValidMosaicSide(mosaicCols)) || (mosaicRows && !isValidMosaicSide(mosaicRows))) {
+    return NextResponse.json({ error: `Grille de mosaïque invalide : ${MAX_MOSAIC_SIDE} colonnes et ${MAX_MOSAIC_SIDE} rangées au maximum.` }, { status: 400 });
+  }
   const mosaicFiles: (File | null)[] | null =
     mosaicCols && mosaicRows
       ? Array.from({ length: mosaicCols * mosaicRows }, (_, i) => {
@@ -72,6 +77,7 @@ export async function POST(request: Request) {
     const f = formData.get(`themeSlot${i}`);
     return f instanceof File && f.size > 0 ? f : null;
   });
+  const mosaicCellAdjust = parseThemeSlotAdjustField(formData.get("mosaicCellAdjust"));
   const themeSlotAdjust = parseThemeSlotAdjustField(
     formData.get("themeSlotAdjust"),
   );
@@ -180,6 +186,7 @@ export async function POST(request: Request) {
       mosaicFiles,
       mosaicCols,
       mosaicRows,
+      mosaicCellAdjust,
       themeId,
       themeSlotFiles,
       themeSlotAdjust,

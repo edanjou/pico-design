@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { coverCropToBuffer } from "./crop";
+import type { ThemeSlotAdjust } from "../types";
 
 /**
  * Compose une mosaïque de plusieurs photos distinctes (par opposition à
@@ -15,13 +16,18 @@ import { coverCropToBuffer } from "./crop";
  * plutôt qu'une largeur/hauteur de cellule fixe multipliée) pour que la
  * dernière colonne/ligne absorbe l'arrondi cumulé et que la mosaïque couvre
  * exactement la cible, sans liseré blanc sur le bord droit/bas.
+ *
+ * `cellAdjust[i]` : le cadrage choisi par le client pour la case i (position
+ * et zoom, même mécanique que les emplacements d'un thème, voir
+ * ThemeSlotAdjust). Absent = photo centrée en "cover", comme avant.
  */
 export async function composeMosaicImage(
   cells: (Buffer | null)[],
   cols: number,
   rows: number,
   targetWidthPx: number,
-  targetHeightPx: number
+  targetHeightPx: number,
+  cellAdjust: (ThemeSlotAdjust | null | undefined)[] = []
 ): Promise<Buffer> {
   const c = Math.max(1, Math.floor(cols));
   const r = Math.max(1, Math.floor(rows));
@@ -35,7 +41,10 @@ export async function composeMosaicImage(
       const cellWidth = colEdges[col + 1] - colEdges[col];
       const cellHeight = rowEdges[row + 1] - rowEdges[row];
       if (!cell || cellWidth <= 0 || cellHeight <= 0) continue;
-      const cropped = await coverCropToBuffer(cell, cellWidth, cellHeight);
+      const adjust = cellAdjust[row * c + col];
+      const cropped = adjust
+        ? await coverCropToBuffer(cell, cellWidth, cellHeight, adjust.positionX, adjust.positionY, adjust.scale)
+        : await coverCropToBuffer(cell, cellWidth, cellHeight);
       composites.push({ input: cropped, left: colEdges[col], top: rowEdges[row] });
     }
   }

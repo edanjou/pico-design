@@ -44,6 +44,10 @@ function appendMosaicToForm(
   (value.mosaicFiles ?? []).forEach((f, i) => {
     if (f) body.append(backPrefixed ? `backMosaicCell${i}` : `mosaicCell${i}`, f);
   });
+  // Cadrage de chaque case (position/zoom), voir composeMosaicImage.
+  if (value.mosaicCellAdjust?.length) {
+    body.append(backPrefixed ? "backMosaicCellAdjust" : "mosaicCellAdjust", JSON.stringify(value.mosaicCellAdjust));
+  }
 }
 
 function appendThemeToForm(body: FormData, value: ImageSourceValue, themeId: string) {

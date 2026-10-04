@@ -71,6 +71,10 @@
   --tracking-body: -0.01em;
   --tracking-price: 0.075em;
 
+  /* Largeur du menu de gauche, mesurée sur son contenu et mise à jour par
+     Nav ; cette valeur ne sert qu'avant la première mesure. */
+  --sidebar-w: 13rem;
+
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 16px;

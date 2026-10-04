@@ -109,6 +109,25 @@ export function menuGroupLabel(groupe: MenuKey[]): string {
   return MENU_GROUP_LABELS[index] ?? MENU_GROUP_LABELS[MENU_GROUP_LABELS.length - 1];
 }
 
+// Pages réservées aux administrateurs : Utilisateurs et Paramètres, qui
+// changent respectivement les accès et l'interface de tout le monde (leurs
+// pages appellent requireAdmin). Le menu ET les tuiles du tableau de bord les
+// masquent aux autres rôles : une tuile visible qui renvoie aussitôt à
+// l'accueil passerait pour un lien cassé.
+const ADMIN_ONLY: MenuKey[] = ["users", "settings"];
+
+// Les pages qu'un rôle peut ouvrir, dans l'ordre par défaut.
+export function menuKeysForRole(role: string | null | undefined): MenuKey[] {
+  return role === "admin" ? DEFAULT_MENU_ORDER : DEFAULT_MENU_ORDER.filter((k) => !ADMIN_ONLY.includes(k));
+}
+
+// Pages sans menu de gauche : le tableau de bord, dont les tuiles sont déjà
+// le menu, et l'Outil Shopify, ouvert aussi aux clients. Lue par Nav (le menu)
+// et par AppShell (le décalage de la page), qui doivent toujours concorder.
+export function hasSidebar(pathname: string): boolean {
+  return pathname !== "/" && pathname !== "/design" && !pathname.startsWith("/design/");
+}
+
 // Ordre par défaut quand l'utilisateur n'a encore rien personnalisé : celui
 // des groupes, mis à plat.
 export const DEFAULT_MENU_ORDER: MenuKey[] = MENU_GROUPS.flat();

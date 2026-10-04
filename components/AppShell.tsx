@@ -2,9 +2,10 @@
 
 import { usePathname } from "next/navigation";
 import Nav from "@/components/Nav";
+import { hasSidebar } from "@/lib/menuItems";
 import { ChromeVisibilityProvider, useChromeHidden } from "@/components/ChromeVisibility";
 
-// Cadre commun des pages (barre de navigation + halo + colonne centrée). La
+// Cadre commun des pages (menu à gauche, ou barre en haut sur mobile + halo + colonne centrée). La
 // page de connexion occupe tout l'écran sans ce chrome. L'Outil Shopify
 // (/design), lui, le garde comme les autres modules SAUF pendant l'édition
 // plein écran — voir ChromeVisibility.tsx/useHideChrome, appelé depuis
@@ -14,6 +15,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const chromeHidden = useChromeHidden();
   const showChrome = pathname !== "/login" && !chromeHidden;
+  // Pas de menu de gauche sur certaines pages (voir hasSidebar) : pas de décalage.
+  const showSidebar = showChrome && hasSidebar(pathname);
 
   // `{children}` (donc la page, ex. DesignTool) reste TOUJOURS à la même
   // place dans l'arbre — seuls Nav et les classes du conteneur autour
@@ -26,7 +29,16 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       {showChrome && <Nav />}
-      <div className={showChrome ? "page-glow" : undefined}>
+      {/* La place du menu fixe à gauche : sa largeur mesurée (--sidebar-w, voir Nav). */}
+      <div
+        className={
+          showSidebar
+            ? "page-glow lg:pl-[var(--sidebar-w)]"
+            : showChrome
+              ? "page-glow"
+              : undefined
+        }
+      >
         <main className={showChrome ? "mx-auto max-w-6xl px-4 py-8 sm:px-6" : undefined}>{children}</main>
       </div>
     </>

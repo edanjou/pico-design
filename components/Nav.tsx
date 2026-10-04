@@ -1,12 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
-import { LogOutIcon, MenuIcon, XIcon } from "@/components/icons";
-import { DEFAULT_MENU_ORDER, groupMenuOrder, MENU_ITEMS, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
+import { LayoutDashboardIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
+import { groupMenuOrder, hasSidebar, MENU_ITEMS, menuKeysForRole, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 import Modal from "@/components/Modal";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 
@@ -19,10 +19,6 @@ const ROLE_LABELS: Record<string, string> = {
   employee: "Designer",
 };
 
-// Pages réservées aux administrateurs : Utilisateurs et Paramètres, qui
-// changent respectivement les accès et l'interface de tout le monde.
-const ADMIN_ONLY: MenuKey[] = ["users", "settings"];
-const DEFAULT_ORDER_NO_ADMIN = DEFAULT_MENU_ORDER.filter((k) => !ADMIN_ONLY.includes(k));
 
 export default function Nav() {
   const router = useRouter();
@@ -44,8 +40,8 @@ export default function Nav() {
     : "admin";
   const [name, setName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  // Menu burger (mobile et tablette — voir le <nav> masqué en `lg:flex`
-  // ci-dessous ; le menu horizontal ne revient qu'à partir de 1024 px).
+  // Menu burger (mobile et tablette : le menu de gauche n'apparaît qu'à
+  // partir de 1024 px).
   // Fermé automatiquement dès qu'on change de page.
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
@@ -58,7 +54,7 @@ export default function Nav() {
   // Ordre par défaut en attendant le chargement du profil, pour éviter un
   // flash de nav vide — synchronisé avec l'ordre choisi sur le tableau de
   // bord une fois le profil chargé (voir DashboardTiles).
-  const [menuOrder, setMenuOrder] = useState<MenuKey[]>(DEFAULT_ORDER_NO_ADMIN);
+  const [menuOrder, setMenuOrder] = useState<MenuKey[]>(() => menuKeysForRole(null));
 
   useEffect(() => {
     async function loadUser() {
@@ -73,8 +69,7 @@ export default function Nav() {
         .single<{ full_name: string | null; role: string | null; menu_order: string[] | null }>();
       setName(profile?.full_name ?? user.email ?? null);
       setRole(profile?.role ?? null);
-      const allowedKeys: MenuKey[] = profile?.role === "admin" ? DEFAULT_MENU_ORDER : DEFAULT_ORDER_NO_ADMIN;
-      setMenuOrder(resolveMenuOrder(profile?.menu_order, allowedKeys));
+      setMenuOrder(resolveMenuOrder(profile?.menu_order, menuKeysForRole(profile?.role)));
     }
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,117 +105,172 @@ export default function Nav() {
     router.refresh();
   }
 
+  // Menu de gauche réduit aux icônes (bouton « Réduire »). Préférence de ce
+  // navigateur seulement.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem("pico:sidebar") === "collapsed");
+    } catch {
+      // Stockage indisponible (navigation privée…) : menu déplié.
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("pico:sidebar", collapsed ? "collapsed" : "expanded");
+    } catch {
+      // Sans stockage, la préférence ne vaut que pour cette page.
+    }
+  }, [collapsed]);
+
+  // Le menu prend la largeur de son contenu (son lien le plus long). Cette
+  // largeur mesurée est publiée dans --sidebar-w sur <html>, d'où AppShell
+  // décale la page : les deux restent alignés quels que soient les titres,
+  // la police ou l'état réduit.
+  const sidebarRef = useRef<HTMLElement>(null);
+  const sidebarShown = hasSidebar(pathname);
+  useEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const publish = () => document.documentElement.style.setProperty("--sidebar-w", `${el.offsetWidth}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sidebarShown]);
+
+  // Page active : le tableau de bord sur « / » seulement, une page sur son
+  // adresse et ses sous-pages (/imposition/new reste dans Imposition).
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+
+  // Un lien du menu, en colonne. `iconOnly` : menu de gauche réduit (le titre
+  // passe alors dans l'infobulle).
+  function navLink(href: string, title: string, Icon: (props: { className?: string }) => JSX.Element, iconOnly = false) {
+    const active = isActive(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        title={iconOnly ? title : undefined}
+        aria-label={iconOnly ? title : undefined}
+        aria-current={active ? "page" : undefined}
+        className={`group flex items-center gap-3 rounded-xl py-2.5 text-[15px] transition-colors duration-150 ${
+          iconOnly ? "w-10 justify-center" : "pl-3 pr-6"
+        } ${active ? "bg-primary-subtle font-medium text-primary" : "text-text-muted hover:bg-surface-muted hover:text-text"}`}
+      >
+        {/* Même secousse « jello » au survol que partout ailleurs ; `motion-safe` la coupe au besoin. */}
+        <Icon className="h-[18px] w-[18px] shrink-0 motion-safe:group-hover:animate-jello" />
+        {!iconOnly && <span className="truncate">{title}</span>}
+      </Link>
+    );
+  }
+
+  // Les liens, groupés comme sur le tableau de bord : le tableau de bord en
+  // tête, puis chaque groupe séparé du précédent par un filet.
+  const links = (iconOnly: boolean) => (
+    <>
+      {navLink("/", "Tableau de bord", LayoutDashboardIcon, iconOnly)}
+      {groupes.map((groupe) => (
+        <div key={groupe.join("-")} className="mt-2 space-y-0.5 border-t border-border pt-2">
+          {groupe.map((key) => navLink(MENU_ITEMS[key].href, MENU_ITEMS[key].title, MENU_ITEMS[key].icon, iconOnly))}
+        </div>
+      ))}
+    </>
+  );
+
   return (
-    <header className="border-b border-border bg-surface">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-6 py-3">
-        <div className="flex items-center">
-          <Link href="/">
-            {/* Logo réglable (module Paramètres). Le jeu suit la surface :
-                l'Outil Shopify peut porter un autre logo que
-                l'administration, et une boutique le sien. La route renvoie
-                le logo d'origine tant que rien n'est téléversé. */}
+    <>
+      {/* Barre du haut, sur toute la largeur et sur tous les écrans : le logo
+          à gauche, le compte et la déconnexion à droite. En dessous de 1024 px,
+          elle porte aussi le burger, qui déplie les liens du menu. */}
+      <header className="sticky top-0 z-40 border-b border-border bg-surface">
+        <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
+          {/* Logo réglable (module Paramètres). Le jeu suit la surface : l'Outil
+              Shopify peut porter un autre logo que l'administration, et une
+              boutique le sien. La route renvoie le logo d'origine tant que rien
+              n'est téléversé. */}
+          {/* Le logo suivi du nom de l'application, comme « Pico OS ». */}
+          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Pico Design — tableau de bord">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/settings/${logoScope}/asset/logo`}
-              alt="Pico Design"
-              className="h-6 w-auto"
-            />
+            <img src={`/api/settings/${logoScope}/asset/logo`} alt="" className="h-7 w-auto" />
+            <span className="font-heading text-2xl font-bold leading-none text-text">Design</span>
           </Link>
-        </div>
-
-        {/* Écrans étroits : remplacée par le bouton burger et le panneau ci-dessous. */}
-        {/* Les liens d'un même groupe sont serrés (gap-4) et les groupes
-            séparés par un trait : c'est l'espacement qui porte le
-            regroupement, le trait ne fait que le souligner. */}
-        <nav className="hidden items-center gap-5 text-sm text-text-muted lg:flex">
-          {groupes.map((groupe, g) => (
-            <Fragment key={groupe.join("-")}>
-              {g > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}
-              <span className="flex items-center gap-4">
-                {groupe.map((key) => {
-                  const item = MENU_ITEMS[key];
-                  return (
-                    <Link
-                      key={key}
-                      href={item.href}
-                      className="group flex items-center gap-1.5 transition-colors duration-200 hover:text-primary"
-                    >
-                      {/* Seule l'icône bouge (secousse « jello », jouée une fois au survol) : le
-                          lien, lui, reste en place, donc la zone de survol ne change pas.
-                          `motion-safe` désactive le mouvement pour qui a demandé moins d'animations. */}
-                      <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
-                      {item.title}
-                    </Link>
-                  );
-                })}
+          {/* Retour au tableau de bord, comme la grille à côté de « Pico OS ». */}
+          <Link
+            href="/"
+            title="Tableau de bord"
+            aria-label="Tableau de bord"
+            className="group mr-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text"
+          >
+            <LayoutDashboardIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
+          </Link>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setMobileOpen((open) => !open)}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-nav"
+              title={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text lg:hidden"
+            >
+              {mobileOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            </button>
+            {/* La pastille du nom ouvre « Changer mon mot de passe » (tous les rôles). */}
+            <button
+              onClick={() => setAccountOpen(true)}
+              title="Changer mon mot de passe"
+              className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-muted"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-text-on-brand">
+                {initials || "?"}
               </span>
-            </Fragment>
-          ))}
-        </nav>
-
-        {/* Groupe aligné à droite : menu burger (mobile/tablette), pastille du nom, déconnexion. */}
-        <div className="flex items-center justify-self-end gap-1">
-          <button
-            onClick={() => setMobileOpen((open) => !open)}
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-nav"
-            title={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text lg:hidden"
-          >
-            {mobileOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
-          </button>
-          <button
-            onClick={() => setAccountOpen(true)}
-            title="Changer mon mot de passe"
-            className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-muted"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-text-on-brand">
-              {initials || "?"}
-            </span>
-            {name && (
-              <span className="hidden text-left sm:block">
-                <span className="block text-sm font-medium text-text">{name}</span>
-                {role && (
-                  <span className="block text-xs text-text-subtle">
-                    {ROLE_LABELS[role] ?? role}
-                  </span>
-                )}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={handleLogout}
-            title="Se déconnecter"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text"
-          >
-            <LogOutIcon className="h-4 w-4" />
-          </button>
+              {name && (
+                <span className="hidden text-left sm:block">
+                  <span className="block text-sm font-medium text-text">{name}</span>
+                  {role && <span className="block text-xs text-text-subtle">{ROLE_LABELS[role] ?? role}</span>}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text"
+            >
+              <LogOutIcon className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-      </div>
+        {mobileOpen && (
+          <nav id="mobile-nav" className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-border px-3 py-2 lg:hidden">
+            {links(false)}
+          </nav>
+        )}
+      </header>
 
-      {/* Panneau du menu burger : liste verticale des mêmes liens, repliée par défaut. */}
-      {mobileOpen && (
-        <nav id="mobile-nav" className="border-t border-border px-4 py-2 lg:hidden">
-          {groupes.map((groupe, g) => (
-            // Mêmes groupes qu'en pleine largeur, séparés par un filet plutôt
-            // que par un trait vertical.
-            <div key={groupe.join("-")} className={g > 0 ? "mt-2 border-t border-border pt-2" : undefined}>
-              {groupe.map((key) => {
-                const item = MENU_ITEMS[key];
-                return (
-                  <Link
-                    key={key}
-                    href={item.href}
-                    className="group flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm text-text-muted hover:bg-surface-muted hover:text-primary"
-                  >
-                    <item.icon className="h-4 w-4 motion-safe:group-hover:animate-jello" />
-                    {item.title}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+      {/* Grand écran : menu fixe à gauche, sous la barre du haut. AppShell
+          décale la page de sa largeur (--sidebar-w). Pas sur toutes les
+          pages : voir hasSidebar. */}
+      {sidebarShown && (
+        <aside
+          ref={sidebarRef}
+          className="fixed bottom-0 left-0 top-16 z-30 hidden w-max flex-col border-r border-border bg-surface lg:flex"
+        >
+          <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? "px-2" : "px-3"}`}>{links(collapsed)}</nav>
+  
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Déplier le menu" : "Réduire le menu"}
+            aria-label={collapsed ? "Déplier le menu" : "Réduire le menu"}
+            aria-expanded={!collapsed}
+            className={`flex shrink-0 items-center gap-3 border-t border-border py-3 text-sm text-text-muted hover:bg-surface-muted hover:text-text ${
+              collapsed ? "justify-center" : "px-5"
+            }`}
+          >
+            <PanelLeftIcon className="h-[18px] w-[18px]" />
+            {!collapsed && "Réduire"}
+          </button>
+        </aside>
       )}
 
       {accountOpen && (
@@ -238,6 +288,6 @@ export default function Nav() {
           )}
         </Modal>
       )}
-    </header>
+    </>
   );
 }

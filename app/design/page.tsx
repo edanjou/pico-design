@@ -172,6 +172,9 @@ export default async function DesignPage({
       themes={themesWithUrls}
       illustrations={illustrations}
       mockups={(mockups as TemplateMockup[]) ?? []}
+      // Lien de fiche produit ouvert par un employé connecté (sans clé
+      // valable) : le modèle est déjà choisi, comme pour le client.
+      initialTemplateId={templateId}
     />
   );
 }

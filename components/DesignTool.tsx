@@ -64,6 +64,7 @@ export default function DesignTool({
   illustrations = [],
   mockups,
   publicTemplateId,
+  initialTemplateId,
   grant,
   shopify,
   brandScope = "tool",
@@ -81,6 +82,10 @@ export default function DesignTool({
   // Entrée publique (lien Shopify, voir app/design/page.tsx) : un seul
   // modèle, imposé — pas de galerie, pas de changement de modèle.
   publicTemplateId?: string;
+  // Modèle à ouvrir d'office pour un employé connecté (`?template=` dans
+  // l'adresse, comme le lien de la fiche produit) : on entre directement dans
+  // l'éditeur, mais la galerie reste accessible (« Changer de modèle »).
+  initialTemplateId?: string;
   // Laissez-passer joint à chaque appel d'API à la place d'une session.
   grant?: string;
   // Contexte de commande venu de Shopify : sa présence change la fin du
@@ -92,7 +97,8 @@ export default function DesignTool({
   // l'administration, qui doit le relire dans l'URL (voir Nav.tsx).
   brandScope?: string;
 }) {
-  const initialTemplate = publicTemplateId ? templates.find((t) => t.id === publicTemplateId) ?? null : null;
+  const startTemplateId = publicTemplateId ?? initialTemplateId;
+  const initialTemplate = startTemplateId ? templates.find((t) => t.id === startTemplateId) ?? null : null;
   // En mode public on entre directement dans l'éditeur : il n'y a rien à
   // choisir, et la galerie exposerait un catalogue qu'on ne veut pas montrer.
   const [phase, setPhase] = useState<"pick" | "editor">(initialTemplate ? "editor" : "pick");

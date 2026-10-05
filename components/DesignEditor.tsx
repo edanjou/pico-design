@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MAX_MOSAIC_SIDE } from "@/lib/design/mosaicGrid";
 import Link from "next/link";
 import ImageSourcePicker, {
@@ -8,7 +8,7 @@ import ImageSourcePicker, {
 } from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Template, ThemeSlotAdjust } from "@/lib/types";
+import type { Category, Template, ThemeSlotAdjust, IllustrationWithUrl } from "@/lib/types";
 import { isLandscape } from "@/lib/pdf/orientation";
 import { formatIn, mmToPx } from "@/lib/pdf/units";
 import {
@@ -278,6 +278,7 @@ export default function DesignEditor({
   onRotatedChange,
   visuals,
   themesForTemplate,
+  illustrations,
   front,
   back,
   onChangeFront,
@@ -306,6 +307,7 @@ export default function DesignEditor({
   onRotatedChange: (rotated: boolean) => void;
   visuals: VisualWithUrl[];
   themesForTemplate: ThemeWithOverlayUrl[];
+  illustrations: IllustrationWithUrl[];
   front: ImageSourceValue;
   back: ImageSourceValue;
   onChangeFront: (patch: Partial<ImageSourceValue>) => void;
@@ -372,6 +374,20 @@ export default function DesignEditor({
   // page — la ligne suivante est repoussée naturellement, sans mesure ni
   // boucle.
   const [viewZoom, setViewZoom] = useState(1);
+  // Place libre de la zone centrale, mesurée en continu : l'aperçu de la page
+  // s'y inscrit au plus grand (voir `fitBox` d'ImageSourcePicker), et suit
+  // l'ouverture de la barre de texte, le redimensionnement de la fenêtre…
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const side = template.two_sided ? activeSide : "front";
   const themePageCount = Math.max(
@@ -519,7 +535,10 @@ export default function DesignEditor({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    // Grand écran : exactement la hauteur de la fenêtre, pour que la zone
+    // centrale ait une hauteur définie à remplir ; les panneaux latéraux
+    // défilent chacun de leur côté.
+    <div className="flex min-h-dvh flex-col bg-background lg:h-dvh">
       {/* Barre du haut */}
       <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
@@ -656,7 +675,7 @@ export default function DesignEditor({
         </div>
       )}
 
-      <div className="flex flex-1 flex-col lg:flex-row">
+      <div className="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
         {/* Panneau gauche */}
         <div className="flex shrink-0 flex-col gap-6 overflow-y-auto border-b border-border bg-surface p-5 lg:w-[300px] lg:border-b-0 lg:border-r">
           <SidebarGroup title="Visuel">
@@ -1176,7 +1195,7 @@ export default function DesignEditor({
         </div>
 
         {/* Zone de travail centrale */}
-        <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6">
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto p-4">
           {selectedLayer?.type === "text" && (
             <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface p-1.5 shadow">
               <select
@@ -1256,48 +1275,64 @@ export default function DesignEditor({
             </p>
           )}
 
-          <div className="flex justify-center" style={{ zoom: viewZoom }}>
-            <ImageSourcePicker
-              key={side}
-              side={side}
-              template={template}
-              grant={grant}
-              rotated={rotated}
-              visuals={visuals}
-              value={activeValue}
-              onChange={activeOnChange}
-              logo={null}
-              pairedPdf={side === "back" ? backFromPdf : undefined}
-              previewSize="lg"
-              allowZoom
-              showGuides={showGuides}
-              layers={activeLayers}
-              onChangeLayers={activeOnChangeLayers}
-              selectedLayerId={selectedLayerId}
-              sourceModes={[activeValue.sourceMode]}
-              allowFileChange={false}
-              mosaicGrid={mosaicGrid}
-              themeId={side === "front" ? (selectedTheme?.id ?? null) : null}
-              themeSlots={side === "front" ? (selectedTheme?.slots ?? []) : []}
-              themeOverlayUrl={
-                side === "front" ? (selectedTheme?.overlayUrl ?? null) : null
-              }
-              // Case sélectionnée : emplacement de thème (recto) ou case de
-              // mosaïque (les deux côtés).
-              selectedThemeSlot={
-                side === "front" || isMosaicSide ? selectedThemeSlot : null
-              }
-              onSelectThemeSlot={
-                side === "front" || isMosaicSide
-                  ? setSelectedThemeSlot
-                  : undefined
-              }
-            />
+          {/* Scène : toute la place restante (sur mobile, une hauteur fixe,
+              faute de hauteur à partager). Au-delà de 100 % d'échelle, la
+              page la dépasse et la scène défile. */}
+          <div
+            ref={stageRef}
+            className="flex h-[65vh] min-h-0 w-full items-center justify-center overflow-auto lg:h-auto lg:flex-1"
+          >
+            <div style={{ zoom: viewZoom }}>
+              <ImageSourcePicker
+                // Place libre, moins l'aide que l'aperçu affiche sous la page
+                // (jusqu'à deux lignes quand la zone est étroite).
+                fitBox={
+                  stageSize
+                    ? { width: stageSize.width, height: Math.max(0, stageSize.height - 44) }
+                    : null
+                }
+                key={side}
+                side={side}
+                template={template}
+                grant={grant}
+                rotated={rotated}
+                visuals={visuals}
+                value={activeValue}
+                onChange={activeOnChange}
+                logo={null}
+                pairedPdf={side === "back" ? backFromPdf : undefined}
+                previewSize="lg"
+                allowZoom
+                showGuides={showGuides}
+                layers={activeLayers}
+                onChangeLayers={activeOnChangeLayers}
+                selectedLayerId={selectedLayerId}
+                sourceModes={[activeValue.sourceMode]}
+                allowFileChange={false}
+                mosaicGrid={mosaicGrid}
+                themeId={side === "front" ? (selectedTheme?.id ?? null) : null}
+                themeSlots={side === "front" ? (selectedTheme?.slots ?? []) : []}
+                themeOverlayUrl={
+                  side === "front" ? (selectedTheme?.overlayUrl ?? null) : null
+                }
+                // Case sélectionnée : emplacement de thème (recto) ou case de
+                // mosaïque (les deux côtés).
+                selectedThemeSlot={
+                  side === "front" || isMosaicSide ? selectedThemeSlot : null
+                }
+                onSelectThemeSlot={
+                  side === "front" || isMosaicSide
+                    ? setSelectedThemeSlot
+                    : undefined
+                }
+              />
+            </div>
           </div>
 
-          {/* Légende — informative seulement, mêmes couleurs que les traits
-              réellement dessinés (voir lib/pdf/preview.ts). */}
-          <div className="flex flex-wrap justify-center gap-2">
+          {/* Une seule ligne sous la page : la légende (mêmes couleurs que les
+              traits réellement dessinés, voir lib/pdf/preview.ts) et l'échelle
+              d'affichage — pour laisser le plus de hauteur possible à la page. */}
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
             <LegendPill color="#ff00ff" label="Coupe" />
             <LegendPill color="#60a5fa" dashed label="Marge de protection" />
             <LegendPill
@@ -1309,60 +1344,50 @@ export default function DesignEditor({
               (rawTemplate.fold_marks_horizontal_mm?.length ?? 0) > 0) && (
               <LegendPill color="#16a34a" dashed label="Marques de pli" />
             )}
-          </div>
-
-          <p className="max-w-md text-center text-xs text-text-muted">
-            Ligne de coupe et marge de sécurité sont affichées pour référence
-            {side === "front" && designType === "mosaic"
-              ? " — ajoute une photo par case."
-              : side === "front" && designType === "theme"
-                ? " — ajoute une photo par emplacement."
-                : " — glisse encore l'image ou zoome si besoin."}
-          </p>
-
-          {/* Zoom de vue — échelle d'affichage du canevas, distincte du zoom
-              de l'image (voir la barre latérale gauche). */}
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
-            <button
-              type="button"
-              onClick={() =>
-                setViewZoom((z) =>
-                  Math.max(0.5, Math.round((z - 0.1) * 10) / 10),
-                )
-              }
-              className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
-              aria-label="Réduire l'échelle d'affichage"
-            >
-              −
-            </button>
-            <PercentField
-              value={viewZoom}
-              min={50}
-              max={150}
-              onChange={setViewZoom}
-              label="Échelle d'affichage, en pourcentage"
-              className="w-12 justify-center text-xs font-semibold text-text"
-            />
-            <button
-              type="button"
-              onClick={() =>
-                setViewZoom((z) =>
-                  Math.min(1.5, Math.round((z + 0.1) * 10) / 10),
-                )
-              }
-              className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
-              aria-label="Augmenter l'échelle d'affichage"
-            >
-              +
-            </button>
-            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => setViewZoom(1)}
-              className="rounded-md px-2.5 py-1 text-xs text-text-muted hover:bg-surface-muted"
-            >
-              Ajuster à l&apos;écran
-            </button>
+            {/* Zoom de vue — échelle d'affichage du canevas, distincte du zoom
+                de l'image (voir la barre latérale gauche). */}
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setViewZoom((z) =>
+                    Math.max(0.5, Math.round((z - 0.1) * 10) / 10),
+                  )
+                }
+                className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
+                aria-label="Réduire l'échelle d'affichage"
+              >
+                −
+              </button>
+              <PercentField
+                value={viewZoom}
+                min={50}
+                max={150}
+                onChange={setViewZoom}
+                label="Échelle d'affichage, en pourcentage"
+                className="w-12 justify-center text-xs font-semibold text-text"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setViewZoom((z) =>
+                    Math.min(1.5, Math.round((z + 0.1) * 10) / 10),
+                  )
+                }
+                className="rounded-md px-2.5 py-1 text-text-muted hover:bg-surface-muted"
+                aria-label="Augmenter l'échelle d'affichage"
+              >
+                +
+              </button>
+              <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => setViewZoom(1)}
+                className="rounded-md px-2.5 py-1 text-xs text-text-muted hover:bg-surface-muted"
+              >
+                Ajuster à l&apos;écran
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1374,6 +1399,7 @@ export default function DesignEditor({
             selectedLayerId={selectedLayerId}
             onSelectLayer={setSelectedLayerId}
             maxFontSizeMm={maxFontSizeMm}
+            illustrations={illustrations}
           />
 
           <div className="mt-auto space-y-2.5 rounded-xl bg-surface-muted p-3.5">

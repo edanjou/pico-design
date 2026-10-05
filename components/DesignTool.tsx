@@ -8,7 +8,7 @@ import { useHideChrome } from "@/components/ChromeVisibility";
 import { DEFAULT_TILE_SIZE_MM, isPdfFile, type ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Sku, Template, TemplateMockup } from "@/lib/types";
+import type { Category, Sku, Template, TemplateMockup, IllustrationWithUrl } from "@/lib/types";
 import { pdfPageCount, planPdfPages } from "@/lib/pdf/pdfPages";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import type { DesignLayer } from "@/lib/design/layers";
@@ -61,6 +61,7 @@ export default function DesignTool({
   skus,
   visuals,
   themes,
+  illustrations = [],
   mockups,
   publicTemplateId,
   grant,
@@ -72,6 +73,8 @@ export default function DesignTool({
   skus: Sku[];
   visuals: VisualWithUrl[];
   themes: ThemeWithOverlayUrl[];
+  // Banque d'illustrations, que le client pose comme calques (voir LayersPanel).
+  illustrations?: IllustrationWithUrl[];
   // Mockups de TOUS les modèles — filtrés par modèle courant plus bas,
   // comme `themes`.
   mockups: TemplateMockup[];
@@ -276,6 +279,7 @@ export default function DesignTool({
           onRotatedChange={setRotated}
           visuals={visuals}
           themesForTemplate={themesForTemplate}
+          illustrations={illustrations}
           front={front}
           back={back}
           onChangeFront={(patch) => setFront((f) => ({ ...f, ...patch }))}

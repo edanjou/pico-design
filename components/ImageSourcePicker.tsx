@@ -513,6 +513,7 @@ export default function ImageSourcePicker({
   previewUnavailableMessage,
   pairedPdf,
   previewSize = "sm",
+  fitBox = null,
   showGuides = true,
   allowZoom = false,
   sourceModes = ["upload", "full", "tile"],
@@ -550,6 +551,9 @@ export default function ImageSourcePicker({
   // Largeur de l'aperçu : "sm" (défaut, formulaires admin étroits) ou "lg"
   // (étape 3 de Design Shopify — aperçu zoomé, même mécanique de glisser).
   previewSize?: "sm" | "lg";
+  // Place réellement libre pour l'aperçu, en px (mesurée par l'éditeur) : la
+  // page s'y inscrit au plus grand, ratio gardé. Absente : plafond de 60vh.
+  fitBox?: { width: number; height: number } | null;
   // Ligne de coupe/marge de sécurité/gabarit : affichés par défaut (admin).
   // Design Shopify les masque à l'étape « Visuel » (false) — seule l'étape
   // « Aperçu » les montre.
@@ -1356,6 +1360,9 @@ export default function ImageSourcePicker({
 
       {showPreview && (
       <div>
+        {/* En-tête « Aperçu » : seulement dans l'admin. L'Outil Shopify
+            (previewSize "lg") n'a que la page, qui prend toute la place. */}
+        {previewSize !== "lg" && (
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-2 text-sm font-medium">
             Aperçu
@@ -1379,9 +1386,12 @@ export default function ImageSourcePicker({
             </button>
           )}
         </div>
+        )}
         {previewError && <p className="mt-1 text-sm text-red-600">{previewError}</p>}
         {hasTemplate ? (
-          <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+          // Cadre gris autour de la page : seulement dans l'admin. Dans l'Outil
+          // Shopify, sa marge prendrait sur la place de la page (voir fitBox).
+          <div className={previewSize === "lg" ? "" : "mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3"}>
             <div
               ref={previewBoxRef}
               onPointerDown={handlePointerDown}
@@ -1396,14 +1406,19 @@ export default function ImageSourcePicker({
                 previewSize === "lg" ? "" : "w-full max-w-xs"
               }`}
               style={
-                previewSize === "lg"
+                previewSize === "lg" && fitBox && fitBox.width > 0 && fitBox.height > 0
+                  ? // La plus grande page qui tienne dans la place libre : la
+                    // contrainte la plus serrée entre sa largeur et sa hauteur.
+                    {
+                      aspectRatio: String(pageAspectRatio),
+                      width: Math.floor(Math.min(fitBox.width, fitBox.height * pageAspectRatio)),
+                    }
+                  : previewSize === "lg"
                   ? // Bornée en largeur ET en hauteur en gardant le ratio de la
                     // page : `min()` choisit la contrainte la plus serrée entre
-                    // 100 % du conteneur (l'outil peut prendre toute la largeur
-                    // de la page, voir DesignTool/DesignPreview) et l'équivalent
-                    // largeur de 60 % de la hauteur de la fenêtre — sans ce
-                    // second plafond, un très grand écran étirerait la page à une
-                    // hauteur excessive.
+                    // 100 % du conteneur et l'équivalent largeur de 60 % de la
+                    // hauteur de la fenêtre — sans ce second plafond, un très
+                    // grand écran étirerait la page à une hauteur excessive.
                     { aspectRatio: String(pageAspectRatio), width: `min(100%, calc(60vh * ${pageAspectRatio}))` }
                   : { aspectRatio: String(pageAspectRatio) }
               }
@@ -1731,6 +1746,13 @@ export default function ImageSourcePicker({
                   draggable={false}
                   className="pointer-events-none absolute inset-0 h-full w-full"
                 />
+              )}
+              {/* Sans en-tête (Outil Shopify), le rendu en cours se signale
+                  dans le coin de la page. */}
+              {previewSize === "lg" && previewLoading && (
+                <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-xs text-neutral-500 shadow-sm">
+                  <SpinnerIcon className="h-3.5 w-3.5" /> génération...
+                </span>
               )}
             </div>
             <p className="mt-2 text-center text-xs text-neutral-500">

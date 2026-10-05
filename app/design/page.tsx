@@ -1,3 +1,4 @@
+import { loadIllustrations } from "@/lib/illustrationsData";
 import {
   createAdminSupabaseClient,
   createServerSupabaseClient,
@@ -160,6 +161,8 @@ export default async function DesignPage({
     }),
   );
 
+  const illustrations = await loadIllustrations(supabase);
+
   return (
     <DesignTool
       templates={(templates as Template[]) ?? []}
@@ -167,6 +170,7 @@ export default async function DesignPage({
       skus={(skus as Sku[]) ?? []}
       visuals={visualsWithUrls}
       themes={themesWithUrls}
+      illustrations={illustrations}
       mockups={(mockups as TemplateMockup[]) ?? []}
     />
   );
@@ -241,6 +245,10 @@ async function publicTool(
     }),
   );
 
+  // La banque d'illustrations, elle, est faite pour le client : contrairement
+  // aux visuels, elle part aussi en mode public (en adresses signées).
+  const illustrations = await loadIllustrations(admin);
+
   // Boutique d'origine du visiteur, lue sur l'adresse de retour — déjà
   // validée plus haut par isAllowedReturnUrl. Ses réglages priment sur le
   // jeu « tool » posé par app/design/layout.tsx : ce bloc de style vient plus
@@ -257,6 +265,7 @@ async function publicTool(
         skus={(skus as Sku[]) ?? []}
         visuals={[]}
         themes={themesWithUrls}
+        illustrations={illustrations}
         mockups={(mockups as TemplateMockup[]) ?? []}
         publicTemplateId={row.id}
         grant={grant}

@@ -204,6 +204,22 @@ export interface ImpositionSheet {
   created_by: string | null;
 }
 
+// Illustration de la banque (module Illustrations) : posée par le client de
+// l'Outil Shopify comme un calque image, voir supabase/migrations/0064.
+export interface Illustration {
+  id: string;
+  name: string;
+  file_path: string;
+  mime_type: "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml";
+  created_at: string;
+  created_by: string | null;
+}
+
+// Avec son adresse signée (le bucket est privé), telle que l'écran la reçoit.
+export interface IllustrationWithUrl extends Illustration {
+  fileUrl: string | null;
+}
+
 // Profil de découpe de la Graphtec : feuille, grille fixe, marges, espacement,
 // calibration, marques imprimées et gabarit de guidage (aperçu seulement).
 export interface ImpositionCutter {

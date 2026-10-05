@@ -2,20 +2,32 @@
 
 import { useRef, useState } from "react";
 import ColorPickerButton from "@/components/ColorPickerButton";
+import IllustrationPicker from "@/components/IllustrationPicker";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
   CircleIcon,
+  CopyIcon,
   GripVerticalIcon,
   ImageIcon,
   PlusIcon,
   SquareIcon,
+  StickerIcon,
   TrashIcon,
   TypeIcon,
 } from "@/components/icons";
 import { FONT_OPTIONS } from "@/lib/design/fonts";
-import { BLEND_MODES, newImageLayer, newShapeLayer, newTextLayer, type DesignLayer, type ShapeKind } from "@/lib/design/layers";
+import {
+  BLEND_MODES,
+  newImageLayer,
+  newShapeLayer,
+  newTextLayer,
+  nextLayerId,
+  type DesignLayer,
+  type ShapeKind,
+} from "@/lib/design/layers";
 import { rangeFillStyle } from "@/components/ui/rangeFill";
+import type { IllustrationWithUrl } from "@/lib/types";
 
 const SHAPE_OPTIONS: { value: ShapeKind; icon: (props: { className?: string }) => JSX.Element; label: string }[] = [
   { value: "rectangle", icon: SquareIcon, label: "Rectangle" },
@@ -41,6 +53,7 @@ export default function LayersPanel({
   selectedLayerId,
   onSelectLayer,
   maxFontSizeMm,
+  illustrations = [],
 }: {
   layers: DesignLayer[];
   onChangeLayers: (layers: DesignLayer[]) => void;
@@ -49,6 +62,8 @@ export default function LayersPanel({
   // Plafond du curseur de taille — dépend du format du modèle (voir
   // DesignPreview). 40 par défaut si jamais omis.
   maxFontSizeMm?: number;
+  // Banque d'illustrations (module Illustrations) : vide = pas de bouton.
+  illustrations?: IllustrationWithUrl[];
 }) {
   const effectiveMaxFontSizeMm = maxFontSizeMm ?? 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +72,7 @@ export default function LayersPanel({
   // pertinents en même temps (un calque image déjà sélectionné pendant
   // qu'on ajoute).
   const replaceImageInputRef = useRef<HTMLInputElement>(null);
+  const [illustrationsOpen, setIllustrationsOpen] = useState(false);
   // Index (dans la liste affichée, "haut de la pile" d'abord) du calque en
   // cours de glissement — voir handleDrop.
   const draggedDisplayedIndexRef = useRef<number | null>(null);
@@ -82,6 +98,28 @@ export default function LayersPanel({
 
   function updateLayer(id: string, patch: Record<string, unknown>) {
     onChangeLayers(layers.map((l) => (l.id === id ? ({ ...l, ...patch } as DesignLayer) : l)));
+  }
+
+  // Copie d'un calque, posée juste au-dessus de lui dans la pile et décalée
+  // un peu vers le bas à droite, pour qu'on la voie aussitôt (pile exacte, la
+  // copie cacherait l'original). Elle devient le calque sélectionné. Un calque
+  // image garde le même fichier : chaque calque est envoyé dans son propre
+  // champ (voir layerImageFieldName), la copie s'imprime donc à part entière.
+  function duplicateLayer(id: string) {
+    const index = layers.findIndex((l) => l.id === id);
+    if (index === -1) return;
+    const original = layers[index];
+    const offset = 0.03;
+    const copy = {
+      ...original,
+      id: nextLayerId(),
+      positionX: Math.min(1, original.positionX + offset),
+      positionY: Math.min(1, original.positionY + offset),
+    } as DesignLayer;
+    const next = [...layers];
+    next.splice(index + 1, 0, copy);
+    onChangeLayers(next);
+    onSelectLayer(copy.id);
   }
 
   function removeLayer(id: string) {
@@ -122,6 +160,16 @@ export default function LayersPanel({
 
   return (
     <div className="space-y-3">
+      {illustrationsOpen && (
+        <IllustrationPicker
+          illustrations={illustrations}
+          onClose={() => setIllustrationsOpen(false)}
+          onPick={(file) => {
+            setIllustrationsOpen(false);
+            addImage(file);
+          }}
+        />
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase text-text-subtle">Calques</p>
         <p className="text-xs font-semibold text-text-subtle">{layers.length}</p>
@@ -131,7 +179,7 @@ export default function LayersPanel({
           Figma. Tenaient auparavant sur une seule colonne (une rangée par
           bouton) quand la barre latérale faisait sm:w-48 ; elle fait
           maintenant 320px (voir DesignEditor), largement assez pour ça. */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${illustrations.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <button
           type="button"
           onClick={addText}
@@ -165,6 +213,20 @@ export default function LayersPanel({
           </span>
           <span className="text-xs font-medium">Forme</span>
         </button>
+        {/* Illustration de la banque : devient un calque image comme un autre. */}
+        {illustrations.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setIllustrationsOpen(true)}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-surface-muted pb-2.5 pt-3 text-text-muted hover:border-border-strong hover:text-text"
+          >
+            <span className="relative">
+              <StickerIcon className="h-[18px] w-[18px]" />
+              <PlusIcon className="absolute -right-1.5 -top-1 h-3 w-3 rounded-full bg-surface-muted" />
+            </span>
+            <span className="text-xs font-medium">Illustration</span>
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -238,6 +300,15 @@ export default function LayersPanel({
                   className="text-text-subtle hover:text-text disabled:opacity-30"
                 >
                   <ChevronDownIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => duplicateLayer(layer.id)}
+                  aria-label="Dupliquer"
+                  title="Dupliquer"
+                  className="text-text-subtle hover:text-text"
+                >
+                  <CopyIcon className="h-4 w-4" />
                 </button>
                 <button
                   type="button"

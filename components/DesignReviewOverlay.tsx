@@ -175,6 +175,19 @@ export default function DesignReviewOverlay({
       const body = buildPdfFormData();
       body.append("variantId", shopify.variantId);
       body.append("quantity", String(shopify.quantity));
+      // Aperçu pour le panier Shopify : le mockup que le client regarde, à
+      // défaut le premier prêt. Facultatif — sans lui, le panier garde la
+      // photo du produit.
+      const previewUrl =
+        mockupStates[activeMockupKey]?.url ??
+        viewSpecs.map((v) => mockupStates[v.key]?.url).find(Boolean) ??
+        null;
+      if (previewUrl) {
+        const blob = await fetch(previewUrl)
+          .then((r) => r.blob())
+          .catch(() => null);
+        if (blob) body.append("preview", blob, "preview.png");
+      }
       const res = await fetch("/api/design/submit", { method: "POST", body });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

@@ -1,6 +1,7 @@
 import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import sharp from "sharp";
 import {
   createAdminSupabaseClient,
   createServerSupabaseClient,
@@ -57,6 +58,11 @@ export async function POST(request: Request) {
   // la RLS de design_submissions n'ouvre rien à l'anonyme.
   const admin = createAdminSupabaseClient();
   const id = randomUUID();
+  // Aperçu du design (le mockup vu dans « Vérifier et commander »), affiché
+  // ensuite dans le panier Shopify. Retiré avant splitFormData : ce n'est pas
+  // un ingrédient du rendu, le rejouer ne servirait à rien.
+  const preview = formData.get("preview");
+  formData.delete("preview");
   const { fields, files } = splitFormData(formData);
 
   const sourcePaths: {
@@ -87,6 +93,8 @@ export async function POST(request: Request) {
     });
   }
 
+  const mockupPath = preview instanceof File && preview.size > 0 ? await storePreview(admin, id, preview) : null;
+
   const quantityRaw = Number(formData.get("quantity"));
   const variantId = formData.get("variantId");
 
@@ -98,6 +106,7 @@ export async function POST(request: Request) {
       rotated: formData.get("rotated") === "true",
       payload: fields,
       source_paths: sourcePaths,
+      mockup_path: mockupPath,
       shopify_variant_id:
         typeof variantId === "string" && variantId ? variantId : null,
       quantity:
@@ -110,4 +119,27 @@ export async function POST(request: Request) {
 
   if (error) return errorResponse(error.message, 500);
   return NextResponse.json({ id: (data as { id: string }).id });
+}
+
+// Aperçu ré-encodé (WebP, 800 px de large au plus) : léger pour le panier, et
+// une image fabriquée ici, jamais le fichier du client tel quel. Facultatif :
+// un aperçu illisible ou absent n'empêche pas d'enregistrer le design.
+async function storePreview(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  id: string,
+  file: File,
+): Promise<string | null> {
+  try {
+    const webp = await sharp(Buffer.from(await file.arrayBuffer()))
+      .resize({ width: 800, height: 800, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+    const path = `submissions/${id}/preview.webp`;
+    const { error } = await admin.storage
+      .from("uploads")
+      .upload(path, webp, { contentType: "image/webp", upsert: true });
+    return error ? null : path;
+  } catch {
+    return null;
+  }
 }

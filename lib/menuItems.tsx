@@ -1,4 +1,4 @@
-import { BarcodeIcon, Grid3x3Icon, ImageIcon, StickerIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { BarcodeIcon, Grid3x3Icon, ImageIcon, StickerIcon, TagsIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -7,6 +7,7 @@ export type MenuKey =
   | "templates"
   | "visuals"
   | "illustrations"
+  | "stickers"
   | "themes"
   | "products"
   | "design"
@@ -37,6 +38,12 @@ export const MENU_ITEMS: Record<
     title: "Illustrations",
     icon: StickerIcon,
     gradient: "from-cyan-400 to-teal-600",
+  },
+  stickers: {
+    href: "/autocollants",
+    title: "Autocollants",
+    icon: TagsIcon,
+    gradient: "from-lime-400 to-green-600",
   },
   themes: {
     href: "/themes",
@@ -99,7 +106,7 @@ export const MENU_ITEMS: Record<
 // glisser-déposer déplace un lien À L'INTÉRIEUR de son groupe, jamais d'un
 // groupe à l'autre, sans quoi le regroupement ne tiendrait pas.
 export const MENU_GROUPS: MenuKey[][] = [
-  ["products", "templates", "themes", "visuals", "illustrations", "skus", "imposition"],
+  ["products", "templates", "themes", "visuals", "illustrations", "stickers", "skus", "imposition"],
   ["design", "orders", "settings"],
   ["users"],
 ];

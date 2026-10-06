@@ -1,0 +1,122 @@
+// Rendu PDF des planches d'autocollants : le visuel du graphiste, le nom dans
+// chaque zone (en contours vectoriels, net à toute taille), puis les codes
+// Graphtec par-dessus. Une page par nom, dans un seul PDF.
+
+import { PDFDocument, rgb, type PDFEmbeddedPage, type PDFImage, type PDFPage } from "pdf-lib";
+import { mmToPt } from "@/lib/pdf/units";
+import { loadInstance } from "@/lib/pdf/textLayer";
+import { fontOptionById } from "@/lib/design/fonts";
+import { detectMarksKind } from "@/lib/imposition/marks";
+import { displayText, fitFontMm, type StickerTemplate, type StickerZone } from "./types";
+
+// Un calque pleine feuille : page de PDF ou image, étirée à la taille de la planche.
+type SheetLayer = { kind: "pdf"; page: PDFEmbeddedPage } | { kind: "image"; image: PDFImage };
+
+export const MAX_NAMES_PER_PDF = 200;
+
+async function embedLayer(out: PDFDocument, bytes: Uint8Array | null, label: string): Promise<SheetLayer | null> {
+  if (!bytes) return null;
+  const kind = detectMarksKind(bytes);
+  try {
+    if (kind === "pdf") {
+      const [page] = await out.embedPdf(await PDFDocument.load(bytes), [0]);
+      return { kind: "pdf", page };
+    }
+    if (kind === "png") return { kind: "image", image: await out.embedPng(bytes) };
+    if (kind === "jpg") return { kind: "image", image: await out.embedJpg(bytes) };
+  } catch {
+    // Illisible : signalé plus bas, avec le nom du fichier.
+  }
+  throw new Error(`${label} du modèle est illisible : PDF, PNG ou JPEG attendu.`);
+}
+
+function drawLayer(page: PDFPage, layer: SheetLayer, widthPt: number, heightPt: number) {
+  if (layer.kind === "pdf") page.drawPage(layer.page, { x: 0, y: 0, width: widthPt, height: heightPt });
+  else page.drawImage(layer.image, { x: 0, y: 0, width: widthPt, height: heightPt });
+}
+
+function hexToRgb(hex: string) {
+  const v = parseInt(hex.slice(1), 16);
+  return rgb(((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255);
+}
+
+// Mesures d'un texte pour 1 mm de corps : largeur, et hauteur ascendante →
+// descendante (pour le centrage vertical et l'ajustement en hauteur).
+export function measureZoneText(zone: StickerZone, text: string) {
+  const font = loadInstance(fontOptionById(zone.fontId), false, zone.bold);
+  const run = font.layout(text);
+  const advance = run.glyphs.reduce((sum, g) => sum + g.advanceWidth, 0);
+  return {
+    font,
+    widthPerMm: advance / font.unitsPerEm,
+    heightPerMm: (font.ascent - font.descent) / font.unitsPerEm,
+    ascentPerMm: font.ascent / font.unitsPerEm,
+    descentPerMm: font.descent / font.unitsPerEm,
+    glyphs: run.glyphs,
+  };
+}
+
+// Le nom dans une zone, en un seul chemin vectoriel : chaque glyphe est mis à
+// l'échelle et placé en coordonnées « vers le bas » autour du centre de la
+// zone, tourné au besoin, puis posé au centre de la zone sur la page.
+function drawZoneText(page: PDFPage, zone: StickerZone, name: string, sheetHeightMm: number) {
+  const text = displayText(zone, name);
+  if (!text) return;
+  const m = measureZoneText(zone, text);
+  const sizeMm = fitFontMm(zone, m.widthPerMm, m.heightPerMm);
+  const sizePt = mmToPt(sizeMm);
+  const scale = sizePt / m.font.unitsPerEm;
+
+  const turned = zone.rotation % 180 !== 0;
+  const boxW = mmToPt(turned ? zone.height : zone.width);
+  const textW = m.widthPerMm * sizePt;
+  const pad = boxW * 0.04;
+  // Départ de la ligne, par rapport au centre de la zone (axe du texte).
+  const startX =
+    zone.align === "left" ? -boxW / 2 + pad : zone.align === "right" ? boxW / 2 - pad - textW : -textW / 2;
+  // Ligne de base : le bloc ascendante-descendante centré verticalement (Y vers le bas).
+  const baseline = ((m.ascentPerMm + m.descentPerMm) / 2) * sizePt;
+
+  const angle = (zone.rotation * Math.PI) / 180;
+  let x = startX;
+  let d = "";
+  for (const glyph of m.glyphs) {
+    const path = glyph.path.scale(scale, -scale).translate(x, baseline).rotate(angle);
+    d += path.toSVG();
+    x += glyph.advanceWidth * scale;
+  }
+  if (!d) return;
+  const centerXPt = mmToPt(zone.x + zone.width / 2);
+  const centerYPt = mmToPt(sheetHeightMm - (zone.y + zone.height / 2));
+  page.drawSvgPath(d, { x: centerXPt, y: centerYPt, color: hexToRgb(zone.color), borderWidth: 0 });
+}
+
+export interface StickerFiles {
+  artwork: Uint8Array | null;
+  marks: Uint8Array | null;
+}
+
+export async function renderStickerSheets(template: StickerTemplate, files: StickerFiles, names: string[]): Promise<Buffer> {
+  const out = await PDFDocument.create();
+  const widthPt = mmToPt(template.width_mm);
+  const heightPt = mmToPt(template.height_mm);
+  const artwork = await embedLayer(out, files.artwork, "Le visuel");
+  const marks = await embedLayer(out, files.marks, "Le fichier des codes Graphtec");
+
+  for (const name of names) {
+    const page = out.addPage([widthPt, heightPt]);
+    if (artwork) drawLayer(page, artwork, widthPt, heightPt);
+    for (const zone of template.zones) drawZoneText(page, zone, name, template.height_mm);
+    // Les codes par-dessus tout : rien ne doit masquer ce que lit la Graphtec.
+    if (marks) drawLayer(page, marks, widthPt, heightPt);
+  }
+  return Buffer.from(await out.save());
+}
+
+// Noms saisis (un par ligne) : espaces normalisés, lignes vides retirées.
+export function parseNames(raw: unknown): string[] {
+  return String(raw ?? "")
+    .split(/\r?\n/)
+    .map((n) => n.replace(/\s+/g, " ").trim().slice(0, 80))
+    .filter(Boolean);
+}

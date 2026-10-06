@@ -34,7 +34,7 @@ function openFont(publicPath: string): Font {
   return font;
 }
 
-function loadInstance(font: FontOption, italic: boolean, bold: boolean): Font {
+export function loadInstance(font: FontOption, italic: boolean, bold: boolean): Font {
   const filePath = resolveFontFile(font, italic);
   const weight = bold ? font.weightBold : font.weightRegular;
   const key = `${filePath}:${weight}`;

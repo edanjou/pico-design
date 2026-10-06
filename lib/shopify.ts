@@ -5,7 +5,8 @@ import { createHmac, timingSafeEqual } from "crypto";
  * sans elles, pico-design fonctionne exactement comme avant, et le module
  * n'affiche que ce qui a déjà été reçu.
  *
- * - SHOPIFY_WEBHOOK_SECRET : signe les webhooks de commande ;
+ * - SHOPIFY_WEBHOOK_SECRET : signe les webhooks de commande d'une boutique ;
+ *   les autres ont leur secret dans Paramètres (table shop_webhook_secrets) ;
  * - SHOPIFY_SHOP_DOMAIN + SHOPIFY_ADMIN_TOKEN : lecture de l'API Admin.
  */
 
@@ -22,14 +23,17 @@ export function shopDomain(): string | null {
  * plus. Sans cette vérification, n'importe qui pourrait fabriquer des
  * commandes en appelant l'URL du webhook.
  */
-export function verifyWebhookSignature(rawBody: string, signature: string | null): boolean {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
-  if (!secret || !signature) return false;
-
-  const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+export function verifyWebhookSignature(rawBody: string, signature: string | null, secrets: string[]): boolean {
+  if (!signature) return false;
+  // Chaque boutique signe avec SA clé : la charge est valable si l'une des
+  // clés candidates (celle de la boutique annoncée, la variable
+  // d'environnement) en donne la signature.
   const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return secrets.some((secret) => {
+    if (!secret) return false;
+    const b = Buffer.from(createHmac("sha256", secret).update(rawBody, "utf8").digest("base64"));
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
 }
 
 // Une ligne de commande Shopify, réduite à ce dont le module a besoin.

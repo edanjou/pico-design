@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-shopify-hmac-sha256");
-  if (!verifyWebhookSignature(rawBody, signature)) {
+  if (!verifyWebhookSignature(rawBody, signature, await webhookSecrets(request.headers.get("x-shopify-shop-domain")))) {
     return NextResponse.json({ error: "Signature invalide." }, { status: 401 });
   }
 
@@ -90,4 +90,23 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ ok: true, lignes: items.length });
+}
+
+/**
+ * Clés à essayer pour vérifier la signature : celle enregistrée dans
+ * Paramètres pour la boutique annoncée, et la variable d'environnement (la
+ * boutique d'origine, configurée avant les Paramètres).
+ *
+ * L'en-tête X-Shopify-Shop-Domain n'est pas signé, mais il ne fait que CHOISIR
+ * la clé : annoncer une autre boutique n'apprend rien de sa clé, et la
+ * signature doit toujours correspondre. Sans en-tête, toutes les clés sont
+ * essayées (quelques boutiques au plus).
+ */
+async function webhookSecrets(shop: string | null): Promise<string[]> {
+  const secrets = [process.env.SHOPIFY_WEBHOOK_SECRET ?? ""];
+  const admin = createAdminSupabaseClient();
+  const query = admin.from("shop_webhook_secrets").select("secret");
+  const { data } = await (shop ? query.eq("shop_domain", shop.toLowerCase()) : query);
+  for (const row of (data as { secret: string }[] | null) ?? []) secrets.push(row.secret);
+  return secrets.filter(Boolean);
 }

@@ -1,4 +1,5 @@
 import {
+  createAdminSupabaseClient,
   createServerSupabaseClient,
   requireAdmin,
 } from "@/lib/supabase/server";
@@ -19,10 +20,15 @@ export default async function SettingsPage() {
 
   // Boutiques connues : celles qui ont déjà des réglages, plus celles d'où
   // sont venues des commandes. Inutile de les saisir à la main.
-  const [{ data: rows }, { data: orders }] = await Promise.all([
+  // Les boutiques dont le secret de webhook est enregistré : les DOMAINES
+  // seulement, par la clé de service (la table n'est lisible par personne
+  // d'autre, voir la migration 0065). La valeur ne quitte jamais le serveur.
+  const [{ data: rows }, { data: orders }, { data: secrets }] = await Promise.all([
     supabase.from("app_settings").select("scope"),
     supabase.from("orders").select("shop_domain"),
+    createAdminSupabaseClient().from("shop_webhook_secrets").select("shop_domain"),
   ]);
+  const webhookShops = ((secrets as { shop_domain: string }[]) ?? []).map((s) => s.shop_domain);
   const boutiques = Array.from(
     new Set([
       ...((rows as { scope: string }[]) ?? [])
@@ -31,6 +37,7 @@ export default async function SettingsPage() {
       ...((orders as { shop_domain: string | null }[]) ?? [])
         .map((o) => o.shop_domain)
         .filter(Boolean),
+      ...webhookShops,
     ]),
   ).sort() as string[];
 
@@ -42,5 +49,5 @@ export default async function SettingsPage() {
     scopes.map((scope, i) => [scope, loaded[i]]),
   ) as Record<SettingsScope, AppSettings>;
 
-  return <SettingsForm initial={initial} boutiques={boutiques} />;
+  return <SettingsForm initial={initial} boutiques={boutiques} webhookShops={webhookShops} />;
 }

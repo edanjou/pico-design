@@ -70,17 +70,137 @@ const FONT_SLOTS = [
  * s'enregistre séparément — changer l'administration ne touche pas à
  * l'Outil Shopify.
  */
+// Adresse que chaque boutique appelle à chaque commande (Paramètres >
+// Notifications > Webhooks, côté Shopify).
+const WEBHOOK_URL = "https://pico-design.vercel.app/api/shopify/webhook";
+
+/**
+ * Secret de signature des webhooks de commande d'une boutique. La valeur est
+ * envoyée au serveur, jamais relue : l'écran sait seulement si elle est
+ * configurée (voir app/api/settings/webhook-secret).
+ */
+function WebhookSecretSection({
+  shop,
+  configured,
+  onChange,
+}: {
+  shop: string;
+  configured: boolean;
+  onChange: (configured: boolean) => void;
+}) {
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    const res = await fetch("/api/settings/webhook-secret", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shop, secret }),
+    }).catch(() => null);
+    setBusy(false);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (!res?.ok) {
+      setMessage({ kind: "error", text: data.error ?? "L'enregistrement a échoué." });
+      return;
+    }
+    setSecret("");
+    onChange(true);
+    setMessage({ kind: "ok", text: "Secret enregistré : les commandes de cette boutique seront acceptées." });
+  }
+
+  async function remove() {
+    if (!confirm(`Retirer le secret de ${shop} ? Ses commandes ne seront plus reçues.`)) return;
+    setBusy(true);
+    setMessage(null);
+    const res = await fetch(`/api/settings/webhook-secret?shop=${encodeURIComponent(shop)}`, { method: "DELETE" }).catch(
+      () => null
+    );
+    setBusy(false);
+    if (!res?.ok) {
+      const data = res ? await res.json().catch(() => ({})) : {};
+      setMessage({ kind: "error", text: data.error ?? "Le retrait a échoué." });
+      return;
+    }
+    onChange(false);
+    setMessage({ kind: "ok", text: "Secret retiré." });
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-text">Webhook des commandes</h2>
+        <span className={`text-xs font-medium ${configured ? "text-success" : "text-warning"}`}>
+          {configured ? "✓ Secret configuré" : "Secret non configuré : les commandes ne sont pas reçues"}
+        </span>
+      </div>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-text-subtle">
+        <li>
+          Dans Shopify : Paramètres → Notifications → Webhooks. Créez deux webhooks (« Création de commande » et
+          « Mise à jour de commande », format JSON) vers{" "}
+          <code className="select-all rounded bg-surface-muted px-1 text-text">{WEBHOOK_URL}</code>
+        </li>
+        <li>
+          Copiez la clé indiquée en bas de cette page Shopify (« Vos webhooks seront signés avec… ») et collez-la
+          ci-dessous.
+        </li>
+      </ol>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input
+          type="password"
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          placeholder={configured ? "Coller une nouvelle clé pour la remplacer" : "Clé de signature Shopify"}
+          aria-label="Clé de signature des webhooks"
+          autoComplete="off"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !secret.trim()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-text-on-brand hover:bg-primary-hover disabled:opacity-50"
+        >
+          Enregistrer
+        </button>
+        {configured && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={busy}
+            className="rounded-lg border border-border px-4 py-2 text-sm text-danger hover:bg-surface-muted disabled:opacity-50"
+          >
+            Retirer
+          </button>
+        )}
+      </div>
+      <p className="mt-2 text-xs text-text-subtle">
+        La clé n&apos;est jamais réaffichée, ni ici ni ailleurs : pour la changer, collez la nouvelle.
+      </p>
+      {message && (
+        <p className={`mt-2 text-xs ${message.kind === "ok" ? "text-text" : "text-danger"}`}>{message.text}</p>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsForm({
   initial,
   boutiques,
+  webhookShops = [],
 }: {
   initial: Record<SettingsScope, AppSettings>;
   // Domaines des boutiques déjà connues (réglages existants ou commandes
   // reçues). Une boutique absente d'ici peut être ajoutée à la main.
   boutiques: string[];
+  // Boutiques dont le secret de webhook est enregistré (domaines seulement).
+  webhookShops?: string[];
 }) {
   const [scope, setScope] = useState<SettingsScope>("admin");
   const [shops, setShops] = useState(boutiques);
+  const [secretShops, setSecretShops] = useState(() => new Set(webhookShops));
   const [settings, setSettings] = useState(initial);
   // Une entrée par jeu — y compris les boutiques. Un objet limité à
   // « admin » et « tool » plantait dès qu'on sélectionnait une boutique, et
@@ -275,6 +395,22 @@ export default function SettingsForm({
             Supprimer cette boutique
           </button>
         </div>
+      )}
+
+      {isShopScope(String(scope)) && (
+        <WebhookSecretSection
+          key={scope}
+          shop={String(scope)}
+          configured={secretShops.has(String(scope))}
+          onChange={(configured) =>
+            setSecretShops((all) => {
+              const next = new Set(all);
+              if (configured) next.add(String(scope));
+              else next.delete(String(scope));
+              return next;
+            })
+          }
+        />
       )}
 
       {message && (

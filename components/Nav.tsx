@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
-import { LayoutGridIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
+import { LayoutGridIcon, MonitorCheckIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
 import { groupMenuOrder, hasSidebar, MENU_ITEMS, menuKeysForRole, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 import Modal from "@/components/Modal";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -215,6 +215,18 @@ export default function Nav() {
             >
               {mobileOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
             </button>
+            {/* Aide : intégrer Pico Design à une boutique Shopify (page /aide). */}
+            <Link
+              href="/aide"
+              title="Aide"
+              aria-label="Aide"
+              aria-current={pathname === "/aide" ? "page" : undefined}
+              className={`group flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-surface-muted hover:text-text ${
+                pathname === "/aide" ? "text-primary" : "text-text-muted"
+              }`}
+            >
+              <MonitorCheckIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
+            </Link>
             {/* La pastille du nom ouvre « Changer mon mot de passe » (tous les rôles). */}
             <button
               onClick={() => setAccountOpen(true)}

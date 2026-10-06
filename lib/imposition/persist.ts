@@ -31,8 +31,20 @@ function parseConfigBase(raw: unknown): Omit<ImpositionConfig, "sources"> {
   if (!c || !isMachine(c.machine) || typeof c.sheetId !== "string" || typeof c.formatId !== "string") {
     throw new ImpositionError("Configuration de l'imposition invalide.");
   }
+  const doc = (c.document ?? {}) as Record<string, unknown>;
   return {
     version: 1,
+    mode: c.mode === "document" ? "document" : "pieces",
+    document:
+      c.mode === "document"
+        ? {
+            marginMm: num(doc.marginMm),
+            gutterMm: num(doc.gutterMm),
+            bleedMm: num(doc.bleedMm),
+            duplex: doc.duplex === true,
+            cropMarks: doc.cropMarks !== false,
+          }
+        : undefined,
     sheetId: c.sheetId,
     machine: c.machine,
     duploJobId: typeof c.duploJobId === "string" ? c.duploJobId : "",
@@ -74,6 +86,7 @@ export async function saveImposition(
         name: (typeof spec.name === "string" && spec.name) || source.name,
         widthMm: Number.isFinite(Number(spec.widthMm)) && spec.widthMm != null ? Number(spec.widthMm) : null,
         heightMm: Number.isFinite(Number(spec.heightMm)) && spec.heightMm != null ? Number(spec.heightMm) : null,
+        ...(Number.isInteger(spec.pageCount) && Number(spec.pageCount) > 0 ? { pageCount: Number(spec.pageCount) } : {}),
         copies: spec.copies,
       };
       if (spec.kind === "product") {

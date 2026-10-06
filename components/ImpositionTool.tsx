@@ -20,6 +20,7 @@ import {
   type PieceOrientation,
 } from "@/lib/imposition/layout";
 import { DUPLO_MARKS, computeDuploLayout } from "@/lib/imposition/duplo";
+import { MAX_DOCUMENT_COPIES, leafAt, planDocument } from "@/lib/imposition/documentPlan";
 import { regMarkRects, type MmRect } from "@/lib/imposition/regmark";
 import { formatInches, sheetLabel } from "@/lib/imposition/presets";
 import { MM_TO_PT, formatIn } from "@/lib/pdf/units";
@@ -150,8 +151,67 @@ export default function ImpositionTool({
   const [assetVersion, setAssetVersion] = useState(0);
   const [orientation, setOrientation] = useState<PieceOrientation>(cfg?.orientation ?? "auto");
   const [flip, setFlip] = useState<FlipEdge>(cfg?.flip ?? "long");
+
+  // Type d'imposition : des pièces répétées (cartes, aimants…) sur UNE feuille,
+  // ou un document de plusieurs pages en feuilles séparées, coupé au massicot
+  // (voir lib/imposition/documentPlan.ts).
+  const [mode, setMode] = useState<"pieces" | "document">(cfg?.mode ?? "pieces");
+  const isDocument = mode === "document";
+  const docSaved = cfg?.mode === "document" ? cfg.sources[0] : undefined;
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docStoredPath, setDocStoredPath] = useState<string | null>(docSaved?.path ?? null);
+  const [docName, setDocName] = useState(docSaved?.name ?? "");
+  // Pages et format, lus dans le PDF déposé (ou repris de l'imposition enregistrée).
+  const [docInfo, setDocInfo] = useState<{ pageCount: number; widthMm: number; heightMm: number; mixed: boolean } | null>(
+    docSaved?.pageCount && docSaved.widthMm && docSaved.heightMm
+      ? { pageCount: docSaved.pageCount, widthMm: docSaved.widthMm, heightMm: docSaved.heightMm, mixed: false }
+      : null
+  );
+  const [docReading, setDocReading] = useState(false);
+  const [docCopies, setDocCopies] = useState(docSaved?.copies ?? 1);
+  const [docMargin, setDocMargin] = useState(cfg?.document?.marginMm ?? 5);
+  const [docGutter, setDocGutter] = useState(cfg?.document?.gutterMm ?? 0);
+  const [docBleed, setDocBleed] = useState(cfg?.document?.bleedMm ?? 0);
+  const [docDuplex, setDocDuplex] = useState(cfg?.document?.duplex ?? false);
+  const [docCropMarks, setDocCropMarks] = useState(cfg?.document?.cropMarks ?? true);
+  const [docUnit, setDocUnit] = useState<Unit>("mm");
+  const [docSheetIndex, setDocSheetIndex] = useState(0);
+  const docInput = useRef<HTMLInputElement>(null);
+
+  // Lit le nombre de pages et le format du PDF (pdf-lib chargé à la demande),
+  // et repère un document aux pages de formats différents.
+  async function handleDocFile(file: File | null) {
+    if (!file) return;
+    setDocReading(true);
+    setDocFile(file);
+    setDocStoredPath(null);
+    setDocName(file.name);
+    setDocSheetIndex(0);
+    try {
+      const { PDFDocument } = await import("pdf-lib");
+      const doc = await PDFDocument.load(await file.arrayBuffer());
+      const pages = doc.getPages();
+      const first = pages[0]?.getSize();
+      if (!first) throw new Error();
+      const w = first.width / MM_TO_PT;
+      const h = first.height / MM_TO_PT;
+      const mixed = pages.some((p) => {
+        const sz = p.getSize();
+        return Math.abs(sz.width / MM_TO_PT - w) > 0.5 || Math.abs(sz.height / MM_TO_PT - h) > 0.5;
+      });
+      setDocInfo({ pageCount: pages.length, widthMm: w, heightMm: h, mixed });
+    } catch {
+      setDocInfo(null);
+      setError("Ce fichier n'est pas un PDF lisible.");
+    } finally {
+      setDocReading(false);
+      if (docInput.current) docInput.current.value = "";
+    }
+  }
   const [items, setItems] = useState<SourceItem[]>(() =>
-    (cfg?.sources ?? []).map((src, index) => {
+    // Une imposition de document garde son PDF à part (docStoredPath) : il
+    // n'a rien à faire dans la liste des pièces.
+    (cfg?.mode === "document" ? [] : (cfg?.sources ?? [])).map((src, index) => {
       const product = src.kind === "product" ? products.find((p) => p.id === src.productId) : undefined;
       return {
         key: `item-${index}`,
@@ -215,7 +275,9 @@ export default function ImpositionTool({
   const isDuplo = machine === "duplo";
   const activeCutter = isDuplo ? null : (cutters.find((c) => c.id === cutterId) ?? null);
   // La Graphtec imprime sur la feuille de son profil : ses marques et son gabarit y sont dessinés.
-  const sheet = isDuplo
+  const sheet = isDocument
+    ? (sheets.find((s) => s.id === sheetId) ?? null)
+    : isDuplo
     ? (sheets.find((s) => s.id === sheetId) ?? null)
     : (sheets.find((s) => s.id === activeCutter?.sheet_id) ?? null);
   const format = formats.find((f) => f.id === formatId) ?? null;
@@ -363,7 +425,37 @@ export default function ImpositionTool({
       : !sheet
         ? `Le profil « ${activeCutter.name} » n'a plus de format de papier : modifiez-le.`
         : null;
-  const problem = machineProblem
+  // Plan du document : poses par feuille, feuilles à imprimer (même calcul que le PDF).
+  const docPlan = useMemo(
+    () =>
+      isDocument && sheet && docInfo
+        ? planDocument({
+            sheetWidth: sheet.width_mm,
+            sheetHeight: sheet.height_mm,
+            marginMm: docMargin,
+            gutterMm: docGutter,
+            pageWidth: docInfo.widthMm,
+            pageHeight: docInfo.heightMm,
+            pageCount: docInfo.pageCount,
+            duplex: docDuplex,
+            copies: docCopies,
+          })
+        : null,
+    [isDocument, sheet, docInfo, docMargin, docGutter, docDuplex, docCopies]
+  );
+  const docProblem = !sheet
+    ? "Créez une feuille pour commencer."
+    : !docFile && !docStoredPath
+      ? "Ajoutez le PDF du document."
+      : docReading
+        ? "Lecture du PDF…"
+        : docInfo?.mixed
+          ? "Toutes les pages du PDF doivent avoir le même format."
+          : docPlan && docPlan.perSheet === 0
+            ? "Une page ne tient pas sur cette feuille avec ces marges : choisissez une feuille plus grande ou réduisez la marge."
+            : null;
+
+  const piecesProblem = machineProblem
     ? machineProblem
     : !layout || cellCount === 0
         ? activeCutter
@@ -376,10 +468,58 @@ export default function ImpositionTool({
             : mismatched.length > 0
               ? `La taille de « ${mismatched[0].name} » ne correspond pas au format.`
               : null;
+  const problem = isDocument ? docProblem : piecesProblem;
   const saveProblem = problem ?? (name.trim() ? null : "Donnez un nom à l'imposition pour l'enregistrer.");
 
   // Requête commune à l'aperçu et à l'enregistrement.
+  // Requête d'un document de plusieurs pages (voir buildDocumentImposition).
+  function buildDocumentBody(): FormData | null {
+    if (!sheet || (!docFile && !docStoredPath)) return null;
+    const body = new FormData();
+    body.append("mode", "document");
+    body.append("sheetId", sheet.id);
+    body.append("machine", machine);
+    body.append("flip", flip);
+    body.append("marginMm", String(docMargin));
+    body.append("gutterMm", String(docGutter));
+    body.append("bleedMm", String(docBleed));
+    body.append("duplex", String(docDuplex));
+    body.append("cropMarks", String(docCropMarks));
+    if (saved) body.append("impositionId", saved.id);
+    body.append(
+      "config",
+      JSON.stringify({
+        version: 1,
+        mode: "document",
+        document: { marginMm: docMargin, gutterMm: docGutter, bleedMm: docBleed, duplex: docDuplex, cropMarks: docCropMarks },
+        sheetId: sheet.id,
+        machine,
+        duploJobId: "",
+        cutterId: "",
+        formatId,
+        custom: { widthMm: customWidth, heightMm: customHeight, bleedMm: customBleed },
+        orientation,
+        flip,
+      })
+    );
+    const shown = {
+      name: docName,
+      widthMm: docInfo?.widthMm ?? null,
+      heightMm: docInfo?.heightMm ?? null,
+      pageCount: docInfo?.pageCount ?? null,
+      copies: docCopies,
+    };
+    if (docFile) {
+      body.append("file0", docFile);
+      body.append("sources", JSON.stringify([{ kind: "upload", field: "file0", ...shown }]));
+    } else {
+      body.append("sources", JSON.stringify([{ kind: "stored", path: docStoredPath, ...shown }]));
+    }
+    return body;
+  }
+
   function buildBody(): FormData | null {
+    if (isDocument) return buildDocumentBody();
     if (!sheet || (!activeDuplo && !activeCutter)) return null;
     const body = new FormData();
     body.append("sheetId", sheet.id);
@@ -508,6 +648,32 @@ export default function ImpositionTool({
               />
             </div>
 
+            {/* Type d'imposition : pièces répétées sur une feuille, ou document de
+                plusieurs pages en feuilles séparées. */}
+            <div>
+              <label className={labelClass}>Type d&apos;imposition</label>
+              <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg border border-neutral-300 p-1 text-sm">
+                {(
+                  [
+                    ["pieces", "Pièces (cartes, aimants…)"],
+                    ["document", "Document multipage"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setMode(value)}
+                    className={`rounded-md px-2 py-1.5 ${
+                      mode === value ? "bg-pico-maroon text-white" : "text-neutral-600 hover:bg-neutral-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!isDocument && (
             <div>
               <label className={labelClass}>Format (fond perdu inclus)</label>
               <select value={formatId} onChange={(e) => setFormatId(e.target.value)} className={selectClass}>
@@ -553,8 +719,9 @@ export default function ImpositionTool({
                 </div>
               )}
             </div>
+            )}
 
-            {isDuplo && (
+            {(isDuplo || isDocument) && (
               <div>
                 <div className="flex items-center justify-between">
                   <label className={labelClass}>Feuille</label>
@@ -577,6 +744,7 @@ export default function ImpositionTool({
               </div>
             )}
 
+            {!isDocument && (
             <div>
               <label className={labelClass}>Découpeuse</label>
               <select
@@ -591,8 +759,9 @@ export default function ImpositionTool({
                 ))}
               </select>
             </div>
+            )}
 
-            {!isDuplo && (
+            {!isDuplo && !isDocument && (
               <div>
                 <div className="flex items-center justify-between">
                   <label className={labelClass}>Profil de découpe</label>
@@ -626,7 +795,7 @@ export default function ImpositionTool({
               </div>
             )}
 
-            {isDuplo && (
+            {isDuplo && !isDocument && (
               <div>
                 <div className="flex items-center justify-between">
                   <label className={labelClass}>Job Duplo</label>
@@ -671,6 +840,7 @@ export default function ImpositionTool({
               </div>
             )}
 
+            {!isDocument && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Sens des pièces</label>
@@ -692,8 +862,94 @@ export default function ImpositionTool({
                 </select>
               </div>
             </div>
+            )}
+            {isDocument && (
+              <div className="space-y-4">
+                <div>
+                  <label className={labelClass}>Document (PDF, toutes les pages)</label>
+                  <input
+                    ref={docInput}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) => handleDocFile(e.target.files?.[0] ?? null)}
+                    className="mt-1 block w-full text-sm"
+                  />
+                  {(docFile || docStoredPath) && (
+                    <p className={`mt-1 text-xs ${docInfo?.mixed ? "text-red-600" : "text-neutral-500"}`}>
+                      {docName}
+                      {docReading
+                        ? " · lecture…"
+                        : docInfo
+                          ? ` · ${docInfo.pageCount} page${docInfo.pageCount > 1 ? "s" : ""} · ${sizeLabel(docInfo.widthMm, docInfo.heightMm)}${
+                              docInfo.mixed ? " — pages de formats différents" : ""
+                            }`
+                          : ""}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Exemplaires</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_DOCUMENT_COPIES}
+                      step={1}
+                      value={docCopies}
+                      onChange={(e) =>
+                        setDocCopies(Math.min(MAX_DOCUMENT_COPIES, Math.max(1, Math.floor(Number(e.target.value)) || 1)))
+                      }
+                      className={selectClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Impression</label>
+                    <select
+                      value={docDuplex ? "duplex" : "simplex"}
+                      onChange={(e) => setDocDuplex(e.target.value === "duplex")}
+                      className={selectClass}
+                    >
+                      <option value="simplex">Recto seul</option>
+                      <option value="duplex">Recto-verso</option>
+                    </select>
+                  </div>
+                </div>
+
+                {docDuplex && (
+                  <div>
+                    <label className={labelClass}>Retournement du verso</label>
+                    <select value={flip} onChange={(e) => setFlip(e.target.value as FlipEdge)} className={selectClass}>
+                      <option value="long">Sur le bord long ({flipMode("long")})</option>
+                      <option value="short">Sur le bord court ({flipMode("short")})</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className={labelClass}>Marges et coupe</span>
+                    <UnitToggle unit={docUnit} onChange={setDocUnit} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <MeasureField key={`dm-${docUnit}`} label="Marge de la feuille" valueMm={docMargin} unit={docUnit} onChange={setDocMargin} />
+                    <MeasureField key={`dg-${docUnit}`} label="Espacement" valueMm={docGutter} unit={docUnit} onChange={setDocGutter} />
+                    <MeasureField key={`db-${docUnit}`} label="Fond perdu (par côté)" valueMm={docBleed} unit={docUnit} onChange={setDocBleed} />
+                  </div>
+                  <p className="text-xs text-neutral-500">
+                    Le fond perdu est celui déjà compris dans les pages du PDF (0 s&apos;il n&apos;y en a pas) : les traits
+                    de coupe tombent à cette distance du bord de chaque page.
+                  </p>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                    <input type="checkbox" checked={docCropMarks} onChange={(e) => setDocCropMarks(e.target.checked)} />
+                    Traits de coupe dans la marge
+                  </label>
+                </div>
+              </div>
+            )}
           </section>
 
+          {!isDocument && (
           <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-pico-black">Fichiers à imposer</h2>
 
@@ -791,6 +1047,7 @@ export default function ImpositionTool({
               />
             </div>
           </section>
+          )}
         </div>
 
         <section className="space-y-4">
@@ -800,7 +1057,7 @@ export default function ImpositionTool({
               <label className="flex items-center gap-1.5 text-xs text-neutral-600">
                 <input type="checkbox" checked={showCuts} onChange={(e) => setShowCuts(e.target.checked)} />
                 <span className="inline-block h-0.5 w-4" style={{ backgroundColor: CUT_COLOR }} />
-                Coupes de la découpeuse
+                {isDocument ? "Coupes au massicot" : "Coupes de la découpeuse"}
               </label>
               {activeCutter?.marks_path && (
                 <label className="flex items-center gap-1.5 text-xs text-neutral-600">
@@ -814,7 +1071,7 @@ export default function ImpositionTool({
                   Gabarit de guidage
                 </label>
               )}
-              {layout && cellCount > 0 && (
+              {!isDocument && layout && cellCount > 0 && (
                 <p className="text-sm text-neutral-600">
                   <strong>{cellCount}</strong> pièces par feuille ({layout.cols} × {layout.rows}
                   {layout.rotated ? ", pivotées" : ""}) · {Math.min(totalCopies, cellCount)} placée
@@ -822,7 +1079,21 @@ export default function ImpositionTool({
                 </p>
               )}
             </div>
-            {sheet && layout ? (
+            {isDocument ? (
+              sheet && docPlan && docPlan.perSheet > 0 && docInfo ? (
+                <DocumentPreview
+                  sheet={sheet}
+                  plan={docPlan}
+                  pageCount={docInfo.pageCount}
+                  duplex={docDuplex}
+                  sheetIndex={Math.min(docSheetIndex, docPlan.sheets - 1)}
+                  onSheetIndexChange={setDocSheetIndex}
+                  bleedMm={showCuts ? docBleed : null}
+                />
+              ) : (
+                <p className="text-sm text-neutral-500">{docProblem ?? "Ajoutez le PDF du document."}</p>
+              )
+            ) : sheet && layout ? (
               <SheetPreview
                 sheet={sheet}
                 layout={layout}
@@ -865,7 +1136,13 @@ export default function ImpositionTool({
               </p>
             )}
             <p className="mt-3 text-xs text-neutral-500">
-              {isDuplo ? (
+              {isDocument ? (
+                <>
+                  Le numéro sur chaque pose est la page placée au recto ; en recto-verso, la page suivante est au dos.
+                  Pointillés gris = zone utile (feuille moins marges). Traits orange = coupes au massicot, au bord de
+                  chaque page finie : visibles ici seulement. Les traits de coupe imprimés, eux, sont dans la marge.
+                </>
+              ) : isDuplo ? (
                 <>
                   L&apos;aperçu montre la grille ; les marques de la découpeuse et le verso apparaissent dans le PDF
                   généré. Pointillés gris = zone utile (feuille moins marges). Traits orange = coupes de la
@@ -935,6 +1212,86 @@ export default function ImpositionTool({
             Télécharger le PDF
           </a>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// Aperçu d'une imposition de document : une feuille à la fois (recto), le
+// numéro de page sur chaque pose, et ce qu'il faut savoir pour l'impression
+// et la coupe.
+function DocumentPreview({
+  sheet,
+  plan,
+  pageCount,
+  duplex,
+  sheetIndex,
+  onSheetIndexChange,
+  bleedMm,
+}: {
+  sheet: ImpositionSheet;
+  plan: ReturnType<typeof planDocument>;
+  pageCount: number;
+  duplex: boolean;
+  sheetIndex: number;
+  onSheetIndexChange: (index: number) => void;
+  bleedMm: number | null;
+}) {
+  // « Source » de chaque pose = la page placée au recto (son numéro s'affiche).
+  const assignment = plan.layout.cells.map((_, slot) => leafAt(plan, sheetIndex, slot, duplex, pageCount)?.front ?? null);
+  const copies = Math.max(1, Math.round(plan.totalLeaves / Math.max(1, plan.leavesPerCopy)));
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-neutral-600">
+        <strong>{plan.perSheet}</strong> page{plan.perSheet > 1 ? "s" : ""} par feuille ({plan.layout.cols} ×{" "}
+        {plan.layout.rows}
+        {plan.layout.rotated ? ", pivotées" : ""}) · <strong>{plan.sheets}</strong> feuille{plan.sheets > 1 ? "s" : ""} à
+        imprimer {duplex ? "en recto-verso" : "en recto seul"} · {copies} exemplaire{copies > 1 ? "s" : ""} de{" "}
+        {pageCount} page{pageCount > 1 ? "s" : ""}
+      </p>
+      <div className="flex items-center justify-center gap-2 text-sm">
+        <button
+          type="button"
+          onClick={() => onSheetIndexChange(Math.max(0, sheetIndex - 1))}
+          disabled={sheetIndex === 0}
+          className="rounded-lg border border-neutral-300 px-2.5 py-1 text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
+          aria-label="Feuille précédente"
+        >
+          ←
+        </button>
+        <span className="tabular-nums text-neutral-600">
+          Feuille {sheetIndex + 1} / {plan.sheets} (recto)
+        </span>
+        <button
+          type="button"
+          onClick={() => onSheetIndexChange(Math.min(plan.sheets - 1, sheetIndex + 1))}
+          disabled={sheetIndex >= plan.sheets - 1}
+          className="rounded-lg border border-neutral-300 px-2.5 py-1 text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
+          aria-label="Feuille suivante"
+        >
+          →
+        </button>
+      </div>
+      <SheetPreview
+        sheet={sheet}
+        layout={plan.layout}
+        assignment={assignment}
+        images={[]}
+        multiColor
+        hasBarcode={false}
+        regRects={null}
+        bleedMm={bleedMm}
+        cutStyle="guillotine"
+        marksUrl={null}
+        guideUrl={null}
+      />
+      {plan.perSheet > 1 && (
+        <p className="rounded-lg bg-neutral-50 p-3 text-xs text-neutral-600">
+          <strong>Couper et empiler :</strong> imprimez le PDF en un seul exemplaire (les {copies} exemplaires y sont
+          déjà), coupez la pile, puis posez la pile de la position 2 sous celle de la position 1, la 3 sous la 2, et
+          ainsi de suite (positions de gauche à droite, puis de haut en bas). Les documents sont alors dans l&apos;ordre,
+          l&apos;un après l&apos;autre.
+        </p>
       )}
     </div>
   );

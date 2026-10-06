@@ -16,6 +16,8 @@ import { productDisplayName } from "@/lib/imposition/productLabel";
 import { DUPLO_MARKS } from "@/lib/imposition/duplo";
 import { isMachine } from "@/lib/imposition/machines";
 import { detectMarksKind } from "@/lib/imposition/marks";
+import { imposeDocumentToPdf } from "@/lib/imposition/document";
+import { MAX_DOCUMENT_COPIES } from "@/lib/imposition/documentPlan";
 import { STORED_SOURCE_PATH, sourcesDir } from "@/lib/imposition/saved";
 import type { FlipEdge, PieceOrientation } from "@/lib/imposition/layout";
 import type { ImpositionCutter, ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
@@ -33,7 +35,13 @@ export class ImpositionError extends Error {
 // Un fichier à imposer, tel qu'envoyé par l'écran : un produit Pico, un PDF
 // téléversé (dans le champ `field` de la requête) ou un PDF déjà enregistré
 // avec l'imposition qu'on modifie (`path`).
-export type SourceSpec = { copies: number; name?: string; widthMm?: number | null; heightMm?: number | null } & (
+export type SourceSpec = {
+  copies: number;
+  name?: string;
+  widthMm?: number | null;
+  heightMm?: number | null;
+  pageCount?: number | null;
+} & (
   | { kind: "product"; productId: string }
   | { kind: "upload"; field: string }
   | { kind: "stored"; path: string }
@@ -86,6 +94,12 @@ export async function buildImposition(
   // Imposition qu'on modifie : seuls ses propres PDF enregistrés peuvent être réutilisés.
   const impositionId = String(formData.get("impositionId") ?? "");
   const storedPrefix = /^[0-9a-f-]{36}$/i.test(impositionId) ? `${sourcesDir(impositionId)}/` : null;
+
+  // Document de plusieurs pages (feuilles séparées, massicot) : ni format de
+  // pièce, ni machine — sa propre construction.
+  if (formData.get("mode") === "document") {
+    return buildDocumentImposition(formData, sheetId, flip, storedPrefix, { supabase, admin });
+  }
 
   if (!(pieceWidth > 0) || !(pieceHeight > 0)) throw new ImpositionError("Le format de la pièce est invalide.");
 
@@ -143,48 +157,9 @@ export async function buildImposition(
   const sources: ImpositionSource[] = [];
   const built: BuiltSource[] = [];
   for (const spec of specs) {
-    if (spec.kind === "upload") {
-      const file = formData.get(spec.field);
-      if (!(file instanceof File) || file.size === 0) throw new ImpositionError("Fichier PDF manquant.");
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      sources.push({ name: file.name, pdf: bytes, copies: spec.copies });
-      built.push({ spec, name: file.name, bytes });
-    } else if (spec.kind === "stored") {
-      if (
-        !storedPrefix ||
-        typeof spec.path !== "string" ||
-        !spec.path.startsWith(storedPrefix) ||
-        !STORED_SOURCE_PATH.test(spec.path)
-      ) {
-        throw new ImpositionError("Fichier enregistré invalide.");
-      }
-      const { data: file, error } = await admin.storage.from("imposition").download(spec.path);
-      if (error || !file) throw new ImpositionError("Un PDF enregistré avec cette imposition est introuvable.", 404);
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const name = spec.name || spec.path.split("/").pop() || "fichier.pdf";
-      sources.push({ name, pdf: bytes, copies: spec.copies });
-      built.push({ spec, name, bytes });
-    } else if (spec.kind === "product") {
-      const { data: product } = await supabase
-        .from("products")
-        .select("name, pdf_path, image_path, visual_id")
-        .eq("id", spec.productId)
-        .single<{ name: string; pdf_path: string | null; image_path: string | null; visual_id: string | null }>();
-      if (!product) throw new ImpositionError("Produit introuvable.", 404);
-      if (!product.pdf_path) {
-        throw new ImpositionError(`Le PDF de « ${product.name} » n'a pas encore été généré.`);
-      }
-      const { data: file, error } = await admin.storage.from("outputs").download(product.pdf_path);
-      if (error || !file) throw new ImpositionError(`PDF introuvable pour « ${product.name} ».`, 404);
-      const { data: visual } = product.visual_id
-        ? await supabase.from("visuals").select("name").eq("id", product.visual_id).single<{ name: string }>()
-        : { data: null };
-      const label = productDisplayName(product, new Map(visual && product.visual_id ? [[product.visual_id, visual.name]] : []));
-      sources.push({ name: label, pdf: new Uint8Array(await file.arrayBuffer()), copies: spec.copies });
-      built.push({ spec, name: label, bytes: null });
-    } else {
-      throw new ImpositionError("Type de fichier inconnu.");
-    }
+    const loaded = await loadSource(spec, formData, storedPrefix, { supabase, admin });
+    sources.push(loaded.source);
+    built.push(loaded.built);
   }
 
   // Ce qui dépend de la machine : la grille et les marques imprimées au recto.
@@ -290,6 +265,119 @@ export async function buildImposition(
     });
     return { pdf: result.pdf, sheet, duploJob, cutter, sources: built };
   } catch (err) {
+    throw new ImpositionError(err instanceof Error ? err.message : "Erreur lors de l'imposition.");
+  }
+}
+
+// Charge un fichier à imposer : un PDF téléversé (champ du formulaire), un PDF
+// déjà enregistré avec l'imposition qu'on modifie (sous `storedPrefix`
+// seulement), ou le PDF d'un produit Pico.
+async function loadSource(
+  spec: SourceSpec,
+  formData: FormData,
+  storedPrefix: string | null,
+  { supabase, admin }: SupabaseClients
+): Promise<{ source: ImpositionSource; built: BuiltSource }> {
+  if (spec.kind === "upload") {
+    const file = formData.get(spec.field);
+    if (!(file instanceof File) || file.size === 0) throw new ImpositionError("Fichier PDF manquant.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return { source: { name: file.name, pdf: bytes, copies: spec.copies }, built: { spec, name: file.name, bytes } };
+  } else if (spec.kind === "stored") {
+    if (
+      !storedPrefix ||
+      typeof spec.path !== "string" ||
+      !spec.path.startsWith(storedPrefix) ||
+      !STORED_SOURCE_PATH.test(spec.path)
+    ) {
+      throw new ImpositionError("Fichier enregistré invalide.");
+    }
+    const { data: file, error } = await admin.storage.from("imposition").download(spec.path);
+    if (error || !file) throw new ImpositionError("Un PDF enregistré avec cette imposition est introuvable.", 404);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const name = spec.name || spec.path.split("/").pop() || "fichier.pdf";
+    return { source: { name, pdf: bytes, copies: spec.copies }, built: { spec, name, bytes } };
+  } else if (spec.kind === "product") {
+    const { data: product } = await supabase
+      .from("products")
+      .select("name, pdf_path, image_path, visual_id")
+      .eq("id", spec.productId)
+      .single<{ name: string; pdf_path: string | null; image_path: string | null; visual_id: string | null }>();
+    if (!product) throw new ImpositionError("Produit introuvable.", 404);
+    if (!product.pdf_path) {
+      throw new ImpositionError(`Le PDF de « ${product.name} » n'a pas encore été généré.`);
+    }
+    const { data: file, error } = await admin.storage.from("outputs").download(product.pdf_path);
+    if (error || !file) throw new ImpositionError(`PDF introuvable pour « ${product.name} ».`, 404);
+    const { data: visual } = product.visual_id
+      ? await supabase.from("visuals").select("name").eq("id", product.visual_id).single<{ name: string }>()
+      : { data: null };
+    const label = productDisplayName(product, new Map(visual && product.visual_id ? [[product.visual_id, visual.name]] : []));
+    return {
+      source: { name: label, pdf: new Uint8Array(await file.arrayBuffer()), copies: spec.copies },
+      built: { spec, name: label, bytes: null },
+    };
+  } else {
+    throw new ImpositionError("Type de fichier inconnu.");
+  }
+}
+
+// Lit un nombre de millimètres du formulaire, dans [0, max].
+function mmField(formData: FormData, key: string, fallback: number, max = 100): number {
+  const raw = formData.get(key);
+  const value = raw === null || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > max) {
+    throw new ImpositionError("Les marges, l'espacement et le fond perdu doivent être des nombres positifs.");
+  }
+  return value;
+}
+
+// Imposition d'un document de plusieurs pages (voir lib/imposition/document.ts).
+async function buildDocumentImposition(
+  formData: FormData,
+  sheetId: string,
+  flip: FlipEdge,
+  storedPrefix: string | null,
+  clients: SupabaseClients
+): Promise<BuiltImposition> {
+  let specs: SourceSpec[];
+  try {
+    specs = JSON.parse(String(formData.get("sources") ?? "[]"));
+  } catch {
+    throw new ImpositionError("Fichier invalide.");
+  }
+  if (!Array.isArray(specs) || specs.length !== 1) throw new ImpositionError("Ajoutez le PDF du document.");
+  const spec = specs[0];
+  const copies = spec.copies;
+  if (!Number.isInteger(copies) || copies < 1 || copies > MAX_DOCUMENT_COPIES) {
+    throw new ImpositionError(`Le nombre d'exemplaires doit être un entier de 1 à ${MAX_DOCUMENT_COPIES}.`);
+  }
+
+  const { data: sheet } = await clients.supabase
+    .from("imposition_sheets")
+    .select("*")
+    .eq("id", sheetId)
+    .single<ImpositionSheet>();
+  if (!sheet) throw new ImpositionError("Feuille introuvable.", 404);
+
+  const { source, built } = await loadSource(spec, formData, storedPrefix, clients);
+  try {
+    const result = await imposeDocumentToPdf({
+      name: source.name,
+      pdf: source.pdf,
+      sheetWidth: sheet.width_mm,
+      sheetHeight: sheet.height_mm,
+      marginMm: mmField(formData, "marginMm", 5),
+      gutterMm: mmField(formData, "gutterMm", 0),
+      bleedMm: mmField(formData, "bleedMm", 0, 20),
+      duplex: formData.get("duplex") === "true",
+      flip,
+      copies,
+      cropMarks: formData.get("cropMarks") !== "false",
+    });
+    return { pdf: result.pdf, sheet, duploJob: null, cutter: null, sources: [built] };
+  } catch (err) {
+    if (err instanceof ImpositionError) throw err;
     throw new ImpositionError(err instanceof Error ? err.message : "Erreur lors de l'imposition.");
   }
 }

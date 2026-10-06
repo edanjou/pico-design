@@ -17,11 +17,27 @@ export interface SavedSource {
   // Taille de la page du PDF (mm), null si elle n'a pas pu être lue.
   widthMm: number | null;
   heightMm: number | null;
+  // Nombre de pages (document de plusieurs pages), pour rouvrir l'aperçu sans
+  // relire le PDF. Absent pour les pièces.
+  pageCount?: number | null;
   copies: number;
+}
+
+// Réglages d'une imposition de document de plusieurs pages (mode "document").
+export interface DocumentSettings {
+  marginMm: number;
+  gutterMm: number;
+  bleedMm: number;
+  duplex: boolean;
+  cropMarks: boolean;
 }
 
 export interface ImpositionConfig {
   version: 1;
+  // "pieces" (cartes, aimants… répétés sur une feuille) ou "document" (un PDF
+  // de plusieurs pages, en feuilles séparées). Absent = "pieces", comme avant.
+  mode?: "pieces" | "document";
+  document?: DocumentSettings;
   sheetId: string;
   machine: CutterMachine;
   duploJobId: string;

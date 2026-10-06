@@ -181,7 +181,7 @@ function drawInCell(
 
 // Pose une pièce dans sa cellule, rognée à sa zone `clip` s'il y en a une
 // (fonds perdus de deux voisines qui se chevauchent, voir computeLayout).
-function drawPiece(
+export function drawPiece(
   sheetPage: PDFPage,
   page: PDFEmbeddedPage,
   cell: Cell,
@@ -198,7 +198,7 @@ function drawPiece(
   sheetPage.pushOperators(popGraphicsState());
 }
 
-function toPdfRect(cell: Cell, sheetHeight: number) {
+export function toPdfRect(cell: Cell, sheetHeight: number) {
   return {
     x: mmToPt(cell.x),
     y: mmToPt(sheetHeight - cell.y - cell.height),
@@ -366,6 +366,15 @@ async function drawMarks(
   sheetPage.drawImage(image, { x: 0, y: 0, width: sheetWidthPt, height: sheetHeightPt });
 }
 
+// Rotation du verso d'une pièce dont le recto est tourné de `frontRotation`.
+// Le verso se tourne comme un feuillet : si l'axe de retournement de la
+// feuille n'est pas celui de la pièce (pièce couchée sur la feuille), il doit
+// être tourné de 180° de plus pour rester à l'endroit.
+export function backRotationFor(frontRotation: Rotation, verticalAxis: boolean): Rotation {
+  const pieceAxisVertical = frontRotation % 180 === 0;
+  return ((frontRotation + (pieceAxisVertical === verticalAxis ? 0 : 180)) % 360) as Rotation;
+}
+
 export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
   let layout: Layout | null;
   if (input.duploJob) {
@@ -456,13 +465,7 @@ export async function imposeToPdf(input: ImposeInput): Promise<ImposeResult> {
       await inLayer(back, visualLayers.get(index)!, () => {
         layout.cells.forEach((cell, i) => {
           if (assignment[i] !== index) return;
-          const frontTotal = frontRotationFor(source, cell);
-          // Le verso se tourne comme un feuillet : si l'axe de retournement de la
-          // feuille n'est pas celui de la pièce (pièce couchée sur la feuille), le
-          // verso doit être tourné de 180° de plus pour rester à l'endroit.
-          const cardAxisVertical = frontTotal % 180 === 0;
-          const backRotation = ((frontTotal + (cardAxisVertical === verticalAxis ? 0 : 180)) %
-            360) as Rotation;
+          const backRotation = backRotationFor(frontRotationFor(source, cell), verticalAxis);
           const mirrored = mirrorCell(cell, input.sheetWidth, input.sheetHeight, verticalAxis);
           drawPiece(back, sourceBack, mirrored, input.sheetHeight, backRotation);
         });

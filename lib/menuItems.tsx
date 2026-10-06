@@ -1,4 +1,4 @@
-import { BarcodeIcon, Grid3x3Icon, ImageIcon, StickerIcon, TagsIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
+import { BarcodeIcon, Grid3x3Icon, ImageIcon, StickerIcon, BadgeIcon, MonitorCogIcon, PaintbrushVerticalIcon, PencilRulerIcon, RocketIcon, ShopifyIcon, TagIcon, UsersIcon } from "@/components/icons";
 
 // Liste centrale des pages de nav / tuiles du tableau de bord, pour que les
 // deux restent synchronisées sur le même ordre (voir `resolveMenuOrder`) et
@@ -42,7 +42,7 @@ export const MENU_ITEMS: Record<
   stickers: {
     href: "/autocollants",
     title: "Autocollants",
-    icon: TagsIcon,
+    icon: BadgeIcon,
     gradient: "from-lime-400 to-green-600",
   },
   themes: {

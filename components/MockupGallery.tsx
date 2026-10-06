@@ -25,12 +25,16 @@ export default function MockupGallery({
   activeKey,
   onActiveKeyChange,
   onZoom,
+  imageMaxHeight = "55vh",
 }: {
   views: MockupView[];
   activeKey: string;
   onActiveKeyChange: (key: string) => void;
   // Absent = pas de vue agrandie au clic.
   onZoom?: (view: MockupView) => void;
+  // Hauteur maximale du mockup affiché (valeur CSS) : l'aperçu final de
+  // l'Outil Shopify lui donne toute la hauteur libre de l'écran.
+  imageMaxHeight?: string;
 }) {
   if (views.length === 0) return null;
 
@@ -78,7 +82,8 @@ export default function MockupGallery({
               <img
                 src={active.url}
                 alt={active.label}
-                className="mx-auto max-h-[55vh] w-auto max-w-full rounded-2xl border border-border bg-surface-muted shadow-sm"
+                className="mx-auto w-auto max-w-full rounded-2xl border border-border bg-surface-muted shadow-sm"
+                style={{ maxHeight: imageMaxHeight }}
               />
               {onZoom && (
                 <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">

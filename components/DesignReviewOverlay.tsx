@@ -366,8 +366,9 @@ export default function DesignReviewOverlay({
   const hasMockupColumn = views.some((v) => v.loading || v.url);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-surface p-6 shadow-lg sm:p-8">
+    // Presque tout l'écran : le mockup est ce qu'on vient regarder ici.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4">
+      <div className="max-h-[calc(100dvh-1rem)] w-full max-w-[110rem] overflow-y-auto rounded-2xl bg-surface p-4 shadow-lg sm:max-h-[calc(100dvh-2rem)] sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-text-subtle">
@@ -389,9 +390,9 @@ export default function DesignReviewOverlay({
             toute la place restante (colonne de détails fixée à ~300px),
             plutôt qu'une moitié chacun comme avant. */}
         <div
-          className={`mt-8 ${
+          className={`mt-4 ${
             hasMockupColumn
-              ? "grid gap-8 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] lg:items-start"
+              ? "grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:items-start"
               : "mx-auto max-w-xl"
           }`}
         >
@@ -458,6 +459,9 @@ export default function DesignReviewOverlay({
                 activeKey={activeMockupKey}
                 onActiveKeyChange={setActiveMockupKey}
                 onZoom={(view) => view.url && setZoomed({ url: view.url, label: view.label })}
+                // Toute la hauteur libre : l'écran, moins le titre de la
+                // fenêtre, la légende de la vue, les vignettes et les marges.
+                imageMaxHeight="max(15rem, calc(100dvh - 16rem))"
               />
             </div>
           )}

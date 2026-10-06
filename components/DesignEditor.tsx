@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MAX_MOSAIC_SIDE } from "@/lib/design/mosaicGrid";
+import Modal from "@/components/Modal";
+import DesignHelpContent from "@/components/DesignHelpContent";
 import Link from "next/link";
 import ImageSourcePicker, {
   type ImageSourceValue,
@@ -353,6 +355,8 @@ export default function DesignEditor({
   );
   const [confirmingCoverage, setConfirmingCoverage] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  // Fenêtre « Aide ? » (barre du haut) : le mode d'emploi de l'outil.
+  const [helpOpen, setHelpOpen] = useState(false);
   const [themePage, setThemePage] = useState(0);
   // « Afficher les guides d'impression » (nouveau, voir le plan) — masque/
   // affiche uniquement les repères sur le canevas d'édition, jamais le PDF
@@ -539,6 +543,11 @@ export default function DesignEditor({
     // centrale ait une hauteur définie à remplir ; les panneaux latéraux
     // défilent chacun de leur côté.
     <div className="flex min-h-dvh flex-col bg-background lg:h-dvh">
+      {helpOpen && (
+        <Modal title="Aide — créer ton design, pas à pas" onClose={() => setHelpOpen(false)} wide>
+          <DesignHelpContent />
+        </Modal>
+      )}
       {/* Barre du haut */}
       <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
@@ -607,6 +616,21 @@ export default function DesignEditor({
         )}
 
         <div className="flex shrink-0 items-center gap-3">
+          {/* Aide, à côté du bouton principal. Fond : #4F0A1F à 6 %, en
+              rgba() littéral — les couleurs du projet sont des variables CSS
+              complètes, le modificateur d'opacité de Tailwind
+              (bg-primary/[0.06]) produirait du CSS invalide, donc invisible. */}
+          {/* L'aide s'ouvre par-dessus l'éditeur : le design en cours reste là,
+              rien n'est quitté. */}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            aria-label="Aide"
+            className="flex items-center gap-1.5 rounded-full bg-[rgba(79,10,31,0.06)] px-3 py-1.5 text-sm font-medium text-primary hover:bg-[rgba(79,10,31,0.12)]"
+          >
+            <HelpCircleIcon className="h-4 w-4 shrink-0" />
+            <span className="hidden whitespace-nowrap md:inline">Aide</span>
+          </button>
           {confirmingCoverage && anyUncovered ? (
             <>
               <span className="hidden max-w-xs text-xs text-text-subtle sm:inline">
@@ -1121,8 +1145,11 @@ export default function DesignEditor({
             )}
           </SidebarGroup>
 
+          {/* Seule l'orientation reste ici (les guides sont sous la page) :
+              sans elle, le groupe n'aurait plus que son titre. */}
+          {rawTemplate.allow_orientation_change && (
           <SidebarGroup title="Plan de travail">
-            {rawTemplate.allow_orientation_change && (
+            {(
               // Même style de pilule que Recto/Verso (barre du haut) :
               // conteneur rounded-full/border/bg-background, actif =
               // bg-primary + texte blanc (pas de fond blanc/ombre/texte
@@ -1162,36 +1189,8 @@ export default function DesignEditor({
                 </button>
               </div>
             )}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-text">
-                Afficher les guides d&apos;impression
-              </span>
-              <Switch
-                checked={showGuides}
-                onChange={setShowGuides}
-                label="Afficher les guides d'impression"
-              />
-            </div>
           </SidebarGroup>
-
-          {/* Fond : #4F0A1F à 6 %, écrit en rgba() littéral plutôt qu'avec
-              le modificateur d'opacité de Tailwind (`bg-primary/[0.06]`).
-              Les couleurs du projet sont des variables CSS contenant une
-              couleur complète (voir app/globals.css, `--primary:
-              var(--pico-bourgogne)`), pas des canaux RGB séparés : le
-              modificateur génère alors du CSS invalide que le navigateur
-              ignore — l'encadré devenait carrément invisible. */}
-          <div className="mt-auto flex items-start gap-2.5 rounded-xl bg-[rgba(79,10,31,0.06)] p-3.5">
-            <HelpCircleIcon className="h-[18px] w-[18px] shrink-0 text-primary" />
-            <div>
-              <p className="text-sm font-semibold text-primary">
-                Besoin d&apos;un coup de main?
-              </p>
-              <p className="text-xs text-text-subtle">
-                Notre équipe peut finaliser ton design.
-              </p>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Zone de travail centrale */}
@@ -1333,16 +1332,30 @@ export default function DesignEditor({
               traits réellement dessinés, voir lib/pdf/preview.ts) et l'échelle
               d'affichage — pour laisser le plus de hauteur possible à la page. */}
           <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
-            <LegendPill color="#ff00ff" label="Coupe" />
-            <LegendPill color="#60a5fa" dashed label="Marge de protection" />
-            <LegendPill
-              color="var(--text-subtle)"
-              dashed
-              label={`Fond perdu : ${formatIn(template.bleed_mm)} po`}
-            />
-            {((rawTemplate.fold_marks_vertical_mm?.length ?? 0) > 0 ||
-              (rawTemplate.fold_marks_horizontal_mm?.length ?? 0) > 0) && (
-              <LegendPill color="#16a34a" dashed label="Marques de pli" />
+            {/* Les guides s'allument et s'éteignent à côté de leur légende ;
+                éteints, la légende n'a plus rien à décrire et disparaît. */}
+            <div className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-3 pr-1.5 text-xs text-text">
+              Guides d&apos;impression
+              <Switch
+                checked={showGuides}
+                onChange={setShowGuides}
+                label="Afficher les guides d'impression"
+              />
+            </div>
+            {showGuides && (
+              <>
+                <LegendPill color="#ff00ff" label="Coupe" />
+                <LegendPill color="#60a5fa" dashed label="Marge de protection" />
+                <LegendPill
+                  color="var(--text-subtle)"
+                  dashed
+                  label={`Fond perdu : ${formatIn(template.bleed_mm)} po`}
+                />
+                {((rawTemplate.fold_marks_vertical_mm?.length ?? 0) > 0 ||
+                  (rawTemplate.fold_marks_horizontal_mm?.length ?? 0) > 0) && (
+                  <LegendPill color="#16a34a" dashed label="Marques de pli" />
+                )}
+              </>
             )}
             {/* Zoom de vue — échelle d'affichage du canevas, distincte du zoom
                 de l'image (voir la barre latérale gauche). */}

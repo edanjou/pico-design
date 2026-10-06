@@ -14,7 +14,9 @@ import { ChromeVisibilityProvider, useChromeHidden } from "@/components/ChromeVi
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const chromeHidden = useChromeHidden();
-  const showChrome = pathname !== "/login" && !chromeHidden;
+  // Ni la connexion, ni l'aide de l'Outil Shopify (lue par les clients de la
+  // boutique, qui n'ont rien à faire des menus de l'administration).
+  const showChrome = pathname !== "/login" && pathname !== "/design/aide" && !chromeHidden;
   // Pas de menu de gauche sur certaines pages (voir hasSidebar) : pas de décalage.
   const showSidebar = showChrome && hasSidebar(pathname);
 

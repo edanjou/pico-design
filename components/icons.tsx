@@ -332,7 +332,7 @@ export function StickerIcon({ className }: { className?: string }) {
   );
 }
 
-export function MonitorCheckIcon({ className }: { className?: string }) {
+export function LifeBuoyIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -343,10 +343,12 @@ export function MonitorCheckIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
       className={className}
     >
-      <path d="m9 10 2 2 4-4" />
-      <rect width="20" height="14" x="2" y="3" rx="2" />
-      <path d="M12 17v4" />
-      <path d="M8 21h8" />
+      <circle cx="12" cy="12" r="10" />
+      <path d="m4.93 4.93 4.24 4.24" />
+      <path d="m14.83 9.17 4.24-4.24" />
+      <path d="m14.83 14.83 4.24 4.24" />
+      <path d="m9.17 14.83-4.24 4.24" />
+      <circle cx="12" cy="12" r="4" />
     </svg>
   );
 }

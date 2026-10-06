@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { shopScopeOfReturnUrl } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
-import { LayoutGridIcon, MonitorCheckIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
+import { LayoutGridIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
 import { groupMenuOrder, hasSidebar, MENU_ITEMS, menuKeysForRole, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
 import Modal from "@/components/Modal";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -225,7 +225,7 @@ export default function Nav() {
                 pathname === "/aide" ? "text-primary" : "text-text-muted"
               }`}
             >
-              <MonitorCheckIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
+              <LifeBuoyIcon className="h-5 w-5 motion-safe:group-hover:animate-jello" />
             </Link>
             {/* La pastille du nom ouvre « Changer mon mot de passe » (tous les rôles). */}
             <button

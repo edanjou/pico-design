@@ -10,6 +10,7 @@ import DuploJobsManager from "@/components/DuploJobsManager";
 import GraphtecProfilesManager from "@/components/GraphtecProfilesManager";
 import { DownloadIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import UpdatingBadge from "@/components/UpdatingBadge";
+import { createClient } from "@/lib/supabase/client";
 import {
   assignCells,
   computeLayout,
@@ -92,6 +93,27 @@ async function readPdfPageSizeMm(file: File): Promise<{ widthMm: number; heightM
   } catch {
     return null;
   }
+}
+
+// Message d'une réponse en erreur. Le serveur explique d'habitude (JSON
+// `error`) ; mais une requête refusée AVANT d'atteindre la route (fichier trop
+// lourd, délai dépassé) revient sans explication — on dit alors ce qui s'est
+// passé plutôt qu'un vague « Erreur lors de la génération ».
+async function serverError(res: Response, body: FormData, fallback: string): Promise<string> {
+  const data = await res.json().catch(() => null);
+  if (data && typeof data.error === "string") return data.error;
+  if (res.status === 413) {
+    let bytes = 0;
+    body.forEach((value) => {
+      if (value instanceof File) bytes += value.size;
+    });
+    return `Fichier trop volumineux pour être envoyé (${Math.round(bytes / 104857.6) / 10} Mo). Réduisez le PDF (images compressées) et réessayez.`;
+  }
+  if (res.status === 504 || res.status === 502) {
+    return "La génération a pris trop de temps. Réessayez ; si ça se répète, essayez avec moins d'exemplaires ou un PDF plus léger.";
+  }
+  if (res.status === 401) return "Votre session a expiré : reconnectez-vous, puis réessayez.";
+  return `${fallback} (code ${res.status})`;
 }
 
 type ModalState =
@@ -472,6 +494,37 @@ export default function ImpositionTool({
   const saveProblem = problem ?? (name.trim() ? null : "Donnez un nom à l'imposition pour l'enregistrer.");
 
   // Requête commune à l'aperçu et à l'enregistrement.
+  // PDF déjà déposés dans le stockage (voir app/api/imposition/stage), par
+  // fichier : un aperçu puis un enregistrement ne renvoient pas deux fois le
+  // même document.
+  const stagedPaths = useRef(new Map<File, string>());
+  const [staging, setStaging] = useState(false);
+
+  // Dépose les PDF à imposer DIRECTEMENT dans le stockage. La plateforme refuse
+  // toute requête de plus de 4,5 Mo : un document de plusieurs pages ne pouvait
+  // pas passer dans le corps de la requête. Seul son chemin y voyage ensuite.
+  async function stageFiles() {
+    const files = isDocument ? (docFile ? [docFile] : []) : items.flatMap((i) => (i.file ? [i.file] : []));
+    const pending = files.filter((f) => !stagedPaths.current.has(f));
+    if (pending.length === 0) return;
+    setStaging(true);
+    try {
+      const supabase = createClient();
+      for (const file of pending) {
+        const res = await fetch("/api/imposition/stage", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.path || !data.token) throw new Error(data.error ?? "Préparation de l'envoi impossible.");
+        const { error: uploadError } = await supabase.storage
+          .from("imposition")
+          .uploadToSignedUrl(data.path, data.token, file, { contentType: "application/pdf" });
+        if (uploadError) throw new Error(`Envoi de « ${file.name} » impossible : ${uploadError.message}`);
+        stagedPaths.current.set(file, data.path);
+      }
+    } finally {
+      setStaging(false);
+    }
+  }
+
   // Requête d'un document de plusieurs pages (voir buildDocumentImposition).
   function buildDocumentBody(): FormData | null {
     if (!sheet || (!docFile && !docStoredPath)) return null;
@@ -509,7 +562,10 @@ export default function ImpositionTool({
       pageCount: docInfo?.pageCount ?? null,
       copies: docCopies,
     };
-    if (docFile) {
+    const docStaged = docFile ? stagedPaths.current.get(docFile) : undefined;
+    if (docFile && docStaged) {
+      body.append("sources", JSON.stringify([{ kind: "staged", path: docStaged, ...shown }]));
+    } else if (docFile) {
       body.append("file0", docFile);
       body.append("sources", JSON.stringify([{ kind: "upload", field: "file0", ...shown }]));
     } else {
@@ -548,6 +604,8 @@ export default function ImpositionTool({
     );
     const specs = items.map((item, index) => {
       const shown = { name: item.name, widthMm: item.widthMm, heightMm: item.heightMm, copies: item.copies };
+      const itemStaged = item.file ? stagedPaths.current.get(item.file) : undefined;
+      if (item.kind === "upload" && item.file && itemStaged) return { kind: "staged", path: itemStaged, ...shown };
       if (item.kind === "upload" && item.file) {
         body.append(`file${index}`, item.file);
         return { kind: "upload", field: `file${index}`, ...shown };
@@ -561,21 +619,22 @@ export default function ImpositionTool({
 
   // Aperçu du PDF, sans l'enregistrer.
   async function handlePreview() {
-    const body = buildBody();
-    if (!body || problem) return;
+    if (problem) return;
     setGenerating(true);
     setError(null);
     try {
+      await stageFiles();
+      const body = buildBody();
+      if (!body) return;
       const res = await fetch("/api/imposition/generate", { method: "POST", body });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Erreur lors de la génération.");
+        setError(await serverError(res, body, "Erreur lors de la génération."));
         return;
       }
       const blob = await res.blob();
       setModal({ mode: "result", url: URL.createObjectURL(blob) });
-    } catch {
-      setError("Impossible de joindre le serveur.");
+    } catch (err) {
+      setError(err instanceof Error && err.message !== "Failed to fetch" ? err.message : "Impossible de joindre le serveur.");
     } finally {
       setGenerating(false);
     }
@@ -583,26 +642,30 @@ export default function ImpositionTool({
 
   // Enregistre l'imposition (nom, configuration et PDF) puis revient à la liste.
   async function handleSave() {
-    const body = buildBody();
-    if (!body || saveProblem) return;
-    body.append("name", name.trim());
+    if (saveProblem) return;
     setSaving(true);
     setError(null);
     try {
+      await stageFiles();
+      const body = buildBody();
+      if (!body) {
+        setSaving(false);
+        return;
+      }
+      body.append("name", name.trim());
       const res = await fetch(saved ? `/api/impositions/${saved.id}` : "/api/impositions", {
         method: saved ? "PATCH" : "POST",
         body,
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Erreur lors de l'enregistrement.");
+        setError(await serverError(res, body, "Erreur lors de l'enregistrement."));
         setSaving(false);
         return;
       }
       router.push("/imposition");
       router.refresh();
-    } catch {
-      setError("Impossible de joindre le serveur.");
+    } catch (err) {
+      setError(err instanceof Error && err.message !== "Failed to fetch" ? err.message : "Impossible de joindre le serveur.");
       setSaving(false);
     }
   }
@@ -1170,7 +1233,7 @@ export default function ImpositionTool({
               className="flex items-center justify-center gap-2 rounded-lg bg-pico-maroon px-4 py-2.5 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-50"
             >
               {saving && <SpinnerIcon className="h-4 w-4" />}
-              {saving ? "Enregistrement en cours..." : saved ? "Enregistrer les modifications" : "Enregistrer l'imposition"}
+              {saving ? (staging ? "Envoi du PDF…" : "Enregistrement en cours...") : saved ? "Enregistrer les modifications" : "Enregistrer l'imposition"}
             </button>
             <button
               type="button"
@@ -1179,7 +1242,7 @@ export default function ImpositionTool({
               className="flex items-center justify-center gap-2 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
             >
               {generating && <SpinnerIcon className="h-4 w-4" />}
-              {generating ? "Génération en cours..." : "Aperçu du PDF (sans enregistrer)"}
+              {generating ? (staging ? "Envoi du PDF…" : "Génération en cours...") : "Aperçu du PDF (sans enregistrer)"}
             </button>
           </div>
         </section>

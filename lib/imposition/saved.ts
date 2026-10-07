@@ -68,6 +68,12 @@ export const sourcesDir = (id: string) => `impositions/${id}/sources`;
 // Un PDF source enregistré d'une imposition : impositions/<uuid>/sources/<fichier>.
 export const STORED_SOURCE_PATH = /^impositions\/[0-9a-f-]{36}\/sources\/(?!\.{1,2}$)[^/]+$/i;
 
+// PDF déposé par le navigateur directement dans le stockage, avant l'aperçu
+// ou l'enregistrement (voir app/api/imposition/stage) : la plateforme refuse
+// les requêtes de plus de 4,5 Mo, un document de plusieurs pages les dépasse
+// vite. staging/<utilisateur>/<aléatoire>.pdf
+export const STAGED_SOURCE_PATH = /^staging\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i;
+
 // Nom de fichier sûr pour une clé de stockage (pas d'accents ni d'espaces).
 export function safeStorageName(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80) || "fichier.pdf";

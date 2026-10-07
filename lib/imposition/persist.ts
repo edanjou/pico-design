@@ -94,6 +94,8 @@ export async function saveImposition(
       } else if (spec.kind === "stored") {
         sources.push({ kind: "upload", path: spec.path, ...shown });
       } else {
+        // Téléversé, ou déposé directement dans le stockage (staged) : rangé
+        // sous le dossier de l'imposition.
         const path = `${sourcesDir(id)}/${randomUUID().slice(0, 8)}-${i}-${safeStorageName(source.name)}`;
         const { error } = await admin.storage
           .from(BUCKET)
@@ -130,6 +132,10 @@ export async function saveImposition(
         throw new ImpositionError(error.message, 500);
       }
     }
+    // Les PDF déposés directement par le navigateur sont maintenant rangés
+    // avec l'imposition : leur copie de dépôt ne sert plus.
+    const staged = built.sources.flatMap((s) => (s.spec.kind === "staged" ? [s.spec.path] : []));
+    if (staged.length > 0) await admin.storage.from(BUCKET).remove(staged);
     return { id, name };
   } catch (err) {
     await cleanup();

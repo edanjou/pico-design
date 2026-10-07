@@ -18,7 +18,7 @@ import { isMachine } from "@/lib/imposition/machines";
 import { detectMarksKind } from "@/lib/imposition/marks";
 import { imposeDocumentToPdf } from "@/lib/imposition/document";
 import { MAX_DOCUMENT_COPIES } from "@/lib/imposition/documentPlan";
-import { STORED_SOURCE_PATH, sourcesDir } from "@/lib/imposition/saved";
+import { STAGED_SOURCE_PATH, STORED_SOURCE_PATH, sourcesDir } from "@/lib/imposition/saved";
 import type { FlipEdge, PieceOrientation } from "@/lib/imposition/layout";
 import type { ImpositionCutter, ImpositionDuploJob, ImpositionSheet } from "@/lib/types";
 
@@ -45,6 +45,9 @@ export type SourceSpec = {
   | { kind: "product"; productId: string }
   | { kind: "upload"; field: string }
   | { kind: "stored"; path: string }
+  // PDF déposé directement dans le stockage par le navigateur (voir
+  // app/api/imposition/stage) : seul son chemin voyage dans la requête.
+  | { kind: "staged"; path: string }
 );
 
 export interface BuiltSource {
@@ -278,6 +281,16 @@ async function loadSource(
   storedPrefix: string | null,
   { supabase, admin }: SupabaseClients
 ): Promise<{ source: ImpositionSource; built: BuiltSource }> {
+  if (spec.kind === "staged") {
+    if (typeof spec.path !== "string" || !STAGED_SOURCE_PATH.test(spec.path)) {
+      throw new ImpositionError("Fichier déposé invalide.");
+    }
+    const { data: file, error } = await admin.storage.from("imposition").download(spec.path);
+    if (error || !file) throw new ImpositionError("Le PDF déposé est introuvable : ajoutez-le de nouveau.", 404);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const name = spec.name || "fichier.pdf";
+    return { source: { name, pdf: bytes, copies: spec.copies }, built: { spec, name, bytes } };
+  }
   if (spec.kind === "upload") {
     const file = formData.get(spec.field);
     if (!(file instanceof File) || file.size === 0) throw new ImpositionError("Fichier PDF manquant.");

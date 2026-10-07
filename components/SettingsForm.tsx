@@ -192,8 +192,8 @@ export default function SettingsForm({
   webhookShops = [],
 }: {
   initial: Record<SettingsScope, AppSettings>;
-  // Domaines des boutiques déjà connues (réglages existants ou commandes
-  // reçues). Une boutique absente d'ici peut être ajoutée à la main.
+  // Domaines des boutiques déjà connues (réglages existants ou secret de
+  // webhook). Une boutique absente d'ici peut être ajoutée à la main.
   boutiques: string[];
   // Boutiques dont le secret de webhook est enregistré (domaines seulement).
   webhookShops?: string[];
@@ -279,8 +279,8 @@ export default function SettingsForm({
    * Retire une boutique de la liste. Action destructive : la confirmation
    * nomme la boutique, une liste d'onglets se cliquant vite.
    *
-   * La boutique peut revenir au rechargement si des commandes en proviennent
-   * (voir app/settings/page.tsx) — elle est alors connue, mais revenue à
+   * La boutique peut revenir au rechargement si son secret de webhook est
+   * enregistré (voir app/settings/page.tsx) — elle est alors connue, mais revenue à
    * l'habillage par défaut. Le message le dit plutôt que de laisser croire à
    * un échec.
    */
@@ -320,7 +320,7 @@ export default function SettingsForm({
     setScope("tool");
     setMessage({
       kind: "ok",
-      text: `${supprimée} supprimée. Si des commandes en proviennent, elle restera proposée au rechargement, avec l'habillage par défaut.`,
+      text: `${supprimée} supprimée. Si son secret de webhook est enregistré, elle restera proposée au rechargement, avec l'habillage par défaut.`,
     });
   }
 

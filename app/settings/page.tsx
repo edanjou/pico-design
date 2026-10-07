@@ -18,14 +18,14 @@ export default async function SettingsPage() {
   await requireAdmin();
   const supabase = createServerSupabaseClient();
 
-  // Boutiques connues : celles qui ont déjà des réglages, plus celles d'où
-  // sont venues des commandes. Inutile de les saisir à la main.
+  // Boutiques connues : celles qui ont déjà des réglages ou un secret de
+  // webhook. Pas le domaine des commandes : Shopify y met toujours l'adresse
+  // .myshopify.com, qui ferait doublon avec le domaine de la boutique.
   // Les boutiques dont le secret de webhook est enregistré : les DOMAINES
   // seulement, par la clé de service (la table n'est lisible par personne
   // d'autre, voir la migration 0065). La valeur ne quitte jamais le serveur.
-  const [{ data: rows }, { data: orders }, { data: secrets }] = await Promise.all([
+  const [{ data: rows }, { data: secrets }] = await Promise.all([
     supabase.from("app_settings").select("scope"),
-    supabase.from("orders").select("shop_domain"),
     createAdminSupabaseClient().from("shop_webhook_secrets").select("shop_domain"),
   ]);
   const webhookShops = ((secrets as { shop_domain: string }[]) ?? []).map((s) => s.shop_domain);
@@ -34,9 +34,6 @@ export default async function SettingsPage() {
       ...((rows as { scope: string }[]) ?? [])
         .map((r) => r.scope)
         .filter((s) => !BASE_SCOPES.includes(s as never)),
-      ...((orders as { shop_domain: string | null }[]) ?? [])
-        .map((o) => o.shop_domain)
-        .filter(Boolean),
       ...webhookShops,
     ]),
   ).sort() as string[];

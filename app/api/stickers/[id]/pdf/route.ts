@@ -3,6 +3,8 @@ import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/sup
 import type { StickerTemplate } from "@/lib/stickers/types";
 import { STICKERS_BUCKET } from "@/lib/stickers/assets";
 import { MAX_NAMES_PER_PDF, parseNames, renderStickerSheets } from "@/lib/stickers/render";
+import { stickerSheetLayout } from "@/lib/stickers/layout";
+import type { ImpositionCutter, ImpositionSheet } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,18 +33,46 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!template) return error("Modèle introuvable.", 404);
   if (template.zones.length === 0) return error("Ce modèle n'a encore aucune zone de nom.");
 
-  const storage = createAdminSupabaseClient().storage.from(STICKERS_BUCKET);
-  async function read(path: string | null) {
+  // Profil Graphtec relié : sa feuille, ses marges, sa calibration et ses codes.
+  let cutter: ImpositionCutter | null = null;
+  let sheet: ImpositionSheet | null = null;
+  if (template.cutter_id) {
+    const { data } = await supabase
+      .from("imposition_cutters")
+      .select("*")
+      .eq("id", template.cutter_id)
+      .single<ImpositionCutter>();
+    cutter = data ?? null;
+    if (!cutter?.sheet_id) {
+      return error("Le profil Graphtec de ce modèle n'a plus de format de papier : complétez-le dans l'imposition.");
+    }
+    const { data: s } = await supabase
+      .from("imposition_sheets")
+      .select("*")
+      .eq("id", cutter.sheet_id)
+      .single<ImpositionSheet>();
+    sheet = s ?? null;
+    if (!sheet) return error("La feuille du profil Graphtec est introuvable.", 404);
+  }
+  const layout = stickerSheetLayout(template, cutter, sheet);
+
+  const admin = createAdminSupabaseClient();
+  async function read(bucket: string, path: string | null) {
     if (!path) return null;
-    const { data } = await storage.download(path);
+    const { data } = await admin.storage.from(bucket).download(path);
     return data ? new Uint8Array(await data.arrayBuffer()) : null;
   }
 
   try {
     const pdf = await renderStickerSheets(
       template,
-      { artwork: await read(template.artwork_path), marks: await read(template.marks_path) },
-      names
+      {
+        artwork: await read(STICKERS_BUCKET, template.artwork_path),
+        // Les codes du profil quand il y en a un : un seul endroit à régler pour la machine.
+        marks: cutter ? await read("imposition", cutter.marks_path) : await read(STICKERS_BUCKET, template.marks_path),
+      },
+      names,
+      layout
     );
     const label = names.length === 1 ? names[0] : `${names.length} noms`;
     const filename = `${template.name} - ${label}`.replace(/[\\/:*?"<>|]+/g, " ").trim();

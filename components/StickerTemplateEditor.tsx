@@ -7,6 +7,8 @@ import Modal from "@/components/Modal";
 import { CopyIcon, DownloadIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import { FONT_OPTIONS, fontOptionById } from "@/lib/design/fonts";
 import { sheetLabel } from "@/lib/imposition/presets";
+import { stickerSheetLayout } from "@/lib/stickers/layout";
+import type { ImpositionCutter, ImpositionSheet } from "@/lib/types";
 import {
   STICKER_ASSETS,
   STICKER_ASSET_COLUMN,
@@ -69,10 +71,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputClass = "mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm";
 
-export default function StickerTemplateEditor({ template }: { template: StickerTemplate }) {
+export default function StickerTemplateEditor({
+  template,
+  cutters,
+  sheets,
+}: {
+  template: StickerTemplate;
+  cutters: ImpositionCutter[];
+  sheets: ImpositionSheet[];
+}) {
   const router = useRouter();
-  const W = Number(template.width_mm);
-  const H = Number(template.height_mm);
+  // Profil Graphtec relié : la planche prend la zone utile de sa feuille.
+  const [cutterId, setCutterId] = useState<string>(template.cutter_id ?? "");
+  const cutter = cutters.find((c) => c.id === cutterId) ?? null;
+  const cutterSheet = sheets.find((s) => s.id === cutter?.sheet_id) ?? null;
+  const layout = stickerSheetLayout(template, cutter, cutterSheet);
+  const W = layout.area.width;
+  const H = layout.area.height;
   const [name, setName] = useState(template.name);
   const [zones, setZones] = useState<StickerZone[]>(template.zones ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -247,6 +262,7 @@ export default function StickerTemplateEditor({ template }: { template: StickerT
     setMessage(null);
     const body = new FormData();
     body.append("name", name);
+    body.append("cutter_id", cutterId);
     body.append("zones", JSON.stringify(zones));
     const res = await fetch(`/api/stickers/${template.id}`, { method: "PATCH", body }).catch(() => null);
     const data = res ? await res.json().catch(() => ({})) : {};
@@ -326,8 +342,53 @@ export default function StickerTemplateEditor({ template }: { template: StickerT
             className="mt-1 block w-full max-w-xl rounded-lg border border-transparent bg-transparent px-1 text-page-title font-semibold text-pico-black hover:border-neutral-300 focus:border-neutral-300"
           />
           <p className="px-1 text-sm text-neutral-500">
-            Planche {sheetLabel(W, H)} · {zones.length} zone{zones.length > 1 ? "s" : ""} de nom
+            Planche {sheetLabel(W, H)}
+            {cutter && cutterSheet ? ` dans une feuille ${sheetLabel(layout.sheetWidth, layout.sheetHeight)}` : ""} ·{" "}
+            {zones.length} zone{zones.length > 1 ? "s" : ""} de nom
           </p>
+          <label className="mt-2 flex flex-wrap items-center gap-2 px-1 text-sm text-neutral-600">
+            Profil Graphtec
+            <select
+              value={cutterId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCutterId(next);
+                setDirty(true);
+                // La planche change de taille : les zones restent à l'intérieur.
+                const c = cutters.find((cc) => cc.id === next) ?? null;
+                const l = stickerSheetLayout(template, c, sheets.find((s) => s.id === c?.sheet_id) ?? null);
+                setZones((all) =>
+                  all.map((z) => {
+                    const width = Math.min(z.width, l.area.width);
+                    const height = Math.min(z.height, l.area.height);
+                    return {
+                      ...z,
+                      width,
+                      height,
+                      x: Math.min(z.x, l.area.width - width),
+                      y: Math.min(z.y, l.area.height - height),
+                    };
+                  })
+                );
+              }}
+              className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-sm"
+            >
+              <option value="">Aucun — la planche occupe toute la feuille</option>
+              {cutters.map((c) => (
+                <option key={c.id} value={c.id} disabled={!c.sheet_id}>
+                  {c.name}
+                  {c.sheet_id ? "" : " (sans format de papier)"}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cutter && (
+            <p className="px-1 text-xs text-neutral-500">
+              Marges du profil (haut / droite / bas / gauche) : {cutter.margin_top_mm} / {cutter.margin_right_mm} /{" "}
+              {cutter.margin_bottom_mm} / {cutter.margin_left_mm} mm · calibration {cutter.offset_x_mm} /{" "}
+              {cutter.offset_y_mm} mm. Le visuel se pose dans ces marges ; les codes Graphtec viennent du profil.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {dirty && <span className="text-xs text-amber-700">Modifications non enregistrées</span>}
@@ -493,7 +554,22 @@ export default function StickerTemplateEditor({ template }: { template: StickerT
           {/* Fichiers du modèle */}
           <section className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-pico-black">Fichiers du modèle</h2>
-            {STICKER_ASSETS.map((asset) => (
+            {STICKER_ASSETS.map((asset) =>
+              asset === "marks" && cutter ? (
+                // Avec un profil, ses codes servent : rien à envoyer ici.
+                <div key={asset} className="space-y-1 border-t border-neutral-100 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-pico-black">{STICKER_ASSET_LABELS.marks}</span>
+                    <span className={`text-xs ${cutter.marks_path ? "text-green-700" : "text-amber-700"}`}>
+                      {cutter.marks_path ? "✓ du profil" : "absents du profil"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-500">
+                    Ceux du profil « {cutter.name} », imprimés sur toute la feuille. Ils se changent dans
+                    l&apos;imposition (Profil de découpe → Gérer).
+                  </p>
+                </div>
+              ) : (
               <div key={asset} className="space-y-1 border-t border-neutral-100 pt-3 first:border-0 first:pt-0">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-pico-black">{STICKER_ASSET_LABELS[asset]}</span>
@@ -536,7 +612,8 @@ export default function StickerTemplateEditor({ template }: { template: StickerT
                   )}
                 </div>
               </div>
-            ))}
+              )
+            )}
           </section>
 
           {/* Zone sélectionnée */}
@@ -695,7 +772,7 @@ export default function StickerTemplateEditor({ template }: { template: StickerT
                   : "Préparer la planche"}
             </button>
             {zones.length === 0 && <p className="text-xs text-neutral-500">Tracez d&apos;abord au moins une zone de nom.</p>}
-            {!hasAsset("marks") && zones.length > 0 && (
+            {!(cutter ? cutter.marks_path : hasAsset("marks")) && zones.length > 0 && (
               <p className="text-xs text-amber-700">Sans fichier de codes Graphtec, la planche ne pourra pas être découpée.</p>
             )}
           </section>

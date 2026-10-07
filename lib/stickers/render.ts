@@ -8,6 +8,7 @@ import { loadInstance } from "@/lib/pdf/textLayer";
 import { fontOptionById } from "@/lib/design/fonts";
 import { detectMarksKind } from "@/lib/imposition/marks";
 import { displayText, fitFontMm, type StickerTemplate, type StickerZone } from "./types";
+import type { StickerSheetLayout } from "./layout";
 
 // Un calque pleine feuille : page de PDF ou image, étirée à la taille de la planche.
 type SheetLayer = { kind: "pdf"; page: PDFEmbeddedPage } | { kind: "image"; image: PDFImage };
@@ -30,9 +31,10 @@ async function embedLayer(out: PDFDocument, bytes: Uint8Array | null, label: str
   throw new Error(`${label} du modèle est illisible : PDF, PNG ou JPEG attendu.`);
 }
 
-function drawLayer(page: PDFPage, layer: SheetLayer, widthPt: number, heightPt: number) {
-  if (layer.kind === "pdf") page.drawPage(layer.page, { x: 0, y: 0, width: widthPt, height: heightPt });
-  else page.drawImage(layer.image, { x: 0, y: 0, width: widthPt, height: heightPt });
+// Un calque étiré sur un rectangle (en points, origine en bas à gauche).
+function drawLayer(page: PDFPage, layer: SheetLayer, rect: { x: number; y: number; width: number; height: number }) {
+  if (layer.kind === "pdf") page.drawPage(layer.page, rect);
+  else page.drawImage(layer.image, rect);
 }
 
 function hexToRgb(hex: string) {
@@ -59,7 +61,7 @@ export function measureZoneText(zone: StickerZone, text: string) {
 // Le nom dans une zone, en un seul chemin vectoriel : chaque glyphe est mis à
 // l'échelle et placé en coordonnées « vers le bas » autour du centre de la
 // zone, tourné au besoin, puis posé au centre de la zone sur la page.
-function drawZoneText(page: PDFPage, zone: StickerZone, name: string, sheetHeightMm: number) {
+function drawZoneText(page: PDFPage, zone: StickerZone, name: string, layout: StickerSheetLayout) {
   const text = displayText(zone, name);
   if (!text) return;
   const m = measureZoneText(zone, text);
@@ -86,8 +88,9 @@ function drawZoneText(page: PDFPage, zone: StickerZone, name: string, sheetHeigh
     x += glyph.advanceWidth * scale;
   }
   if (!d) return;
-  const centerXPt = mmToPt(zone.x + zone.width / 2);
-  const centerYPt = mmToPt(sheetHeightMm - (zone.y + zone.height / 2));
+  // Zone mesurée depuis le coin de la planche, posée sur la feuille.
+  const centerXPt = mmToPt(layout.area.x + zone.x + zone.width / 2);
+  const centerYPt = mmToPt(layout.sheetHeight - (layout.area.y + zone.y + zone.height / 2));
   page.drawSvgPath(d, { x: centerXPt, y: centerYPt, color: hexToRgb(zone.color), borderWidth: 0 });
 }
 
@@ -96,19 +99,33 @@ export interface StickerFiles {
   marks: Uint8Array | null;
 }
 
-export async function renderStickerSheets(template: StickerTemplate, files: StickerFiles, names: string[]): Promise<Buffer> {
+export async function renderStickerSheets(
+  template: StickerTemplate,
+  files: StickerFiles,
+  names: string[],
+  layout: StickerSheetLayout
+): Promise<Buffer> {
   const out = await PDFDocument.create();
-  const widthPt = mmToPt(template.width_mm);
-  const heightPt = mmToPt(template.height_mm);
+  const widthPt = mmToPt(layout.sheetWidth);
+  const heightPt = mmToPt(layout.sheetHeight);
+  // La planche dans la feuille (marges et calibration du profil, s'il y en a un).
+  const areaRect = {
+    x: mmToPt(layout.area.x),
+    y: mmToPt(layout.sheetHeight - layout.area.y - layout.area.height),
+    width: mmToPt(layout.area.width),
+    height: mmToPt(layout.area.height),
+  };
+  const sheetRect = { x: 0, y: 0, width: widthPt, height: heightPt };
   const artwork = await embedLayer(out, files.artwork, "Le visuel");
   const marks = await embedLayer(out, files.marks, "Le fichier des codes Graphtec");
 
   for (const name of names) {
     const page = out.addPage([widthPt, heightPt]);
-    if (artwork) drawLayer(page, artwork, widthPt, heightPt);
-    for (const zone of template.zones) drawZoneText(page, zone, name, template.height_mm);
-    // Les codes par-dessus tout : rien ne doit masquer ce que lit la Graphtec.
-    if (marks) drawLayer(page, marks, widthPt, heightPt);
+    if (artwork) drawLayer(page, artwork, areaRect);
+    for (const zone of template.zones) drawZoneText(page, zone, name, layout);
+    // Les codes par-dessus tout, sur toute la feuille : rien ne doit masquer
+    // ce que lit la Graphtec.
+    if (marks) drawLayer(page, marks, sheetRect);
   }
   return Buffer.from(await out.save());
 }

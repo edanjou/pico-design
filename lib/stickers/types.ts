@@ -54,6 +54,9 @@ export interface StickerTemplate {
   artwork_path: string | null;
   marks_path: string | null;
   guide_path: string | null;
+  // Profil de découpe Graphtec : feuille, marges, calibration et codes (voir
+  // lib/stickers/layout.ts). Null : la planche occupe toute la feuille.
+  cutter_id: string | null;
   zones: StickerZone[];
   created_at: string;
   updated_at: string;

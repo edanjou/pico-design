@@ -517,7 +517,17 @@ export default function ImpositionTool({
         const { error: uploadError } = await supabase.storage
           .from("imposition")
           .uploadToSignedUrl(data.path, data.token, file, { contentType: "application/pdf" });
-        if (uploadError) throw new Error(`Envoi de « ${file.name} » impossible : ${uploadError.message}`);
+        if (uploadError) {
+          const sizeMb = Math.round(file.size / 104857.6) / 10;
+          // Refus du stockage pour la taille : la limite par fichier du projet
+          // Supabase (réglage Storage), pas une limite de Pico Design.
+          if (/maximum allowed size|too large|Payload too large/i.test(uploadError.message)) {
+            throw new Error(
+              `« ${file.name} » (${sizeMb} Mo) dépasse la taille maximale par fichier du stockage. Réduisez le PDF (Acrobat : Fichier → Réduire la taille du fichier) ou relevez la limite dans Supabase (Storage → Settings).`
+            );
+          }
+          throw new Error(`Envoi de « ${file.name} » (${sizeMb} Mo) impossible : ${uploadError.message}`);
+        }
         stagedPaths.current.set(file, data.path);
       }
     } finally {

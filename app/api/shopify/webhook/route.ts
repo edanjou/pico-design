@@ -101,12 +101,16 @@ export async function POST(request: Request) {
  * la clé : annoncer une autre boutique n'apprend rien de sa clé, et la
  * signature doit toujours correspondre. Sans en-tête, toutes les clés sont
  * essayées (quelques boutiques au plus).
+ *
+ * Shopify envoie toujours le domaine en .myshopify.com, alors qu'une boutique
+ * peut avoir été enregistrée sous son domaine personnalisé (ex. picolabo.ca) :
+ * sans clé pour le domaine annoncé, toutes les clés sont donc essayées aussi.
  */
 async function webhookSecrets(shop: string | null): Promise<string[]> {
   const secrets = [process.env.SHOPIFY_WEBHOOK_SECRET ?? ""];
-  const admin = createAdminSupabaseClient();
-  const query = admin.from("shop_webhook_secrets").select("secret");
-  const { data } = await (shop ? query.eq("shop_domain", shop.toLowerCase()) : query);
-  for (const row of (data as { secret: string }[] | null) ?? []) secrets.push(row.secret);
+  const { data } = await createAdminSupabaseClient().from("shop_webhook_secrets").select("shop_domain, secret");
+  const rows = (data as { shop_domain: string; secret: string }[] | null) ?? [];
+  const forShop = shop ? rows.filter((row) => row.shop_domain === shop.toLowerCase()) : [];
+  for (const row of forShop.length > 0 ? forShop : rows) secrets.push(row.secret);
   return secrets.filter(Boolean);
 }

@@ -38,6 +38,12 @@ export default function Nav() {
   const logoScope = pathname.startsWith("/design")
     ? (shopScopeOf(searchParams.get("boutique"), searchParams.get("retour")) ?? "tool")
     : "admin";
+  // Accueil de la boutique d'origine, pour le lien du logo sur l'Outil
+  // Shopify. Seulement depuis une adresse de retour en .myshopify.com (Shopify
+  // redirige vers le domaine public) : jamais depuis `boutique`, que
+  // n'importe qui peut changer dans l'adresse, et qui ferait du logo un lien
+  // vers un site tiers.
+  const shopHome = pathname.startsWith("/design") ? shopHomeOf(searchParams.get("retour")) : null;
   const [name, setName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   // Menu burger (mobile et tablette : le menu de gauche n'apparaît qu'à
@@ -191,11 +197,18 @@ export default function Nav() {
               n'est téléversé. */}
           {/* Le logo suivi de l'initiale de l'application : « Pico D », comme
               « Pico OS ». Le nom complet reste dans l'étiquette du lien. */}
-          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Pico Design — tableau de bord">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/settings/${logoScope}/asset/logo`} alt="" className="h-7 w-auto" />
-            <span className="font-heading text-2xl font-bold leading-none text-text">D</span>
-          </Link>
+          {shopHome ? (
+            <a href={shopHome} className="flex shrink-0 items-center gap-2.5" aria-label="Retour à la boutique">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/settings/${logoScope}/asset/logo`} alt="" className="h-7 w-auto" />
+            </a>
+          ) : (
+            <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Pico Design — tableau de bord">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/settings/${logoScope}/asset/logo`} alt="" className="h-7 w-auto" />
+              <span className="font-heading text-2xl font-bold leading-none text-text">D</span>
+            </Link>
+          )}
           {/* Retour au tableau de bord, comme la grille à côté de « Pico OS ». */}
           <Link
             href="/"
@@ -303,4 +316,16 @@ export default function Nav() {
       )}
     </>
   );
+}
+
+/** Accueil de la boutique, d'après une adresse de retour en .myshopify.com. */
+function shopHomeOf(returnUrl: string | null): string | null {
+  if (!returnUrl) return null;
+  try {
+    const url = new URL(returnUrl);
+    if (url.protocol !== "https:" || !url.hostname.toLowerCase().endsWith(".myshopify.com")) return null;
+    return `https://${url.hostname}/`;
+  } catch {
+    return null;
+  }
 }

@@ -37,7 +37,9 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
   </style>
   <div class="pico-design" data-templates="{{ pico_map | escape }}">
     <p class="pico-design__status" hidden></p>
-    <button type="button" class="button pico-design__link">Débuter votre création</button>
+    <button type="button" class="product-form__btn btn btn--md btn--primary pico-design__link">
+      <span>Débuter votre création</span>
+    </button>
   </div>
   <script>
     (function () {

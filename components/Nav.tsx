@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { shopScopeOfReturnUrl } from "@/lib/appSettings";
+import { shopScopeOf } from "@/lib/appSettings";
 import { createClient } from "@/lib/supabase/client";
 import { LayoutGridIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PanelLeftIcon, XIcon } from "@/components/icons";
 import { groupMenuOrder, hasSidebar, MENU_ITEMS, menuKeysForRole, resolveMenuOrder, type MenuKey } from "@/lib/menuItems";
@@ -32,11 +32,11 @@ export default function Nav() {
   // La boutique est relue de l'URL plutôt que reçue en prop : cette barre
   // vit dans app/layout.tsx, donc AU-DESSUS de la page qui la connaît —
   // l'information ne peut pas remonter (même contrainte que
-  // ChromeVisibility.tsx). Un `retour` forgé ne donne ici qu'un jeu
+  // ChromeVisibility.tsx). Un `boutique` ou un `retour` forgé ne donne ici qu'un jeu
   // inexistant, donc le logo par défaut ; ce qui est acceptable comme
   // adresse de retour reste jugé côté serveur.
   const logoScope = pathname.startsWith("/design")
-    ? (shopScopeOfReturnUrl(searchParams.get("retour")) ?? "tool")
+    ? (shopScopeOf(searchParams.get("boutique"), searchParams.get("retour")) ?? "tool")
     : "admin";
   const [name, setName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);

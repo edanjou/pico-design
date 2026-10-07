@@ -64,6 +64,25 @@ export function shopScopeOfReturnUrl(value: unknown): string | null {
   }
 }
 
+/**
+ * Jeu de réglages de l'Outil Shopify : le paramètre `boutique` (le domaine
+ * public de la boutique, ex. picolabo.ca, envoyé par le bloc Liquid) s'il est
+ * valable, sinon le domaine de l'adresse de retour. L'adresse de retour est
+ * toujours en .myshopify.com (seul domaine accepté pour y renvoyer le client),
+ * alors que les réglages sont rangés sous le domaine que voit le client.
+ *
+ * Même garantie que plus haut : un domaine inventé ne donne qu'un jeu
+ * inexistant, donc l'habillage par défaut. `boutique` ne sert jamais
+ * d'adresse de retour.
+ */
+export function shopScopeOf(boutique: unknown, returnUrl: unknown): string | null {
+  if (typeof boutique === "string") {
+    const shop = boutique.trim().toLowerCase();
+    if (isShopScope(shop)) return shop;
+  }
+  return shopScopeOfReturnUrl(returnUrl);
+}
+
 /** Libellé d'un jeu : « Administration », « Outil Shopify », ou le domaine. */
 export function scopeLabel(scope: SettingsScope): string {
   return (SCOPE_LABELS as Record<string, string>)[scope] ?? scope;

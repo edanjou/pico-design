@@ -97,7 +97,8 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
           cle: KEY,
           variant: value("id", FIRST_VARIANT),
           quantity: value("quantity", "1"),
-          retour: SHOP + location.pathname
+          retour: SHOP + location.pathname,
+          boutique: "{{ shop.domain }}"
         });
         location.href = TOOL + "?" + params.toString();
       });

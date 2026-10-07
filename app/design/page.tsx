@@ -12,7 +12,7 @@ import AppSettingsStyle from "@/components/AppSettingsStyle";
 import {
   assetUrl,
   loadAppSettings,
-  shopScopeOfReturnUrl,
+  shopScopeOf,
 } from "@/lib/appSettings";
 import type { Metadata } from "next";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
@@ -50,10 +50,10 @@ import type {
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams?: { retour?: string };
+  searchParams?: { retour?: string; boutique?: string };
 }): Promise<Metadata> {
   const scope = isAllowedReturnUrl(searchParams?.retour)
-    ? (shopScopeOfReturnUrl(searchParams?.retour) ?? "tool")
+    ? (shopScopeOf(searchParams?.boutique, searchParams?.retour) ?? "tool")
     : "tool";
   const settings = await loadAppSettings(createAdminSupabaseClient(), scope);
   return { icons: { icon: assetUrl(scope, "favicon", settings.updatedAt) } };
@@ -75,6 +75,7 @@ export default async function DesignPage({
     variant?: string;
     quantity?: string;
     retour?: string;
+    boutique?: string;
   };
 }) {
   const templateId = searchParams?.template;
@@ -84,13 +85,15 @@ export default async function DesignPage({
   // les en-têtes Referer, ni dans le code de la page — contrairement au
   // jeton, qui ne vaut que pour ce modèle et que douze heures.
   // Contexte de commande transmis par la fiche produit Shopify : variante,
-  // quantité et adresse de retour. Conservé à travers l'échange clé →
+  // quantité, adresse de retour et domaine public de la boutique. Conservé à travers l'échange clé →
   // laissez-passer, sinon le client perdrait son panier en route.
   const shopifyParams = new URLSearchParams();
   if (searchParams?.variant) shopifyParams.set("variant", searchParams.variant);
   if (searchParams?.quantity)
     shopifyParams.set("quantity", searchParams.quantity);
   if (searchParams?.retour) shopifyParams.set("retour", searchParams.retour);
+  if (searchParams?.boutique)
+    shopifyParams.set("boutique", searchParams.boutique);
   const suffix = shopifyParams.toString() ? `&${shopifyParams}` : "";
 
   if (templateId && isValidPublicKey(searchParams?.cle)) {
@@ -113,6 +116,7 @@ export default async function DesignPage({
       returnUrl: isAllowedReturnUrl(searchParams?.retour)
         ? searchParams!.retour!
         : null,
+      boutique: searchParams?.boutique ?? null,
     });
   }
 
@@ -192,6 +196,7 @@ async function publicTool(
     variantId: string | null;
     quantity: number;
     returnUrl: string | null;
+    boutique: string | null;
   },
 ) {
   const admin = createAdminSupabaseClient();
@@ -252,12 +257,15 @@ async function publicTool(
   // aux visuels, elle part aussi en mode public (en adresses signées).
   const illustrations = await loadIllustrations(admin);
 
-  // Boutique d'origine du visiteur, lue sur l'adresse de retour — déjà
-  // validée plus haut par isAllowedReturnUrl. Ses réglages priment sur le
+  // Boutique d'origine du visiteur : son domaine public (`boutique`), sinon
+  // celui de l'adresse de retour — validée plus haut par isAllowedReturnUrl,
+  // et sans laquelle on ne vient pas d'une boutique. Ses réglages priment sur le
   // jeu « tool » posé par app/design/layout.tsx : ce bloc de style vient plus
   // loin dans le document, il l'emporte. Sans réglages propres à cette
   // boutique, il ne produit rien et le jeu par défaut s'applique.
-  const boutique = shopScopeOfReturnUrl(shopify.returnUrl);
+  const boutique = shopify.returnUrl
+    ? shopScopeOf(shopify.boutique, shopify.returnUrl)
+    : null;
 
   return (
     <>

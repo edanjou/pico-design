@@ -45,7 +45,11 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
     (function () {
       var TOOL = "${SITE}/design";
       var KEY = "VOTRE_DESIGN_LINK_KEY";
-      var SHOP = "https://{{ shop.permanent_domain }}";
+      // Domaine .myshopify.com (adresse de retour) et domaine que voit le
+      // client (habillage). Le navigateur prend le relais si Liquid ne les
+      // fournit pas.
+      var SHOP = "https://" + ("{{ shop.permanent_domain }}" || (window.Shopify && window.Shopify.shop) || "");
+      var BOUTIQUE = "{{ shop.domain }}" || location.hostname;
       var CART_ADD = "{{ routes.cart_add_url }}.js";
       var CART = "{{ routes.cart_url }}";
       var FIRST_VARIANT = "{{ product.selected_or_first_available_variant.id }}";
@@ -98,7 +102,7 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
           variant: value("id", FIRST_VARIANT),
           quantity: value("quantity", "1"),
           retour: SHOP + location.pathname,
-          boutique: "{{ shop.domain }}"
+          boutique: BOUTIQUE
         });
         location.href = TOOL + "?" + params.toString();
       });

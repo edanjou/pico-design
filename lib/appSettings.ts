@@ -77,7 +77,8 @@ export function shopScopeOfReturnUrl(value: unknown): string | null {
  */
 export function shopScopeOf(boutique: unknown, returnUrl: unknown): string | null {
   if (typeof boutique === "string") {
-    const shop = boutique.trim().toLowerCase();
+    // www.picolabo.ca et picolabo.ca désignent la même boutique.
+    const shop = boutique.trim().toLowerCase().replace(/^www\./, "");
     if (isShopScope(shop)) return shop;
   }
   return shopScopeOfReturnUrl(returnUrl);

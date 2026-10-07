@@ -11,16 +11,53 @@ const SITE = "https://pico-design.vercel.app";
 const WEBHOOK_URL = `${SITE}/api/shopify/webhook`;
 
 const PRODUCT_BLOCK = String.raw`{%- comment -%}
-  Pico Design : bouton « Personnaliser », et ajout automatique au panier au
-  retour de l'outil. Le modèle Pico vient du métachamp produit
-  custom.pico_template (id copié depuis Pico Design > Modèles).
-  Sans id, rien ne s'affiche.
+  Pico Design : bouton « Débuter votre création », et ajout automatique au panier au
+  retour de l'outil.
+
+  Modèle Pico : métachamp custom.pico_template (id copié depuis
+  Pico Design > Modèles), lu d'abord sur la VARIANTE, puis sur le PRODUIT
+  à défaut. Une variante sans modèle (ni sur elle, ni sur le produit) n'est
+  pas personnalisable. Si aucune ne l'est, rien ne s'affiche.
 {%- endcomment -%}
-{%- assign pico_template = product.metafields.custom.pico_template.value -%}
-{%- if pico_template != blank -%}
-  <div class="pico-design" data-template="{{ pico_template | escape }}">
+{%- assign pico_default = product.metafields.custom.pico_template.value -%}
+{%- assign pico_any = false -%}
+{%- capture pico_map -%}{
+  {%- for v in product.variants -%}
+    {%- assign pico_t = v.metafields.custom.pico_template.value | default: pico_default -%}
+    {%- if pico_t != blank -%}{%- assign pico_any = true -%}{%- endif -%}
+    "{{ v.id }}": {{ pico_t | default: '' | json }}{% unless forloop.last %},{% endunless %}
+  {%- endfor -%}
+}{%- endcapture -%}
+{%- if pico_any -%}
+  <style>
+    .pico-design { margin: 1rem 0; }
+    .pico-design__link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 3rem;
+      padding: 0.75rem 1.5rem;
+      border: 0;
+      border-radius: 999px;
+      background: #111;
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .pico-design__link:hover { opacity: 0.85; color: #fff; }
+    .pico-design__link:active { transform: scale(0.98); }
+    .pico-design__link:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+    .pico-design__link[hidden] { display: none; }
+    .pico-design__status { margin: 0 0 0.5rem; font-size: 0.9em; }
+  </style>
+  <div class="pico-design" data-templates="{{ pico_map | escape }}">
     <p class="pico-design__status" hidden></p>
-    <a class="button button--secondary pico-design__link" href="#">Personnaliser</a>
+    <a class="pico-design__link" href="#" role="button">Débuter votre création</a>
   </div>
   <script>
     (function () {
@@ -29,9 +66,14 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       var SHOP = "https://{{ shop.permanent_domain }}";
       var CART_ADD = "{{ routes.cart_add_url }}.js";
       var CART = "{{ routes.cart_url }}";
+      var FIRST_VARIANT = "{{ product.selected_or_first_available_variant.id }}";
 
       var root = document.currentScript.previousElementSibling;
       var status = root.querySelector(".pico-design__status");
+      var link = root.querySelector(".pico-design__link");
+      var templates = {};
+      try { templates = JSON.parse(root.dataset.templates); } catch (err) {}
+
       var forms = document.querySelectorAll('form[action*="/cart/add"]');
       function value(name, fallback) {
         for (var i = 0; i < forms.length; i++) {
@@ -42,16 +84,35 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       }
       function say(text) {
         status.textContent = text;
-        status.hidden = false;
+        status.hidden = !text;
+      }
+      function currentTemplate() {
+        return templates[value("id", FIRST_VARIANT)] || "";
       }
 
-      // Aller : la variante et la quantité choisies au moment du clic.
-      root.querySelector(".pico-design__link").addEventListener("click", function (e) {
+      // Le bouton suit la variante choisie : masqué si elle n'a pas de modèle.
+      function refresh() {
+        var ok = Boolean(currentTemplate());
+        link.hidden = !ok;
+        if (ok && status.dataset.kind === "variante") { say(""); status.dataset.kind = ""; }
+        if (!ok) { say("Cette variante n'est pas personnalisable."); status.dataset.kind = "variante"; }
+      }
+      // Le thème met à jour le champ « id » après le changement de variante :
+      // on relit un instant plus tard.
+      for (var i = 0; i < forms.length; i++) {
+        forms[i].addEventListener("change", function () { setTimeout(refresh, 50); });
+      }
+      document.addEventListener("variant:change", function () { setTimeout(refresh, 50); });
+
+      // Aller : le modèle de la variante, la variante et la quantité choisies.
+      link.addEventListener("click", function (e) {
         e.preventDefault();
+        var template = currentTemplate();
+        if (!template) { refresh(); return; }
         var params = new URLSearchParams({
-          template: root.dataset.template,
+          template: template,
           cle: KEY,
-          variant: value("id", "{{ product.selected_or_first_available_variant.id }}"),
+          variant: value("id", FIRST_VARIANT),
           quantity: value("quantity", "1"),
           retour: SHOP + location.pathname
         });
@@ -61,7 +122,7 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       // Retour : l'outil renvoie ?pico_design=…&variant=…&quantity=…
       var back = new URLSearchParams(location.search);
       var design = back.get("pico_design");
-      if (!design || !/^[0-9a-f-]{36}$/i.test(design)) return;
+      if (!design || !/^[0-9a-f-]{36}$/i.test(design)) { refresh(); return; }
 
       // pico_design retiré de l'adresse : recharger n'ajoute pas deux fois.
       back.delete("pico_design");
@@ -79,7 +140,7 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           items: [{
-            id: Number(back.get("variant") || value("id", "{{ product.selected_or_first_available_variant.id }}")),
+            id: Number(back.get("variant") || value("id", FIRST_VARIANT)),
             quantity: Math.max(1, parseInt(back.get("quantity"), 10) || 1),
             properties: { _design: design }
           }]
@@ -156,7 +217,7 @@ export default async function AidePage() {
           Intégrer Pico Design à une boutique Shopify
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          Le client clique <strong>Personnaliser</strong> sur une fiche produit, compose son design dans l&apos;Outil
+          Le client clique <strong>Débuter votre création</strong> sur une fiche produit, compose son design dans l&apos;Outil
           Shopify, puis revient avec son article ajouté au panier, aperçu compris. Une fois payée, la commande arrive
           dans <Link href="/orders" className="text-primary underline">Commandes</Link> avec son PDF prêt pour
           l&apos;impression. Compter une trentaine de minutes, plus la saisie des produits.
@@ -219,6 +280,10 @@ export default async function AidePage() {
           <li>
             Type : <strong>Texte sur une ligne</strong>, puis Enregistrer.
           </li>
+          <li>
+            Si le modèle change selon la variante : refaire la même définition dans Paramètres → Données
+            personnalisées → <strong>Variantes</strong> (même nom, même clé <K>custom.pico_template</K>).
+          </li>
         </Steps>
       </Section>
 
@@ -228,9 +293,15 @@ export default async function AidePage() {
           <strong>Modèle Pico</strong>, en bas de la fiche produit dans Shopify. Un produit sans id n&apos;affiche
           pas le bouton.
         </p>
+        <p>
+          Modèle différent selon la variante : coller l&apos;id dans le champ <strong>Modèle Pico</strong> de la
+          variante (fiche produit → la variante). Une variante sans id reprend celui du produit. Une variante sans
+          modèle, ni sur elle ni sur le produit, n&apos;est pas personnalisable : le bouton se masque quand elle est
+          choisie.
+        </p>
       </Section>
 
-      <Section id="bouton" title="4. Ajouter le bouton « Personnaliser »">
+      <Section id="bouton" title="4. Ajouter le bouton « Débuter votre création »">
         <Steps>
           <li>Boutique en ligne → Thèmes → Personnaliser.</li>
           <li>En haut, choisir le modèle de page Produit.</li>
@@ -329,7 +400,7 @@ export default async function AidePage() {
         </p>
         <Steps>
           <li>
-            Ouvrir une fiche produit : le bouton <strong>Personnaliser</strong> apparaît.
+            Ouvrir une fiche produit : le bouton <strong>Débuter votre création</strong> apparaît.
           </li>
           <li>Cliquer : l&apos;éditeur s&apos;ouvre directement sur le bon modèle.</li>
           <li>

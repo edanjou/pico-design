@@ -52,18 +52,6 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       var status = root.querySelector(".pico-design__status");
       var link = root.querySelector(".pico-design__link");
 
-      // Même style que le bouton « Ajouter au panier » du thème : on reprend
-      // ses classes, sauf celles qui le relient au panier (le script du thème
-      // ne doit pas prendre ce bouton pour le sien). Sans bouton trouvé, la
-      // classe « button » du thème suffit.
-      var themeButton = document.querySelector('form[action*="/cart/add"] [type="submit"]');
-      if (themeButton) {
-        var classes = Array.prototype.filter.call(themeButton.classList, function (c) {
-          return !/submit|cart|js-|loading|disabled/i.test(c);
-        });
-        if (classes.length) link.className = classes.concat("pico-design__link").join(" ");
-      }
-
       var templates = {};
       try { templates = JSON.parse(root.dataset.templates); } catch (err) {}
 

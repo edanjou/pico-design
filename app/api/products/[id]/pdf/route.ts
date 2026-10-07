@@ -25,12 +25,28 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     );
   }
 
+  // Le stockage peut refuser un téléchargement de façon passagère (vu juste
+  // après la création d'un produit : échec, puis succès moins d'une minute
+  // plus tard). On réessaie avant d'abandonner, et la vraie raison part dans
+  // les journaux — le message « introuvable » laissait croire à un fichier perdu.
   const admin = createAdminSupabaseClient();
-  const { data: file, error: downloadError } = await admin.storage
-    .from("outputs")
-    .download(product.pdf_path);
-  if (downloadError || !file) {
-    return NextResponse.json({ error: "Fichier PDF introuvable." }, { status: 404 });
+  let file: Blob | null = null;
+  let lastError: unknown = null;
+  for (const delayMs of [0, 500, 1000]) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const { data, error: downloadError } = await admin.storage.from("outputs").download(product.pdf_path);
+    if (data) {
+      file = data;
+      break;
+    }
+    lastError = downloadError;
+  }
+  if (!file) {
+    console.error(`PDF du produit ${params.id} (${product.pdf_path}) : téléchargement impossible`, lastError);
+    return NextResponse.json(
+      { error: "Le PDF n'est pas disponible pour l'instant. Réessayez dans un instant." },
+      { status: 503 }
+    );
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());

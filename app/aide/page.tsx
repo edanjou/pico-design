@@ -31,33 +31,13 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
 {%- if pico_any -%}
   <style>
     .pico-design { margin: 1rem 0; }
-    .pico-design__link {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: 3rem;
-      padding: 0.75rem 1.5rem;
-      border: 0;
-      border-radius: 999px;
-      background: #111;
-      color: #fff;
-      font: inherit;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      text-decoration: none;
-      cursor: pointer;
-      transition: opacity 0.15s ease, transform 0.15s ease;
-    }
-    .pico-design__link:hover { opacity: 0.85; color: #fff; }
-    .pico-design__link:active { transform: scale(0.98); }
-    .pico-design__link:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+    .pico-design__link { width: 100%; }
     .pico-design__link[hidden] { display: none; }
     .pico-design__status { margin: 0 0 0.5rem; font-size: 0.9em; }
   </style>
   <div class="pico-design" data-templates="{{ pico_map | escape }}">
     <p class="pico-design__status" hidden></p>
-    <a class="pico-design__link" href="#" role="button">Débuter votre création</a>
+    <button type="button" class="button pico-design__link">Débuter votre création</button>
   </div>
   <script>
     (function () {
@@ -71,6 +51,19 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       var root = document.currentScript.previousElementSibling;
       var status = root.querySelector(".pico-design__status");
       var link = root.querySelector(".pico-design__link");
+
+      // Même style que le bouton « Ajouter au panier » du thème : on reprend
+      // ses classes, sauf celles qui le relient au panier (le script du thème
+      // ne doit pas prendre ce bouton pour le sien). Sans bouton trouvé, la
+      // classe « button » du thème suffit.
+      var themeButton = document.querySelector('form[action*="/cart/add"] [type="submit"]');
+      if (themeButton) {
+        var classes = Array.prototype.filter.call(themeButton.classList, function (c) {
+          return !/submit|cart|js-|loading|disabled/i.test(c);
+        });
+        if (classes.length) link.className = classes.concat("pico-design__link").join(" ");
+      }
+
       var templates = {};
       try { templates = JSON.parse(root.dataset.templates); } catch (err) {}
 

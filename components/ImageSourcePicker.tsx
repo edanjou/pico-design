@@ -8,6 +8,7 @@ import VisualPicker from "@/components/VisualPicker";
 import FileDropZone from "@/components/FileDropZone";
 import { mmToIn, inToMm } from "@/lib/pdf/units";
 import { slotClipPath, slotShape, slotSvgShape } from "@/lib/themeShapes";
+import { stageLargeFiles } from "@/lib/design/stageUpload";
 import { SpinnerIcon, UploadIcon } from "@/components/icons";
 import { fontOptionById } from "@/lib/design/fonts";
 import { maxTextSizeMmForTemplate, type DesignLayer, type ImageLayer } from "@/lib/design/layers";
@@ -767,7 +768,16 @@ export default function ImageSourcePicker({
         }
       }
 
-      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
+      let body: FormData;
+      try {
+        body = await stageLargeFiles(formData);
+      } catch (err) {
+        if (token !== frameTokenRef.current) return;
+        setFrameError(err instanceof Error ? err.message : "Erreur lors de la génération du cadre.");
+        setFrameLoading(false);
+        return;
+      }
+      const res = await fetch("/api/products/preview", { method: "POST", body });
       if (token !== frameTokenRef.current) return;
 
       if (!res.ok) {
@@ -869,7 +879,19 @@ export default function ImageSourcePicker({
       formData.append("mode", "background");
       formData.append("rotated", String(rotated));
 
-      const res = await fetch("/api/products/preview", { method: "POST", body: formData });
+      // Photos lourdes déposées directement dans le stockage (voir
+      // lib/design/stageUpload.ts) : une requête de plus de 4,5 Mo serait
+      // refusée par Vercel.
+      let body: FormData;
+      try {
+        body = await stageLargeFiles(formData);
+      } catch (err) {
+        if (token !== renderedBgTokenRef.current) return;
+        setRenderedBgError(err instanceof Error ? err.message : "Erreur lors de la génération de l'aperçu.");
+        setRenderedBgLoading(false);
+        return;
+      }
+      const res = await fetch("/api/products/preview", { method: "POST", body });
       if (token !== renderedBgTokenRef.current) return;
 
       if (!res.ok) {

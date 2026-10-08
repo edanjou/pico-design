@@ -22,6 +22,9 @@ export const LIMITS = {
   // Aperçus : nombreux par nature, mais plus légers.
   mockup: { max: 200, windowSeconds: 3600 },
   preview: { max: 400, windowSeconds: 3600 },
+  // Adresses d'envoi direct au stockage (voir app/api/design/stage) : un
+  // appel par lot de fichiers, chaque fichier n'étant déposé qu'une fois.
+  stage: { max: 200, windowSeconds: 3600 },
 } as const;
 
 export type LimitBucket = keyof typeof LIMITS;

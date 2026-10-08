@@ -5,6 +5,7 @@ import type { ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import type { Category, Template, TemplateMockup } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
+import { stageLargeFiles } from "@/lib/design/stageUpload";
 import { SpinnerIcon, XIcon } from "@/components/icons";
 import MockupGallery, { type MockupView } from "@/components/MockupGallery";
 import { layerImageFieldName, type DesignLayer } from "@/lib/design/layers";
@@ -67,6 +68,10 @@ interface GeneratedPdf {
 interface MockupState {
   loading: boolean;
   url: string | null;
+  // L'image elle-même, gardée pour l'aperçu du panier (voir handleOrder) :
+  // la relire depuis `url` (blob:) par fetch est bloqué par la CSP, dont
+  // `connect-src` n'admet pas blob:.
+  blob?: Blob;
 }
 
 // Une vue à rendre : soit un mockup précis du modèle (`mockupId`), soit un
@@ -177,17 +182,12 @@ export default function DesignReviewOverlay({
       // Aperçu pour le panier Shopify : le mockup que le client regarde, à
       // défaut le premier prêt. Facultatif — sans lui, le panier garde la
       // photo du produit.
-      const previewUrl =
-        mockupStates[activeMockupKey]?.url ??
-        viewSpecs.map((v) => mockupStates[v.key]?.url).find(Boolean) ??
+      const preview =
+        mockupStates[activeMockupKey]?.blob ??
+        viewSpecs.map((v) => mockupStates[v.key]?.blob).find(Boolean) ??
         null;
-      if (previewUrl) {
-        const blob = await fetch(previewUrl)
-          .then((r) => r.blob())
-          .catch(() => null);
-        if (blob) body.append("preview", blob, "preview.png");
-      }
-      const res = await fetch("/api/design/submit", { method: "POST", body });
+      if (preview) body.append("preview", preview, "preview.png");
+      const res = await fetch("/api/design/submit", { method: "POST", body: await stageLargeFiles(body) });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Erreur lors de l'enregistrement du design.");
@@ -272,7 +272,7 @@ export default function DesignReviewOverlay({
     (async () => {
       try {
         const body = buildPdfFormData();
-        const res = await fetch("/api/design/pdf", { method: "POST", body });
+        const res = await fetch("/api/design/pdf", { method: "POST", body: await stageLargeFiles(body) });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error ?? "Erreur lors de la génération du PDF.");
@@ -336,13 +336,13 @@ export default function DesignReviewOverlay({
         body.append("imageRotation", String(value.rotation ?? 0));
         appendLayersToForm(body, side, sideLayers);
 
-        const res = await fetch("/api/design/mockup", { method: "POST", body });
+        const res = await fetch("/api/design/mockup", { method: "POST", body: await stageLargeFiles(body) });
         if (res.status === 204 || !res.ok) {
           setState(key, { loading: false, url: null });
           return;
         }
         const blob = await res.blob();
-        setState(key, { loading: false, url: URL.createObjectURL(blob) });
+        setState(key, { loading: false, url: URL.createObjectURL(blob), blob });
       } catch {
         setState(key, { loading: false, url: null });
       }

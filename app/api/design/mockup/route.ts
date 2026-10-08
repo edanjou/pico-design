@@ -1,5 +1,6 @@
 import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
+import { hydrateStagedFiles } from "@/lib/design/stagedFiles";
 import {
   createServerSupabaseClient,
   createAdminSupabaseClient,
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const formData = await request.formData();
+  let formData = await request.formData();
   const templateId = formData.get("templateId");
   if (typeof templateId !== "string")
     return errorResponse("Paramètre manquant (templateId).");
@@ -71,6 +72,17 @@ export async function POST(request: Request) {
   // client admin : la RLS n'aurait personne à autoriser.
   if (!user && !grantAllows(formData.get("grant"), templateId)) {
     return errorResponse("Non authentifié.", 401);
+  }
+  // Fichiers déposés directement dans le stockage par l'outil (au-delà de
+  // la limite de 4,5 Mo des requêtes Vercel) : remis en place avant tout le
+  // reste, contrôles de taille compris.
+  try {
+    formData = await hydrateStagedFiles(formData);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Fichier introuvable." },
+      { status: 400 },
+    );
   }
   // Appel public : compter et plafonner (voir lib/rateLimit.ts). Les
   // utilisateurs connectés ne sont pas limités.

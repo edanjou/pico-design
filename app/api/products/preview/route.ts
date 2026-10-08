@@ -1,5 +1,6 @@
 import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 import { NextResponse } from "next/server";
+import { hydrateStagedFiles } from "@/lib/design/stagedFiles";
 import { parseLogoShadowForm } from "@/lib/logoShadowSettings";
 import {
   createServerSupabaseClient,
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const formData = await request.formData();
+  let formData = await request.formData();
   const templateId = formData.get("templateId");
   // Voir /api/design/mockup : lien public accepté pour ce seul modèle.
   if (
@@ -33,6 +34,17 @@ export async function POST(request: Request) {
     )
   ) {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+  // Fichiers déposés directement dans le stockage par l'outil (au-delà de
+  // la limite de 4,5 Mo des requêtes Vercel) : remis en place avant tout le
+  // reste, contrôles de taille compris.
+  try {
+    formData = await hydrateStagedFiles(formData);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Fichier introuvable." },
+      { status: 400 },
+    );
   }
   if (!user) {
     const limit = await checkRateLimit("preview", request);

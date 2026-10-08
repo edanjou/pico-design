@@ -211,6 +211,39 @@ const GENERIC_CART_BLOCK = String.raw`{%- assign pico_design = item.properties['
   {%- comment -%} Ici : le code d'origine de l'image du produit {%- endcomment -%}
 {%- endif -%}`;
 
+const MEDIACLIP_CART_BLOCK = String.raw`{%- comment -%}
+  Pico Design : aperçu du design dans le panier affiché par Mediaclip Hub
+  (classes mc-cart-item). Son Liquid n'est pas modifiable : ce bloc remplace
+  l'image du produit par l'aperçu, pour chaque article qui porte un design.
+{%- endcomment -%}
+{%- capture pico_cart_designs -%}{
+  {%- for item in cart.items -%}
+    {%- assign pico_design = item.properties['_design'] -%}
+    {%- if pico_design != blank -%}{{ item.key | json }}: {{ pico_design | json }},{%- endif -%}
+  {%- endfor -%}
+  "": ""
+}{%- endcapture -%}
+<script>
+  (function () {
+    var designs = {{ pico_cart_designs }};
+    var PREVIEW = "${SITE}/api/design/preview/";
+    function apply() {
+      document.querySelectorAll("[data-mc-shopify-cart-item-key]").forEach(function (item) {
+        var id = designs[item.getAttribute("data-mc-shopify-cart-item-key")];
+        if (!id) return;
+        var img = item.querySelector("img");
+        if (!img || img.getAttribute("src") === PREVIEW + id) return;
+        img.src = PREVIEW + id;
+        img.removeAttribute("srcset");
+        img.alt = "Aperçu de ton design";
+      });
+    }
+    apply();
+    // Mediaclip réaffiche le panier (quantité, suppression) : on repasse.
+    new MutationObserver(apply).observe(document.body, { childList: true, subtree: true });
+  })();
+</script>`;
+
 const SECTIONS = [
   { id: "avant", title: "Avant de commencer" },
   { id: "modeles", title: "1. Préparer les modèles" },
@@ -373,6 +406,21 @@ export default async function AidePage() {
         </Steps>
         <CodeBlock label="cart-item.liquid — remplace la ligne {% if item.image %}" code={AURORA_CART_LINES} />
         <p>Ce fichier sert au tiroir de panier comme à la page panier : les deux sont couverts.</p>
+
+        <p className="pt-2 font-medium text-text">Panier affiché par Mediaclip Hub</p>
+        <p>
+          Si le panier vient de l&apos;app Mediaclip (ses articles portent la classe <K>mc-cart-item</K>),{" "}
+          <K>cart-item.liquid</K> n&apos;est pas utilisé et le Liquid de l&apos;app ne se modifie pas. À la place :
+        </p>
+        <Steps>
+          <li>Boutique en ligne → Thèmes → Personnaliser.</li>
+          <li>En haut, choisir la page <strong>Panier</strong>.</li>
+          <li>
+            Ajouter une section ou un bloc → <strong>Liquid personnalisé</strong>, sous le panier.
+          </li>
+          <li>Coller le code ci-dessous, puis Enregistrer.</li>
+        </Steps>
+        <CodeBlock label="Page Panier — bloc Liquid personnalisé (Mediaclip)" code={MEDIACLIP_CART_BLOCK} />
 
         <p className="pt-2 font-medium text-text">Autre thème</p>
         <p>

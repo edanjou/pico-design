@@ -102,6 +102,14 @@ export default function ThemeForm({
   const [removeBackground, setRemoveBackground] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracé d'un polygone au clic : l'emplacement visé (un existant, ou "new"
+  // pour en ajouter un), les sommets posés (ratios de la PAGE) et la
+  // position du pointeur pour le segment en cours.
+  const [drawing, setDrawing] = useState<{
+    target: number | "new";
+    points: { x: number; y: number }[];
+    hover: { x: number; y: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     onBusyChange?.(loading);
@@ -205,6 +213,98 @@ export default function ThemeForm({
     if (!Number.isFinite(sides)) return;
     updateSlot(index, { shape: "polygon", points: regularPolygon(sides) });
   }
+
+  function startDrawing(target: number | "new") {
+    setError(null);
+    setDrawing({ target, points: [], hover: null });
+  }
+
+  // Ferme le tracé : l'emplacement prend le rectangle englobant des sommets,
+  // et les sommets y sont ramenés en ratios de ce rectangle (voir
+  // ThemeSlot.points).
+  function finishDrawing(points: { x: number; y: number }[]) {
+    const target = drawing?.target;
+    setDrawing(null);
+    if (target === undefined || points.length < MIN_POLYGON_SIDES) return;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const width = Math.max(Math.max(...xs) - minX, 0.01);
+    const height = Math.max(Math.max(...ys) - minY, 0.01);
+    const slot = clampSlot({
+      positionX: minX + width / 2,
+      positionY: minY + height / 2,
+      widthRatio: width,
+      heightRatio: height,
+      shape: "polygon",
+      points: points.map((p) => ({
+        x: Math.round(((p.x - minX) / width) * 10000) / 10000,
+        y: Math.round(((p.y - minY) / height) * 10000) / 10000,
+      })),
+    });
+    setSlots((prev) =>
+      target === "new"
+        ? prev.length >= MAX_SLOTS
+          ? prev
+          : [...prev, slot]
+        : prev.map((s, i) => (i === target ? slot : s)),
+    );
+  }
+
+  function pagePoint(e: React.PointerEvent | React.MouseEvent): { x: number; y: number } | null {
+    const rect = previewBoxRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+    };
+  }
+
+  function handleDrawClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!drawing) return;
+    const point = pagePoint(e);
+    if (!point) return;
+    // Double-clic : ferme le polygone (le premier clic a déjà posé le sommet).
+    if (e.detail >= 2) {
+      finishDrawing(drawing.points);
+      return;
+    }
+    // Clic sur le premier sommet (à 10 px près) : ferme le polygone.
+    const first = drawing.points[0];
+    if (first && drawing.points.length >= MIN_POLYGON_SIDES) {
+      const dx = (point.x - first.x) * boxSize.width;
+      const dy = (point.y - first.y) * boxSize.height;
+      if (Math.hypot(dx, dy) <= 10) {
+        finishDrawing(drawing.points);
+        return;
+      }
+    }
+    if (drawing.points.length >= 24) return;
+    setDrawing({ ...drawing, points: [...drawing.points, point] });
+  }
+
+  useEffect(() => {
+    if (!drawing) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setDrawing(null);
+      // Pendant la saisie d'un champ (nom du thème…), Entrée et Retour
+      // arrière gardent leur rôle habituel.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finishDrawing(drawing!.points);
+      }
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        setDrawing((d) => (d ? { ...d, points: d.points.slice(0, -1) } : d));
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawing]);
 
   function addSlot() {
     setSlots((prev) => (prev.length >= MAX_SLOTS ? prev : [...prev, defaultSlot(prev.length, pageAspectRatio)]));
@@ -353,15 +453,51 @@ export default function ThemeForm({
           <label className="block text-sm font-medium">
             Emplacements photo ({slots.length}/{MAX_SLOTS})
           </label>
-          <button
-            type="button"
-            onClick={addSlot}
-            disabled={slots.length >= MAX_SLOTS}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-          >
-            + Ajouter un emplacement
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => startDrawing("new")}
+              disabled={slots.length >= MAX_SLOTS || !template || Boolean(drawing)}
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+            >
+              ✎ Tracer un emplacement
+            </button>
+            <button
+              type="button"
+              onClick={addSlot}
+              disabled={slots.length >= MAX_SLOTS || Boolean(drawing)}
+              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+            >
+              + Ajouter un emplacement
+            </button>
+          </div>
         </div>
+        {drawing && (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            <span>
+              Clique sur l&apos;aperçu pour poser chaque sommet ({drawing.points.length} posé
+              {drawing.points.length > 1 ? "s" : ""}). Pour fermer : clique sur le premier point, double-clique ou
+              Entrée. Retour arrière : enlever le dernier. Échap : annuler.
+            </span>
+            <span className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => finishDrawing(drawing.points)}
+                disabled={drawing.points.length < MIN_POLYGON_SIDES}
+                className="rounded-md bg-blue-600 px-2.5 py-1 font-medium text-white disabled:opacity-40"
+              >
+                Terminer
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrawing(null)}
+                className="rounded-md border border-blue-200 bg-white px-2.5 py-1"
+              >
+                Annuler
+              </button>
+            </span>
+          </div>
+        )}
         {!template ? (
           <p className="text-xs text-neutral-500">Choisis un modèle pour placer les emplacements.</p>
         ) : (
@@ -499,11 +635,55 @@ export default function ThemeForm({
                 className="pointer-events-none absolute inset-0 h-full w-full object-fill opacity-70"
               />
             )}
+            {/* Tracé en cours : une couche au-dessus de tout, qui reçoit les
+                clics (les emplacements dessous ne bougent pas pendant ce
+                temps). */}
+            {drawing && (
+              <div
+                className="absolute inset-0 z-10 cursor-crosshair"
+                onClick={handleDrawClick}
+                onPointerMove={(e) => {
+                  const hover = pagePoint(e);
+                  setDrawing((d) => (d ? { ...d, hover } : d));
+                }}
+                onPointerLeave={() => setDrawing((d) => (d ? { ...d, hover: null } : d))}
+              >
+                <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {drawing.points.length >= 2 && (
+                    <polygon
+                      points={polygonPointsAttr(drawing.points, 100, 100)}
+                      fill="rgb(59 130 246 / 0.2)"
+                      stroke="none"
+                    />
+                  )}
+                  <polyline
+                    points={polygonPointsAttr(
+                      drawing.hover ? [...drawing.points, drawing.hover] : drawing.points,
+                      100,
+                      100,
+                    )}
+                    fill="none"
+                    stroke="rgb(37 99 235)"
+                    strokeWidth={2}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+                {drawing.points.map((p, pi) => (
+                  <span
+                    key={pi}
+                    className={`pointer-events-none absolute rounded-full border-2 border-white shadow ${
+                      pi === 0 && drawing.points.length >= MIN_POLYGON_SIDES ? "h-4 w-4 bg-green-600" : "h-3 w-3 bg-blue-600"
+                    }`}
+                    style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, transform: "translate(-50%, -50%)" }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
         <p className="mt-2 text-xs text-neutral-500">
           Glisse chaque case pour la positionner, la poignée du coin pour la redimensionner. Pour un polygone,
-          glisse ses sommets (points ronds) pour lui donner la forme voulue.
+          glisse ses sommets (points ronds), ou trace-le directement avec « Tracer ».
         </p>
         {template && (
           <div className="mt-3 space-y-2">
@@ -527,6 +707,14 @@ export default function ThemeForm({
                     </button>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => startDrawing(i)}
+                  disabled={Boolean(drawing)}
+                  className="rounded-lg border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  ✎ Tracer
+                </button>
                 {slotShape(slot) === "polygon" && (
                   <label className="flex items-center gap-1.5 text-neutral-600">
                     Côtés

@@ -28,6 +28,11 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
     "{{ v.id }}": {{ pico_t | default: '' | json }}{% unless forloop.last %},{% endunless %}
   {%- endfor -%}
 }{%- endcapture -%}
+{%- capture pico_titles -%}{
+  {%- for v in product.variants -%}
+    {{ v.title | json }}: "{{ v.id }}"{% unless forloop.last %},{% endunless %}
+  {%- endfor -%}
+}{%- endcapture -%}
 {%- if pico_any -%}
   <style>
     .pico-design { margin: 1rem 0; }
@@ -35,9 +40,9 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
     .pico-design__link[hidden] { display: none; }
     .pico-design__status { margin: 0 0 0.5rem; font-size: 0.9em; }
   </style>
-  <div class="pico-design" data-templates="{{ pico_map | escape }}">
+  <div class="pico-design" data-templates="{{ pico_map | escape }}" data-variants="{{ pico_titles | escape }}">
     <p class="pico-design__status" hidden></p>
-    <button type="button" class="product-form__btn btn btn--md btn--primary pico-design__link">
+    <button type="button" class="btn btn--md btn--primary pico-design__link">
       <span>Débuter votre création</span>
     </button>
   </div>
@@ -59,22 +64,63 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
       var link = root.querySelector(".pico-design__link");
 
       var templates = {};
+      var variantsByTitle = {};
       try { templates = JSON.parse(root.dataset.templates); } catch (err) {}
+      try { variantsByTitle = JSON.parse(root.dataset.variants); } catch (err) {}
 
-      var forms = document.querySelectorAll('form[action*="/cart/add"]');
+      // Relus à chaque fois : certains thèmes remplacent ces éléments au
+      // changement de variante.
       function value(name, fallback) {
+        var forms = document.querySelectorAll('form[action*="/cart/add"]');
         for (var i = 0; i < forms.length; i++) {
           var el = forms[i].querySelector('[name="' + name + '"]');
           if (el && el.value) return el.value;
         }
         return fallback;
       }
+      // Quantité : le palier choisi dans Bundler (quantity breaks) s'il y en
+      // a un, sinon un champ « quantity » de la page, sinon 1.
+      function currentQuantity() {
+        var bundle = document.querySelector('input[name="bundle_quantity"]:checked');
+        if (bundle && parseInt(bundle.value, 10) > 0) return bundle.value;
+        var field = document.querySelector('[name="quantity"]');
+        if (field && parseInt(field.value, 10) > 0) return field.value;
+        return "1";
+      }
+      // Options cochées dans le sélecteur de variantes (« Recto-verso /
+      // Glacé deux côtés / … ») : lues directement, elles ne dépendent pas du
+      // script du thème, qui peut échouer à mettre la variante à jour.
+      function variantFromOptions() {
+        var picker = document.querySelector("variant-picker, variant-selects, variant-radios, [data-variant-picker]");
+        if (!picker) return "";
+        var values = [];
+        var fields = picker.querySelectorAll("input[type=radio]:checked, select");
+        for (var i = 0; i < fields.length; i++) values.push(fields[i].value);
+        return variantsByTitle[values.join(" / ")] || "";
+      }
+      // Variante choisie : le formulaire du panier s'il existe, sinon les
+      // options cochées, sinon le sélecteur (Aurora : JSON de la variante
+      // choisie), sinon ?variant= dans l'adresse, sinon la variante de départ.
+      function currentVariant() {
+        var fromForm = value("id", "");
+        if (fromForm) return fromForm;
+        var fromOptions = variantFromOptions();
+        if (fromOptions) return fromOptions;
+        var json = document.querySelector("[data-selected-variant-json]");
+        if (json) {
+          try {
+            var v = JSON.parse(json.textContent);
+            if (v && v.id) return String(v.id);
+          } catch (err) {}
+        }
+        return new URLSearchParams(location.search).get("variant") || FIRST_VARIANT;
+      }
       function say(text) {
         status.textContent = text;
         status.hidden = !text;
       }
       function currentTemplate() {
-        return templates[value("id", FIRST_VARIANT)] || "";
+        return templates[currentVariant()] || "";
       }
 
       // Le bouton suit la variante choisie : masqué si elle n'a pas de modèle.
@@ -84,12 +130,14 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
         if (ok && status.dataset.kind === "variante") { say(""); status.dataset.kind = ""; }
         if (!ok) { say("Cette variante n'est pas personnalisable."); status.dataset.kind = "variante"; }
       }
-      // Le thème met à jour le champ « id » après le changement de variante :
-      // on relit un instant plus tard.
-      for (var i = 0; i < forms.length; i++) {
-        forms[i].addEventListener("change", function () { setTimeout(refresh, 50); });
+      // Le thème met la variante à jour après le changement d'option, parfois
+      // après un aller-retour au serveur : on relit un peu plus tard.
+      function later() {
+        setTimeout(refresh, 50);
+        setTimeout(refresh, 1500);
       }
-      document.addEventListener("variant:change", function () { setTimeout(refresh, 50); });
+      document.addEventListener("change", later);
+      document.addEventListener("variant:change", later);
 
       // Aller : le modèle de la variante, la variante et la quantité choisies.
       link.addEventListener("click", function (e) {
@@ -99,8 +147,8 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
         var params = new URLSearchParams({
           template: template,
           cle: KEY,
-          variant: value("id", FIRST_VARIANT),
-          quantity: value("quantity", "1"),
+          variant: currentVariant(),
+          quantity: currentQuantity(),
           retour: SHOP + location.pathname,
           boutique: BOUTIQUE
         });
@@ -128,7 +176,7 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           items: [{
-            id: Number(back.get("variant") || value("id", FIRST_VARIANT)),
+            id: Number(back.get("variant") || currentVariant()),
             quantity: Math.max(1, parseInt(back.get("quantity"), 10) || 1),
             properties: { _design: design }
           }]

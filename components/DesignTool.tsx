@@ -306,6 +306,7 @@ export default function DesignTool({
           onChangeModel={publicTemplateId ? undefined : () => setPhase("pick")}
           grant={grant}
           brandScope={brandScope}
+          shopHome={shopHomeOf(shopify?.returnUrl ?? null)}
           onReview={() => setReviewOpen(true)}
         />
       )}
@@ -332,4 +333,17 @@ export default function DesignTool({
       )}
     </>
   );
+}
+
+/**
+ * Accueil de la boutique d'où vient le client : l'origine de l'adresse de
+ * retour, déjà validée côté serveur (app/design/page.tsx, isAllowedReturnUrl).
+ */
+function shopHomeOf(returnUrl: string | null): string | null {
+  if (!returnUrl) return null;
+  try {
+    return `${new URL(returnUrl).origin}/`;
+  } catch {
+    return null;
+  }
 }

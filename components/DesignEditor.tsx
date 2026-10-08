@@ -300,6 +300,7 @@ export default function DesignEditor({
   onChangeModel,
   grant,
   brandScope = "tool",
+  shopHome = null,
   onReview,
 }: {
   category: Category;
@@ -338,6 +339,9 @@ export default function DesignEditor({
   grant?: string;
   // Jeu de réglages dont vient le logo (voir DesignTool).
   brandScope?: string;
+  // Accueil de la boutique d'origine (client Shopify) : le logo y ramène.
+  // Absent, le logo mène au tableau de bord.
+  shopHome?: string | null;
   onReview: () => void;
 }) {
   const [activeSide, setActiveSide] = useState<"front" | "back">("front");
@@ -551,7 +555,7 @@ export default function DesignEditor({
       {/* Barre du haut */}
       <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/" className="shrink-0">
+          <Link href={shopHome ?? "/"} className="shrink-0" aria-label={shopHome ? "Retour à la boutique" : undefined}>
             {/* Logo réglable (module Paramètres) : celui de la boutique
                 d'origine, à défaut celui de l'Outil Shopify. Le fichier codé
                 en dur qui était ici ignorait les réglages — et c'est le SEUL

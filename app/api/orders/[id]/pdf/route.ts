@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { formDataFromSubmission, type DesignSubmission } from "@/lib/design/submission";
 import { renderPdfFromForm } from "@/lib/design/renderPdf";
+import { pdfDownloadName } from "@/lib/imposition/saved";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,6 +16,10 @@ export const maxDuration = 60;
  * Le FormData d'origine est reconstitué puis passé au MÊME chemin de rendu
  * que le téléchargement direct (renderPdfFromForm) : le fichier obtenu ici
  * est celui que le client a vu à l'écran.
+ *
+ * Nommé « <n° de commande>-<id du design>.pdf » (ex. PICO1454-b293e0b1-….pdf)
+ * quand le design appartient à une commande : le fichier se retrouve à
+ * partir de la commande, et inversement.
  *
  * Réservé aux utilisateurs connectés — c'est un écran interne.
  */
@@ -34,7 +39,11 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const admin = createAdminSupabaseClient();
   try {
     const formData = await formDataFromSubmission(admin, submission);
-    const { pdf, filename } = await renderPdfFromForm(admin, formData, submission.template_id);
+    const [{ pdf, filename: defaultName }, orderNumber] = await Promise.all([
+      renderPdfFromForm(admin, formData, submission.template_id),
+      orderNumberOf(admin, submission.id),
+    ]);
+    const filename = orderNumber ? pdfDownloadName(`${orderNumber}-${submission.id}`) : defaultName;
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
@@ -48,4 +57,21 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       { status: 500 }
     );
   }
+}
+
+// Numéro de la commande qui contient ce design (sans le « # » de Shopify),
+// ou null s'il n'a pas (encore) été commandé.
+async function orderNumberOf(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  designId: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from("order_items")
+    .select("orders(order_number)")
+    .eq("design_submission_id", designId)
+    .limit(1)
+    .maybeSingle();
+  const order = (data as { orders: { order_number: string | null } | null } | null)?.orders;
+  const number = order?.order_number?.replace(/^#/, "").trim();
+  return number || null;
 }

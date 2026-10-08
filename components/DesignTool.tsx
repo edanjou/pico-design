@@ -315,7 +315,6 @@ export default function DesignTool({
         <DesignReviewOverlay
           category={category}
           template={effectiveTemplate}
-          skus={skus}
           rotated={rotated}
           front={front}
           back={back}

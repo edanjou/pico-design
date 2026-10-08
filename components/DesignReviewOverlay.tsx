@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ImageSourceValue } from "@/components/ImageSourcePicker";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
-import type { Category, Sku, Template, TemplateMockup } from "@/lib/types";
+import type { Category, Template, TemplateMockup } from "@/lib/types";
+import { formatIn } from "@/lib/pdf/units";
 import { SpinnerIcon, XIcon } from "@/components/icons";
 import MockupGallery, { type MockupView } from "@/components/MockupGallery";
 import { layerImageFieldName, type DesignLayer } from "@/lib/design/layers";
@@ -92,7 +93,6 @@ interface ViewSpec {
 export default function DesignReviewOverlay({
   category,
   template,
-  skus,
   rotated,
   front,
   back,
@@ -109,7 +109,6 @@ export default function DesignReviewOverlay({
 }: {
   category: Category;
   template: Template;
-  skus: Sku[];
   rotated: boolean;
   front: ImageSourceValue;
   back: ImageSourceValue;
@@ -213,8 +212,6 @@ export default function DesignReviewOverlay({
       setOrdering(false);
     }
   }
-
-  const sku = skus.find((s) => s.id === template.sku_id) ?? null;
 
   useEffect(() => {
     if (!zoomed) return;
@@ -392,24 +389,38 @@ export default function DesignReviewOverlay({
         <div
           className={`mt-4 ${
             hasMockupColumn
-              ? "grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:items-start"
+              ? "grid gap-6 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:items-start"
               : "mx-auto max-w-xl"
           }`}
         >
-          <div className="order-2 space-y-6 lg:order-none">
-            <dl className="grid gap-4 rounded-2xl border border-border bg-surface-muted p-5 text-sm sm:grid-cols-3 lg:grid-cols-1">
+          {/* Détails du produit à gauche de l'aperçu dès que la largeur le
+              permet (sous l'aperçu sur téléphone). Pas de SKU : c'est une
+              information interne. */}
+          <div className="order-2 space-y-6 md:order-none">
+            <dl className="grid gap-4 rounded-2xl border border-border bg-surface-muted p-5 text-sm sm:grid-cols-2 md:grid-cols-1">
               <div>
-                <dt className="text-text-subtle">Modèle</dt>
+                <dt className="text-text-subtle">Produit</dt>
                 <dd className="mt-0.5 font-medium text-text">{template.name}</dd>
               </div>
               <div>
-                <dt className="text-text-subtle">SKU</dt>
-                <dd className="mt-0.5 font-medium text-text">{sku?.sku ?? "—"}</dd>
+                <dt className="text-text-subtle">Format</dt>
+                <dd className="mt-0.5 font-medium text-text">
+                  {formatIn(template.width_mm)} × {formatIn(template.height_mm)} po
+                  {template.two_sided ? " · Recto verso" : " · Recto"}
+                </dd>
               </div>
-              <div>
-                <dt className="text-text-subtle">Fichier PDF</dt>
-                <dd className="mt-0.5 break-all font-medium text-text">{pdf?.filename ?? (loading ? "…" : "—")}</dd>
-              </div>
+              {shopify ? (
+                <div>
+                  <dt className="text-text-subtle">Quantité</dt>
+                  <dd className="mt-0.5 font-medium text-text">{shopify.quantity}</dd>
+                </div>
+              ) : (
+                // Usage interne : le nom du fichier qu'on va télécharger.
+                <div>
+                  <dt className="text-text-subtle">Fichier PDF</dt>
+                  <dd className="mt-0.5 break-all font-medium text-text">{pdf?.filename ?? (loading ? "…" : "—")}</dd>
+                </div>
+              )}
             </dl>
 
             {loading && (
@@ -426,7 +437,7 @@ export default function DesignReviewOverlay({
                 et il repart au panier. Sinon (usage interne, ou lien public
                 sans contexte de commande), le PDF se télécharge comme avant. */}
             {shopify ? (
-              <div className="flex justify-center lg:justify-start">
+              <div className="flex justify-center md:justify-start">
                 <button
                   type="button"
                   onClick={handleOrder}
@@ -439,7 +450,7 @@ export default function DesignReviewOverlay({
               </div>
             ) : (
               pdf && (
-                <div className="flex justify-center lg:justify-start">
+                <div className="flex justify-center md:justify-start">
                   <a
                     href={pdf.url}
                     download={pdf.filename}
@@ -453,7 +464,7 @@ export default function DesignReviewOverlay({
           </div>
 
           {hasMockupColumn && (
-            <div className="order-1 flex items-start justify-center lg:order-none">
+            <div className="order-1 flex items-start justify-center md:order-none">
               <MockupGallery
                 views={views}
                 activeKey={activeMockupKey}

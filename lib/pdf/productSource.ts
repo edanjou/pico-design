@@ -89,6 +89,12 @@ export async function resolveProductImage(
       throw new Error("Impossible de télécharger le graphisme du thème.");
     }
     const overlayBuffer = Buffer.from(await overlayData.arrayBuffer());
+    // Fond facultatif : introuvable, le thème se rend quand même sur blanc.
+    let backgroundBuffer: Buffer | null = null;
+    if (theme.background_path) {
+      const { data: backgroundData } = await supabase.storage.from("overlays").download(theme.background_path);
+      if (backgroundData) backgroundBuffer = Buffer.from(await backgroundData.arrayBuffer());
+    }
 
     const { data: rawTemplate, error: templateError } = await supabase
       .from("templates")
@@ -113,7 +119,8 @@ export async function resolveProductImage(
       overlayBuffer,
       targetWidthPx,
       targetHeightPx,
-      input.themeSlotAdjust ?? []
+      input.themeSlotAdjust ?? [],
+      backgroundBuffer
     );
     return { buffer, contentType: "image/jpeg", filename: "theme.jpg" };
   }

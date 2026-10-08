@@ -865,12 +865,24 @@ export default function DesignEditor({
                         >
                           <div className="flex h-14 w-14 items-center justify-center rounded-md border border-border bg-surface-muted p-1.5">
                             {theme.overlayUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={theme.overlayUrl}
-                                alt=""
-                                className="max-h-full max-w-full object-contain"
-                              />
+                              // Fond (s'il y en a un) sous le graphisme, comme
+                              // sur la page imprimée.
+                              <span className="relative flex">
+                                {theme.backgroundUrl && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={theme.backgroundUrl}
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full"
+                                  />
+                                )}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={theme.overlayUrl}
+                                  alt=""
+                                  className="relative max-h-[2.75rem] max-w-[2.75rem] object-contain"
+                                />
+                              </span>
                             ) : (
                               <PaintbrushVerticalIcon className="h-6 w-6 text-text-subtle" />
                             )}
@@ -1317,6 +1329,9 @@ export default function DesignEditor({
                 themeSlots={side === "front" ? (selectedTheme?.slots ?? []) : []}
                 themeOverlayUrl={
                   side === "front" ? (selectedTheme?.overlayUrl ?? null) : null
+                }
+                themeBackgroundUrl={
+                  side === "front" ? (selectedTheme?.backgroundUrl ?? null) : null
                 }
                 // Case sélectionnée : emplacement de thème (recto) ou case de
                 // mosaïque (les deux côtés).

@@ -8,7 +8,8 @@ import UpdatingBadge from "@/components/UpdatingBadge";
 import { FilePenIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 import type { Template, Theme } from "@/lib/types";
 
-export type ThemeWithOverlayUrl = Theme & { overlayUrl: string | null };
+// URL signées du graphisme et du fond (null sans fond, voir Theme.background_path).
+export type ThemeWithOverlayUrl = Theme & { overlayUrl: string | null; backgroundUrl: string | null };
 
 type ModalState = { mode: "create" } | { mode: "edit"; theme: ThemeWithOverlayUrl } | null;
 

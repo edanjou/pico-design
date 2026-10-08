@@ -39,6 +39,25 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     update.overlay_path = overlayPath;
   }
 
+  // Fond facultatif (voir 0068_theme_background.sql) : un nouveau fichier le
+  // remplace, `removeBackground` le retire.
+  const backgroundFile = formData.get("background");
+  if (backgroundFile instanceof File && backgroundFile.size > 0) {
+    const backgroundPath = `themes/${params.id}/background-${backgroundFile.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("overlays")
+      .upload(backgroundPath, Buffer.from(await backgroundFile.arrayBuffer()), {
+        contentType: backgroundFile.type || "image/png",
+        upsert: true,
+      });
+    if (uploadError) {
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
+    update.background_path = backgroundPath;
+  } else if (formData.get("removeBackground") === "true") {
+    update.background_path = null;
+  }
+
   const { data, error } = await supabase
     .from("themes")
     .update(update)

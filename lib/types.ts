@@ -72,11 +72,25 @@ export type LogoShape = "logo" | "pastille";
 // DesignLayer (voir lib/design/layers.ts). La photo du client y est
 // recadrée en "cover" pour remplir exactement ce rectangle, avant que le
 // graphisme du thème (avec ses zones transparentes) ne soit posé par-dessus.
+//
+// `shape` découpe la photo dans ce rectangle : absente ou "rect", tout le
+// rectangle ; "ellipse", l'ovale inscrit (un cercle si le rectangle est
+// carré sur la page) ; "polygon", le polygone `points`, en ratios 0-1 du
+// rectangle de l'emplacement (voir lib/themeShapes.ts).
+export type ThemeSlotShape = "rect" | "ellipse" | "polygon";
+
+export interface ThemeSlotPoint {
+  x: number;
+  y: number;
+}
+
 export interface ThemeSlot {
   positionX: number;
   positionY: number;
   widthRatio: number;
   heightRatio: number;
+  shape?: ThemeSlotShape;
+  points?: ThemeSlotPoint[];
 }
 
 // Ajustement (position/zoom) apporté par le CLIENT à la photo d'un
@@ -99,6 +113,10 @@ export interface Theme {
   template_id: string;
   name: string;
   overlay_path: string;
+  // Image de fond facultative, posée SOUS les photos (voir
+  // supabase/migrations/0068_theme_background.sql) : visible là où il n'y a
+  // pas de photo. Sans fond, la page est blanche sous les photos.
+  background_path?: string | null;
   slots: ThemeSlot[];
   created_at: string;
   created_by: string | null;

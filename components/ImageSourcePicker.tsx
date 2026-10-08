@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { LogoShape, Template, ThemeSlot, ThemeSlotAdjust, VisualMode } from "@/lib/types";
 import type { LogoShadowSettings } from "@/lib/logoShadowSettings";
 import type { VisualWithUrl } from "@/components/VisualsGrid";
 import VisualPicker from "@/components/VisualPicker";
 import FileDropZone from "@/components/FileDropZone";
 import { mmToIn, inToMm } from "@/lib/pdf/units";
+import { slotClipPath, slotShape, slotSvgShape } from "@/lib/themeShapes";
 import { SpinnerIcon, UploadIcon } from "@/components/icons";
 import { fontOptionById } from "@/lib/design/fonts";
 import { maxTextSizeMmForTemplate, type DesignLayer, type ImageLayer } from "@/lib/design/layers";
@@ -526,6 +527,7 @@ export default function ImageSourcePicker({
   themeId = null,
   themeSlots = [],
   themeOverlayUrl = null,
+  themeBackgroundUrl = null,
   selectedThemeSlot = null,
   onSelectThemeSlot,
 }: {
@@ -597,6 +599,8 @@ export default function ImageSourcePicker({
   // Graphisme du thème (avec transparence) — affiché par-dessus les photos,
   // fixe, jamais déplaçable (comme frameOverlayUrl).
   themeOverlayUrl?: string | null;
+  // Image de fond du thème (facultative) — sous les photos, fixe.
+  themeBackgroundUrl?: string | null;
   // Emplacement actuellement sélectionné (glisser/zoomer l'affecte, lui et
   // pas les autres) — possédé par DesignPreview, comme selectedLayerId.
   selectedThemeSlot?: number | null;
@@ -1466,6 +1470,15 @@ export default function ImageSourcePicker({
                   sélectionné (cadre plein) capte le glisser (voir
                   handlePointerMove) ; le graphisme (avec transparence)
                   vient par-dessus toutes les photos, fixe. */}
+              {isTheme && themeBackgroundUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={themeBackgroundUrl}
+                  alt=""
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                />
+              )}
               {(isTheme || isMosaic) &&
                 boxSize.width > 0 &&
                 slots.map((slot, i) => {
@@ -1476,9 +1489,14 @@ export default function ImageSourcePicker({
                   const slotHeightPx = slot.heightRatio * boxSize.height;
                   const slotLeftPx = slot.positionX * boxSize.width - slotWidthPx / 2;
                   const slotTopPx = slot.positionY * boxSize.height - slotHeightPx / 2;
+                  // Emplacement en cercle ou en polygone (voir
+                  // lib/themeShapes.ts) : la photo est découpée en clip-path,
+                  // et le contour suit la forme (un SVG à côté : le clip-path
+                  // couperait aussi un `outline`).
+                  const shaped = slotShape(slot) !== "rect";
                   return (
+                    <Fragment key={i}>
                     <div
-                      key={i}
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         onSelectThemeSlot?.(i);
@@ -1511,8 +1529,9 @@ export default function ImageSourcePicker({
                         top: slotTopPx,
                         width: slotWidthPx,
                         height: slotHeightPx,
-                        outline: isSelected ? "2px solid var(--accent)" : "1px dashed rgba(0,0,0,0.25)",
+                        outline: shaped ? undefined : isSelected ? "2px solid var(--accent)" : "1px dashed rgba(0,0,0,0.25)",
                         outlineOffset: -1,
+                        clipPath: slotClipPath(slot),
                       }}
                     >
                       {url && (
@@ -1545,6 +1564,20 @@ export default function ImageSourcePicker({
                         />
                       )}
                     </div>
+                    {shaped && (
+                      <svg
+                        aria-hidden="true"
+                        className="pointer-events-none absolute overflow-visible"
+                        style={{ left: slotLeftPx, top: slotTopPx, width: slotWidthPx, height: slotHeightPx }}
+                        viewBox={`0 0 ${slotWidthPx} ${slotHeightPx}`}
+                        fill="none"
+                        stroke={isSelected ? "var(--accent)" : "rgba(0,0,0,0.25)"}
+                        strokeWidth={isSelected ? 2 : 1}
+                        strokeDasharray={isSelected ? undefined : "4 3"}
+                        dangerouslySetInnerHTML={{ __html: slotSvgShape(slot, slotWidthPx, slotHeightPx) }}
+                      />
+                    )}
+                    </Fragment>
                   );
                 })}
               {isTheme && themeOverlayUrl && (

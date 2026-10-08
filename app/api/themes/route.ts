@@ -37,6 +37,7 @@ export async function POST(request: Request) {
   const templateId = formData.get("templateId");
   const name = formData.get("name");
   const overlayFile = formData.get("overlay");
+  const backgroundFile = formData.get("background");
   const slots = parseThemeSlotsField(formData.get("slots"));
 
   if (typeof templateId !== "string" || !templateId) {
@@ -62,6 +63,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
+  // Fond facultatif (voir 0068_theme_background.sql) : la colonne n'est
+  // écrite que s'il y en a un, pour qu'un thème sans fond reste créable
+  // avant la migration.
+  let backgroundPath: string | null = null;
+  if (backgroundFile instanceof File && backgroundFile.size > 0) {
+    backgroundPath = `themes/${themeId}/background-${backgroundFile.name}`;
+    const { error: backgroundError } = await supabase.storage
+      .from("overlays")
+      .upload(backgroundPath, Buffer.from(await backgroundFile.arrayBuffer()), {
+        contentType: backgroundFile.type || "image/png",
+        upsert: true,
+      });
+    if (backgroundError) {
+      return NextResponse.json({ error: backgroundError.message }, { status: 500 });
+    }
+  }
+
   const { data, error } = await supabase
     .from("themes")
     .insert({
@@ -69,6 +87,7 @@ export async function POST(request: Request) {
       template_id: templateId,
       name: name.trim(),
       overlay_path: overlayPath,
+      ...(backgroundPath ? { background_path: backgroundPath } : {}),
       slots,
       created_by: user.id,
     })

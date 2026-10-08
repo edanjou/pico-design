@@ -13,8 +13,11 @@ export default async function ThemesPage() {
   const rows = (themes as Theme[]) ?? [];
   const withOverlayUrls = await Promise.all(
     rows.map(async (t) => {
-      const { data } = await supabase.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30);
-      return { ...t, overlayUrl: data?.signedUrl ?? null };
+      const [{ data }, background] = await Promise.all([
+        supabase.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30),
+        t.background_path ? supabase.storage.from("overlays").createSignedUrl(t.background_path, 60 * 30) : null,
+      ]);
+      return { ...t, overlayUrl: data?.signedUrl ?? null, backgroundUrl: background?.data?.signedUrl ?? null };
     })
   );
 

@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Template, ThemeSlot } from "@/lib/types";
+import type { Template, ThemeSlot, ThemeSlotShape } from "@/lib/types";
 import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import { CopyIcon, SpinnerIcon } from "@/components/icons";
 import FileDropZone from "@/components/FileDropZone";
+import {
+  MAX_POLYGON_SIDES,
+  MIN_POLYGON_SIDES,
+  polygonPointsAttr,
+  regularPolygon,
+  slotClipPath,
+  slotShape,
+} from "@/lib/themeShapes";
 
 const MIN_RATIO = 0.05;
 const MAX_SLOTS = 3;
@@ -40,8 +48,16 @@ function clampSlot(slot: ThemeSlot): ThemeSlot {
   const heightRatio = Math.min(1, Math.max(MIN_RATIO, slot.heightRatio));
   const positionX = Math.min(1 - widthRatio / 2, Math.max(widthRatio / 2, slot.positionX));
   const positionY = Math.min(1 - heightRatio / 2, Math.max(heightRatio / 2, slot.positionY));
-  return { positionX, positionY, widthRatio, heightRatio };
+  // La forme (et ses sommets, relatifs au rectangle) suit l'emplacement.
+  return { ...slot, positionX, positionY, widthRatio, heightRatio };
 }
+
+const SHAPE_OPTIONS: { value: ThemeSlotShape; label: string }[] = [
+  { value: "rect", label: "Rectangle" },
+  { value: "ellipse", label: "Cercle" },
+  { value: "polygon", label: "Polygone" },
+];
+const DEFAULT_POLYGON_SIDES = 6;
 
 /**
  * Éditeur d'un Thème (voir supabase/migrations/0046_themes.sql) : un modèle,
@@ -79,6 +95,11 @@ export default function ThemeForm({
   const [slots, setSlots] = useState<ThemeSlot[]>(() => theme?.slots ?? [defaultSlot(0, pageAspectRatio)]);
   const [overlayFile, setOverlayFile] = useState<File | null>(null);
   const [overlayPreview, setOverlayPreview] = useState<string | null>(null);
+  // Image de fond facultative (sous les photos) : un nouveau fichier, ou le
+  // retrait de celle enregistrée.
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
+  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
+  const [removeBackground, setRemoveBackground] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +118,18 @@ export default function ThemeForm({
 
   const overlayUrl = overlayPreview ?? currentOverlayUrl ?? null;
 
+  function handleBackgroundChange(f: File | null) {
+    setBackgroundFile(f);
+    if (f) setRemoveBackground(false);
+    setBackgroundPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return f ? URL.createObjectURL(f) : null;
+    });
+  }
+
+  const currentBackgroundUrl = removeBackground ? null : (theme?.backgroundUrl ?? null);
+  const backgroundUrl = backgroundPreview ?? currentBackgroundUrl;
+
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const [boxSize, setBoxSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -111,7 +144,9 @@ export default function ThemeForm({
 
   const dragRef = useRef<{
     index: number;
-    mode: "move" | "resize";
+    mode: "move" | "resize" | "vertex";
+    // Sommet déplacé (mode "vertex", polygone seulement).
+    pointIndex?: number;
     startX: number;
     startY: number;
     startSlot: ThemeSlot;
@@ -121,9 +156,9 @@ export default function ThemeForm({
     setSlots((prev) => prev.map((s, i) => (i === index ? clampSlot({ ...s, ...patch }) : s)));
   }
 
-  function beginDrag(e: React.PointerEvent<HTMLDivElement>, index: number, mode: "move" | "resize") {
+  function beginDrag(e: React.PointerEvent<HTMLDivElement>, index: number, mode: "move" | "resize" | "vertex", pointIndex?: number) {
     e.stopPropagation();
-    dragRef.current = { index, mode, startX: e.clientX, startY: e.clientY, startSlot: slots[index] };
+    dragRef.current = { index, mode, pointIndex, startX: e.clientX, startY: e.clientY, startSlot: slots[index] };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -132,7 +167,15 @@ export default function ThemeForm({
     if (!d || boxSize.width === 0 || boxSize.height === 0) return;
     const dx = (e.clientX - d.startX) / boxSize.width;
     const dy = (e.clientY - d.startY) / boxSize.height;
-    if (d.mode === "move") {
+    if (d.mode === "vertex") {
+      // Sommet en ratios du rectangle de l'emplacement, borné à celui-ci.
+      const points = d.startSlot.points ?? [];
+      const start = points[d.pointIndex ?? 0];
+      if (!start) return;
+      const x = Math.min(1, Math.max(0, start.x + dx / d.startSlot.widthRatio));
+      const y = Math.min(1, Math.max(0, start.y + dy / d.startSlot.heightRatio));
+      updateSlot(d.index, { points: points.map((p, i) => (i === d.pointIndex ? { x, y } : p)) });
+    } else if (d.mode === "move") {
       updateSlot(d.index, { positionX: d.startSlot.positionX + dx, positionY: d.startSlot.positionY + dy });
     } else {
       updateSlot(d.index, {
@@ -144,6 +187,23 @@ export default function ThemeForm({
 
   function endDrag() {
     dragRef.current = null;
+  }
+
+  // Forme d'un emplacement. Cercle et polygone partent d'un emplacement
+  // carré sur la page (largeur conservée) : un cercle, pas un ovale, tant
+  // qu'on ne l'étire pas.
+  function setSlotShape(index: number, shape: ThemeSlotShape) {
+    const slot = slots[index];
+    if (!slot || slotShape(slot) === shape) return;
+    const square = { heightRatio: slot.widthRatio * pageAspectRatio };
+    if (shape === "rect") updateSlot(index, { shape: undefined, points: undefined });
+    else if (shape === "ellipse") updateSlot(index, { ...square, shape: "ellipse", points: undefined });
+    else updateSlot(index, { ...square, shape: "polygon", points: regularPolygon(DEFAULT_POLYGON_SIDES) });
+  }
+
+  function setPolygonSides(index: number, sides: number) {
+    if (!Number.isFinite(sides)) return;
+    updateSlot(index, { shape: "polygon", points: regularPolygon(sides) });
   }
 
   function addSlot() {
@@ -187,6 +247,8 @@ export default function ThemeForm({
     formData.append("name", name);
     formData.append("slots", JSON.stringify(slots));
     if (overlayFile) formData.append("overlay", overlayFile);
+    if (backgroundFile) formData.append("background", backgroundFile);
+    else if (removeBackground) formData.append("removeBackground", "true");
 
     const res = await fetch(isEditing ? `/api/themes/${theme!.id}` : "/api/themes", {
       method: isEditing ? "PATCH" : "POST",
@@ -250,6 +312,43 @@ export default function ThemeForm({
       </div>
 
       <div>
+        <label className="block text-sm font-medium">
+          Image de fond (facultative){currentBackgroundUrl ? " — laisser vide pour garder l'actuelle" : ""}
+        </label>
+        <div className="mt-1">
+          <FileDropZone
+            file={backgroundFile}
+            onFileChange={handleBackgroundChange}
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            previewUrl={backgroundUrl}
+          />
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="text-xs text-neutral-500">
+            Posée sous les photos, étirée à la page : visible là où il n&apos;y a pas de photo.
+          </p>
+          {currentBackgroundUrl && !backgroundFile && (
+            <button
+              type="button"
+              onClick={() => setRemoveBackground(true)}
+              className="shrink-0 text-xs text-red-600 hover:underline"
+            >
+              Retirer le fond
+            </button>
+          )}
+          {removeBackground && !backgroundFile && (
+            <button
+              type="button"
+              onClick={() => setRemoveBackground(false)}
+              className="shrink-0 text-xs text-neutral-600 hover:underline"
+            >
+              Annuler le retrait
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div>
         <div className="mb-2 flex items-center justify-between">
           <label className="block text-sm font-medium">
             Emplacements photo ({slots.length}/{MAX_SLOTS})
@@ -271,6 +370,15 @@ export default function ThemeForm({
             className="relative mx-auto touch-none select-none overflow-hidden rounded-lg border border-neutral-200 bg-[repeating-conic-gradient(#e5e5e5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px]"
             style={{ aspectRatio: String(pageAspectRatio), maxWidth: 480 }}
           >
+            {backgroundUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={backgroundUrl}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute inset-0 h-full w-full object-fill"
+              />
+            )}
             {slots.map((slot, i) => (
               <div
                 key={i}
@@ -278,7 +386,9 @@ export default function ThemeForm({
                 onPointerMove={handleDragMove}
                 onPointerUp={endDrag}
                 onPointerLeave={endDrag}
-                className="absolute flex cursor-move items-center justify-center border-2 border-dashed border-blue-500 bg-blue-500/20 text-xs font-medium text-blue-700"
+                className={`absolute flex cursor-move items-center justify-center text-xs font-medium text-blue-700 ${
+                  slotShape(slot) === "rect" ? "border-2 border-dashed border-blue-500 bg-blue-500/20" : ""
+                }`}
                 style={{
                   left: `${(slot.positionX - slot.widthRatio / 2) * 100}%`,
                   top: `${(slot.positionY - slot.heightRatio / 2) * 100}%`,
@@ -286,7 +396,17 @@ export default function ThemeForm({
                   height: `${slot.heightRatio * 100}%`,
                 }}
               >
-                Photo {i + 1}
+                {/* Cercle ou polygone : la forme remplie (là où ira la photo)
+                    et son contour ; le rectangle pointillé fin rappelle la
+                    zone qu'on glisse et redimensionne. */}
+                {slotShape(slot) !== "rect" && (
+                  <>
+                    <div className="absolute inset-0 border border-dashed border-blue-400/60" />
+                    <div className="absolute inset-0 bg-blue-500/25" style={{ clipPath: slotClipPath(slot) }} />
+                    <SlotOutline slot={slot} />
+                  </>
+                )}
+                <span className="relative">Photo {i + 1}</span>
               </div>
             ))}
             {/* Boutons (dupliquer/retirer) et poignée de redimensionnement de
@@ -349,6 +469,18 @@ export default function ThemeForm({
                     </button>
                   )}
                 </div>
+                {slotShape(slot) === "polygon" &&
+                  slot.points!.map((p, pi) => (
+                    <div
+                      key={pi}
+                      onPointerDown={(e) => beginDrag(e, i, "vertex", pi)}
+                      onPointerMove={handleDragMove}
+                      onPointerUp={endDrag}
+                      title="Glisser pour déplacer ce sommet"
+                      className="pointer-events-auto absolute h-3 w-3 cursor-crosshair rounded-full border-2 border-white bg-blue-600 shadow"
+                      style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, transform: "translate(-50%, -50%)" }}
+                    />
+                  ))}
                 <div
                   onPointerDown={(e) => beginDrag(e, i, "resize")}
                   onPointerMove={handleDragMove}
@@ -370,8 +502,49 @@ export default function ThemeForm({
           </div>
         )}
         <p className="mt-2 text-xs text-neutral-500">
-          Glisse chaque case pour la positionner, la poignée du coin pour la redimensionner.
+          Glisse chaque case pour la positionner, la poignée du coin pour la redimensionner. Pour un polygone,
+          glisse ses sommets (points ronds) pour lui donner la forme voulue.
         </p>
+        {template && (
+          <div className="mt-3 space-y-2">
+            {slots.map((slot, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="w-16 font-medium text-neutral-700">Photo {i + 1}</span>
+                <div className="flex overflow-hidden rounded-lg border border-neutral-300">
+                  {SHAPE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setSlotShape(i, option.value)}
+                      aria-pressed={slotShape(slot) === option.value}
+                      className={`px-2.5 py-1 ${
+                        slotShape(slot) === option.value
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-neutral-700 hover:bg-neutral-50"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {slotShape(slot) === "polygon" && (
+                  <label className="flex items-center gap-1.5 text-neutral-600">
+                    Côtés
+                    <input
+                      type="number"
+                      min={MIN_POLYGON_SIDES}
+                      max={MAX_POLYGON_SIDES}
+                      value={slot.points!.length}
+                      onChange={(e) => setPolygonSides(i, parseInt(e.target.value, 10))}
+                      className="w-14 rounded border border-neutral-300 px-2 py-1"
+                    />
+                    <span className="text-neutral-400">(remet une forme régulière)</span>
+                  </label>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -387,5 +560,29 @@ export default function ThemeForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// Contour d'un emplacement en cercle ou en polygone, à la taille de son
+// rectangle (viewBox 0-100, étiré : la forme suit l'emplacement).
+function SlotOutline({ slot }: { slot: ThemeSlot }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      fill="none"
+      stroke="rgb(59 130 246)"
+      strokeWidth={2}
+      strokeDasharray="5 4"
+      vectorEffect="non-scaling-stroke"
+    >
+      {slotShape(slot) === "polygon" ? (
+        <polygon points={polygonPointsAttr(slot.points!, 100, 100)} vectorEffect="non-scaling-stroke" />
+      ) : (
+        <ellipse cx={50} cy={50} rx={50} ry={50} vectorEffect="non-scaling-stroke" />
+      )}
+    </svg>
   );
 }

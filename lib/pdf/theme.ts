@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { coverCropToBuffer } from "./crop";
 import type { ThemeSlot, ThemeSlotAdjust } from "../types";
+import { sanitizeSlotShape, slotShape, slotSvgShape } from "../themeShapes";
 
 const DEFAULT_ADJUST: ThemeSlotAdjust = { positionX: 0.5, positionY: 0.5, scale: 1 };
 
@@ -11,12 +12,14 @@ const DEFAULT_ADJUST: ThemeSlotAdjust = { positionX: 0.5, positionY: 0.5, scale:
  * relatifs à la page), déplacée/zoomée dans ce rectangle selon l'ajustement
  * du client (`slotAdjust[i]`, voir ThemeSlotAdjust — même mécanique que
  * positionX/positionY/scale pour un fond simple, voir coverCropToBuffer),
- * sur un fond blanc, puis le graphisme du thème (`overlayImage`, avec
- * transparence) est posé par-dessus — ses zones opaques (cadre, décor)
- * restent visibles, ses zones transparentes laissent voir les photos en
- * dessous.
+ * découpée selon la forme de l'emplacement (rectangle, ovale ou polygone,
+ * voir lib/themeShapes.ts), sur l'image de fond du thème (`backgroundImage`,
+ * étirée à la page) ou à défaut un fond blanc, puis le graphisme du thème
+ * (`overlayImage`, avec transparence) est posé par-dessus — ses zones
+ * opaques (cadre, décor) restent visibles, ses zones transparentes laissent
+ * voir les photos en dessous.
  *
- * Un emplacement sans photo (`slotFiles[i]` null) reste simplement blanc à
+ * Un emplacement sans photo (`slotFiles[i]` null) laisse voir le fond à
  * cet endroit — comme un fond absent ailleurs dans l'app (voir
  * coverCropToBuffer) : permet de prévisualiser/imprimer un thème même
  * partiellement rempli.
@@ -27,9 +30,18 @@ export async function composeThemeImage(
   overlayImage: Buffer,
   targetWidthPx: number,
   targetHeightPx: number,
-  slotAdjust: (ThemeSlotAdjust | null | undefined)[] = []
+  slotAdjust: (ThemeSlotAdjust | null | undefined)[] = [],
+  backgroundImage: Buffer | null = null
 ): Promise<Buffer> {
   const composites: sharp.OverlayOptions[] = [];
+
+  if (backgroundImage) {
+    const backgroundResized = await sharp(backgroundImage)
+      .resize(targetWidthPx, targetHeightPx, { fit: "fill" })
+      .png()
+      .toBuffer();
+    composites.push({ input: backgroundResized, left: 0, top: 0 });
+  }
 
   for (let i = 0; i < slots.length; i++) {
     const file = slotFiles[i] ?? null;
@@ -47,7 +59,7 @@ export async function composeThemeImage(
     const left = Math.min(Math.max(0, rawLeft), targetWidthPx - widthPx);
     const top = Math.min(Math.max(0, rawTop), targetHeightPx - heightPx);
     const cropped = await coverCropToBuffer(file, widthPx, heightPx, adjust.positionX, adjust.positionY, adjust.scale);
-    composites.push({ input: cropped, left, top });
+    composites.push({ input: await cutToShape(cropped, slot, widthPx, heightPx), left, top });
   }
 
   const overlayResized = await sharp(overlayImage)
@@ -64,6 +76,21 @@ export async function composeThemeImage(
     .toBuffer();
 }
 
+// Découpe la photo recadrée selon la forme de l'emplacement : un masque SVG
+// de la même taille, appliqué en « dest-in » (seule la partie couverte par
+// la forme est gardée, le reste devient transparent et laisse voir le fond).
+async function cutToShape(cropped: Buffer, slot: ThemeSlot, widthPx: number, heightPx: number): Promise<Buffer> {
+  if (slotShape(slot) === "rect") return cropped;
+  const mask = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}" viewBox="0 0 ${widthPx} ${heightPx}"><g fill="#fff">${slotSvgShape(slot, widthPx, heightPx)}</g></svg>`
+  );
+  return sharp(cropped)
+    .ensureAlpha()
+    .composite([{ input: mask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+}
+
 // Lit le champ "slots" envoyé par ThemeForm (un tableau JSON de 1 à 3
 // ThemeSlot) — retourne null si absent/invalide (jamais d'erreur bloquante,
 // mais un thème sans emplacement valide n'a pas de sens : les appelants
@@ -74,14 +101,14 @@ export function parseThemeSlotsField(raw: FormDataEntryValue | null): ThemeSlot[
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 3) return null;
-    const slots: ThemeSlot[] = parsed.map((s) => ({
+    const slots = parsed.map((s) => ({
       positionX: Number(s?.positionX),
       positionY: Number(s?.positionY),
       widthRatio: Number(s?.widthRatio),
       heightRatio: Number(s?.heightRatio),
     }));
     if (slots.some((s) => Object.values(s).some((n) => !Number.isFinite(n)))) return null;
-    return slots;
+    return slots.map((s, i): ThemeSlot => ({ ...s, ...sanitizeSlotShape(parsed[i] ?? {}) }));
   } catch {
     return null;
   }

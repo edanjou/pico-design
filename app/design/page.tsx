@@ -158,10 +158,17 @@ export default async function DesignPage({
   const themeRows = (themes as Theme[]) ?? [];
   const themesWithUrls: ThemeWithOverlayUrl[] = await Promise.all(
     themeRows.map(async (t) => {
-      const { data } = await supabase.storage
-        .from("overlays")
-        .createSignedUrl(t.overlay_path, 60 * 30);
-      return { ...t, overlayUrl: data?.signedUrl ?? null };
+      const [{ data }, background] = await Promise.all([
+        supabase.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30),
+        t.background_path
+          ? supabase.storage.from("overlays").createSignedUrl(t.background_path, 60 * 30)
+          : null,
+      ]);
+      return {
+        ...t,
+        overlayUrl: data?.signedUrl ?? null,
+        backgroundUrl: background?.data?.signedUrl ?? null,
+      };
     }),
   );
 
@@ -246,10 +253,17 @@ async function publicTool(
 
   const themesWithUrls: ThemeWithOverlayUrl[] = await Promise.all(
     ((themes as Theme[]) ?? []).map(async (t) => {
-      const { data } = await admin.storage
-        .from("overlays")
-        .createSignedUrl(t.overlay_path, 60 * 30);
-      return { ...t, overlayUrl: data?.signedUrl ?? null };
+      const [{ data }, background] = await Promise.all([
+        admin.storage.from("overlays").createSignedUrl(t.overlay_path, 60 * 30),
+        t.background_path
+          ? admin.storage.from("overlays").createSignedUrl(t.background_path, 60 * 30)
+          : null,
+      ]);
+      return {
+        ...t,
+        overlayUrl: data?.signedUrl ?? null,
+        backgroundUrl: background?.data?.signedUrl ?? null,
+      };
     }),
   );
 

@@ -14,16 +14,16 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
   Pico Design : bouton « Débuter votre création », et ajout automatique au panier au
   retour de l'outil.
 
-  Modèle Pico : métachamp custom.pico_template (id copié depuis
-  Pico Design > Modèles), lu d'abord sur la VARIANTE, puis sur le PRODUIT
-  à défaut. Une variante sans modèle (ni sur elle, ni sur le produit) n'est
+  Modèle Pico (id copié depuis Pico Design > Modèles), lu d'abord sur la
+  VARIANTE (métachamp custom.custom_pico_template, ou custom.pico_template),
+  puis sur le PRODUIT à défaut (custom.pico_template). Une variante sans modèle (ni sur elle, ni sur le produit) n'est
   pas personnalisable. Si aucune ne l'est, rien ne s'affiche.
 {%- endcomment -%}
 {%- assign pico_default = product.metafields.custom.pico_template.value -%}
 {%- assign pico_any = false -%}
 {%- capture pico_map -%}{
   {%- for v in product.variants -%}
-    {%- assign pico_t = v.metafields.custom.pico_template.value | default: pico_default -%}
+    {%- assign pico_t = v.metafields.custom.custom_pico_template.value | default: v.metafields.custom.pico_template.value | default: pico_default -%}
     {%- if pico_t != blank -%}{%- assign pico_any = true -%}{%- endif -%}
     "{{ v.id }}": {{ pico_t | default: '' | json }}{% unless forloop.last %},{% endunless %}
   {%- endfor -%}
@@ -270,7 +270,8 @@ export default async function AidePage() {
           </li>
           <li>
             Si le modèle change selon la variante : refaire la même définition dans Paramètres → Données
-            personnalisées → <strong>Variantes</strong> (même nom, même clé <K>custom.pico_template</K>).
+            personnalisées → <strong>Variantes</strong>, clé <K>custom.custom_pico_template</K> (ou{" "}
+            <K>custom.pico_template</K>), type Texte sur une ligne.
           </li>
         </Steps>
       </Section>

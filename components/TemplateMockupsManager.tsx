@@ -480,17 +480,21 @@ function FramingPanel({
           <button
             type="button"
             onClick={() =>
+              // Arrondi vers l'extérieur (le pour cent du dessous) : le visuel
+              // déborde un peu du produit, et le masque le recoupe. Arrondi au
+              // plus proche, il pouvait commencer quelques pixels en dedans et
+              // laisser un liseré blanc le long du rebord.
               onChange({
-                marginLeft: Math.round(maskBounds.left * 100) / 100,
-                marginRight: Math.round(maskBounds.right * 100) / 100,
-                marginTop: Math.round(maskBounds.top * 100) / 100,
-                marginBottom: Math.round(maskBounds.bottom * 100) / 100,
+                marginLeft: Math.floor(maskBounds.left * 100) / 100,
+                marginRight: Math.floor(maskBounds.right * 100) / 100,
+                marginTop: Math.floor(maskBounds.top * 100) / 100,
+                marginBottom: Math.floor(maskBounds.bottom * 100) / 100,
               })
             }
             className="mt-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] text-text-muted hover:text-text"
           >
-            Caler sur le produit ({Math.round(maskBounds.left * 100)} · {Math.round(maskBounds.right * 100)} ·{" "}
-            {Math.round(maskBounds.top * 100)} · {Math.round(maskBounds.bottom * 100)} %)
+            Caler sur le produit ({Math.floor(maskBounds.left * 100)} · {Math.floor(maskBounds.right * 100)} ·{" "}
+            {Math.floor(maskBounds.top * 100)} · {Math.floor(maskBounds.bottom * 100)} %)
           </button>
         )}
       </div>

@@ -201,7 +201,7 @@ export default function ThemesTable({
         <Modal
           title={modal.mode === "create" ? "Nouveau thème" : `Modifier « ${modal.theme.name} »`}
           onClose={() => setModal(null)}
-          wide
+          full
           busy={formBusy}
         >
           <ThemeForm

@@ -8,12 +8,15 @@ export default function Modal({
   onClose,
   children,
   wide,
+  full,
   busy,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
+  // Presque tout l'écran : pour un espace de travail (ex. l'éditeur de thème).
+  full?: boolean;
   // Affiche un voile "Enregistrement en cours..." par-dessus la modale et
   // bloque sa fermeture (Échap, clic sur le fond, bouton "X") — évite qu'un
   // envoi un peu long (traitement d'image, génération de PDF...) donne
@@ -33,8 +36,8 @@ export default function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={() => !busy && onClose()} />
       <div
-        className={`relative max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-xl ${
-          wide ? "max-w-4xl" : "max-w-lg"
+        className={`relative w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-xl ${
+          full ? "max-h-[96vh] max-w-[1600px]" : wide ? "max-h-[90vh] max-w-4xl" : "max-h-[90vh] max-w-lg"
         }`}
       >
         <div className="mb-4 flex items-center justify-between">

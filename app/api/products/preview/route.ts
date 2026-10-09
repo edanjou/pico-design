@@ -13,7 +13,7 @@ import { generateTemplatePreviewPng } from "@/lib/pdf/preview";
 import { loadLogoImage } from "@/lib/pdf/logo";
 import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
-import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
+import { parseThemeSlotAdjustField, themeSlotFilesFromForm } from "@/lib/pdf/theme";
 import type { LogoShape, Template, VisualMode } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
@@ -78,17 +78,14 @@ export async function POST(request: Request) {
         })
       : null;
   // Thème (Design Shopify) — voir resolveProductImage. `themeId` absent =
-  // pas de thème (comportement d'origine). Toujours 3 cases (le maximum,
-  // voir ThemeForm) : composeThemeImage ignore celles au-delà du nombre
+  // pas de thème (comportement d'origine). Toujours MAX_THEME_SLOTS cases
+  // (voir themeSlotFilesFromForm) : composeThemeImage ignore celles au-delà du nombre
   // réel d'emplacements du thème (`theme.slots.length`), pas besoin de
   // connaître ce nombre ici pour construire le tableau.
   const themeIdRaw = formData.get("themeId");
   const themeId =
     typeof themeIdRaw === "string" && themeIdRaw ? themeIdRaw : null;
-  const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
-    const f = formData.get(`themeSlot${i}`);
-    return f instanceof File && f.size > 0 ? f : null;
-  });
+  const themeSlotFiles = themeSlotFilesFromForm(formData);
   const mosaicCellAdjust = parseThemeSlotAdjustField(formData.get("mosaicCellAdjust"));
   const themeSlotAdjust = parseThemeSlotAdjustField(
     formData.get("themeSlotAdjust"),

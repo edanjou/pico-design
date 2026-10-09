@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { parseThemeSlotsField } from "@/lib/pdf/theme";
+import { MAX_THEME_SLOTS } from "@/lib/themeShapes";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
@@ -21,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (formData.has("slots")) {
     const slots = parseThemeSlotsField(formData.get("slots"));
     if (!slots) {
-      return NextResponse.json({ error: "Emplacements invalides (1 à 3 attendus)." }, { status: 400 });
+      return NextResponse.json({ error: `Emplacements invalides (1 à ${MAX_THEME_SLOTS} attendus).` }, { status: 400 });
     }
     update.slots = slots;
   }

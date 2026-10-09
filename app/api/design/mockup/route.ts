@@ -17,7 +17,7 @@ import { parsePositionValue } from "@/lib/pdf/crop";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { generateStationeryMockupPng } from "@/lib/pdf/stationeryMockup";
 import { resolveLayersFromForm } from "@/lib/pdf/layers";
-import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
+import { parseThemeSlotAdjustField, themeSlotFilesFromForm } from "@/lib/pdf/theme";
 import type { Template } from "@/lib/types";
 
 export const runtime = "nodejs"; // sharp a besoin du runtime Node, pas Edge.
@@ -140,10 +140,7 @@ export async function POST(request: Request) {
     side === "front" && typeof themeIdRaw === "string" && themeIdRaw
       ? themeIdRaw
       : null;
-  const themeSlotFiles: (File | null)[] = [0, 1, 2].map((i) => {
-    const f = formData.get(`themeSlot${i}`);
-    return f instanceof File && f.size > 0 ? f : null;
-  });
+  const themeSlotFiles = themeSlotFilesFromForm(formData);
   // Cadrage des cases de mosaïque du côté rendu (un seul côté par appel).
   const mosaicCellAdjust = parseThemeSlotAdjustField(formData.get("mosaicCellAdjust"));
   const themeSlotAdjust = parseThemeSlotAdjustField(

@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { coverCropToBuffer } from "./crop";
 import type { ThemeSlot, ThemeSlotAdjust } from "../types";
-import { sanitizeSlotShape, slotShape, slotSvgShape } from "../themeShapes";
+import { MAX_THEME_SLOTS, sanitizeSlotShape, slotShape, slotSvgShape } from "../themeShapes";
 
 const DEFAULT_ADJUST: ThemeSlotAdjust = { positionX: 0.5, positionY: 0.5, scale: 1 };
 
@@ -91,7 +91,16 @@ async function cutToShape(cropped: Buffer, slot: ThemeSlot, widthPx: number, hei
     .toBuffer();
 }
 
-// Lit le champ "slots" envoyé par ThemeForm (un tableau JSON de 1 à 3
+// Photos des emplacements envoyées par l'outil de design (`themeSlot0`,
+// `themeSlot1`…), dans l'ordre des emplacements ; null là où il n'y en a pas.
+export function themeSlotFilesFromForm(formData: FormData): (File | null)[] {
+  return Array.from({ length: MAX_THEME_SLOTS }, (_, i) => {
+    const f = formData.get(`themeSlot${i}`);
+    return f instanceof File && f.size > 0 ? f : null;
+  });
+}
+
+// Lit le champ "slots" envoyé par ThemeForm (un tableau JSON de 1 à MAX_THEME_SLOTS
 // ThemeSlot) — retourne null si absent/invalide (jamais d'erreur bloquante,
 // mais un thème sans emplacement valide n'a pas de sens : les appelants
 // traitent null comme une erreur de validation, contrairement aux champs
@@ -100,7 +109,7 @@ export function parseThemeSlotsField(raw: FormDataEntryValue | null): ThemeSlot[
   if (typeof raw !== "string" || !raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 3) return null;
+    if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > MAX_THEME_SLOTS) return null;
     const slots = parsed.map((s) => ({
       positionX: Number(s?.positionX),
       positionY: Number(s?.positionY),

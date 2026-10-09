@@ -6,7 +6,9 @@ import type { ThemeWithOverlayUrl } from "@/components/ThemesTable";
 import { CopyIcon, SpinnerIcon } from "@/components/icons";
 import FileDropZone from "@/components/FileDropZone";
 import {
+  MAX_POINTS,
   MAX_POLYGON_SIDES,
+  MAX_THEME_SLOTS,
   MIN_POLYGON_SIDES,
   polygonPointsAttr,
   regularPolygon,
@@ -15,7 +17,6 @@ import {
 } from "@/lib/themeShapes";
 
 const MIN_RATIO = 0.05;
-const MAX_SLOTS = 3;
 
 // Emplacement par défaut d'un nouveau slot — carré (même taille physique en
 // largeur et en hauteur, pas juste widthRatio === heightRatio : ces deux
@@ -62,7 +63,7 @@ const DEFAULT_POLYGON_SIDES = 6;
 /**
  * Éditeur d'un Thème (voir supabase/migrations/0046_themes.sql) : un modèle,
  * un graphisme (PNG avec transparence, affiché par-dessus les photos), et 1
- * à 3 emplacements (`slots`) que l'admin place/redimensionne directement sur
+ * N emplacements (`slots`) que l'admin place/redimensionne directement sur
  * un aperçu de la page du modèle, en glissant — même principe que les
  * calques de Design Shopify (voir ImageSourcePicker/LayerHandles), mais sans
  * rotation ici (positions/tailles seulement, suffisant pour un cadre photo).
@@ -245,7 +246,7 @@ export default function ThemeForm({
     });
     setSlots((prev) =>
       target === "new"
-        ? prev.length >= MAX_SLOTS
+        ? prev.length >= MAX_THEME_SLOTS
           ? prev
           : [...prev, slot]
         : prev.map((s, i) => (i === target ? slot : s)),
@@ -280,7 +281,7 @@ export default function ThemeForm({
         return;
       }
     }
-    if (drawing.points.length >= 24) return;
+    if (drawing.points.length >= MAX_POINTS) return;
     setDrawing({ ...drawing, points: [...drawing.points, point] });
   }
 
@@ -307,7 +308,7 @@ export default function ThemeForm({
   }, [drawing]);
 
   function addSlot() {
-    setSlots((prev) => (prev.length >= MAX_SLOTS ? prev : [...prev, defaultSlot(prev.length, pageAspectRatio)]));
+    setSlots((prev) => (prev.length >= MAX_THEME_SLOTS ? prev : [...prev, defaultSlot(prev.length, pageAspectRatio)]));
   }
 
   function removeSlot(index: number) {
@@ -322,7 +323,7 @@ export default function ThemeForm({
   // qu'on ne le glisse pas.
   function duplicateSlot(index: number) {
     setSlots((prev) => {
-      if (prev.length >= MAX_SLOTS) return prev;
+      if (prev.length >= MAX_THEME_SLOTS) return prev;
       const source = prev[index];
       const offset = 0.04;
       return [...prev, clampSlot({ ...source, positionX: source.positionX + offset, positionY: source.positionY + offset })];
@@ -365,113 +366,180 @@ export default function ThemeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium">Nom du thème</label>
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ex. Cadre Noël"
-          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium">Modèle</label>
-        <select
-          required
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value)}
-          className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
-        >
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium">
-          Graphisme (PNG avec transparence){currentOverlayUrl ? " — laisser vide pour garder l'actuel" : ""}
-        </label>
-        <div className="mt-1">
-          <FileDropZone
-            file={overlayFile}
-            onFileChange={handleOverlayChange}
-            accept="image/png,image/svg+xml"
-            previewUrl={overlayPreview ?? currentOverlayUrl ?? null}
+    <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium">Nom du thème</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex. Cadre Noël"
+            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
           />
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
-          Zones transparentes = là où les photos du client apparaîtront ; le reste (cadre, décor) reste
-          visible par-dessus.
-        </p>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium">
-          Image de fond (facultative){currentBackgroundUrl ? " — laisser vide pour garder l'actuelle" : ""}
-        </label>
-        <div className="mt-1">
-          <FileDropZone
-            file={backgroundFile}
-            onFileChange={handleBackgroundChange}
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
-            previewUrl={backgroundUrl}
-          />
+        <div>
+          <label className="block text-sm font-medium">Modèle</label>
+          <select
+            required
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2"
+          >
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <p className="text-xs text-neutral-500">
-            Posée sous les photos, étirée à la page : visible là où il n&apos;y a pas de photo.
-          </p>
-          {currentBackgroundUrl && !backgroundFile && (
-            <button
-              type="button"
-              onClick={() => setRemoveBackground(true)}
-              className="shrink-0 text-xs text-red-600 hover:underline"
-            >
-              Retirer le fond
-            </button>
-          )}
-          {removeBackground && !backgroundFile && (
-            <button
-              type="button"
-              onClick={() => setRemoveBackground(false)}
-              className="shrink-0 text-xs text-neutral-600 hover:underline"
-            >
-              Annuler le retrait
-            </button>
-          )}
-        </div>
-      </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div>
           <label className="block text-sm font-medium">
-            Emplacements photo ({slots.length}/{MAX_SLOTS})
+            Graphisme (PNG avec transparence){currentOverlayUrl ? " — laisser vide pour garder l'actuel" : ""}
           </label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => startDrawing("new")}
-              disabled={slots.length >= MAX_SLOTS || !template || Boolean(drawing)}
-              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-            >
-              ✎ Tracer un emplacement
-            </button>
-            <button
-              type="button"
-              onClick={addSlot}
-              disabled={slots.length >= MAX_SLOTS || Boolean(drawing)}
-              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-            >
-              + Ajouter un emplacement
-            </button>
+          <div className="mt-1">
+            <FileDropZone
+              file={overlayFile}
+              onFileChange={handleOverlayChange}
+              accept="image/png,image/svg+xml"
+              previewUrl={overlayPreview ?? currentOverlayUrl ?? null}
+            />
+          </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            Zones transparentes = là où les photos du client apparaîtront ; le reste (cadre, décor) reste
+            visible par-dessus.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">
+            Image de fond (facultative){currentBackgroundUrl ? " — laisser vide pour garder l'actuelle" : ""}
+          </label>
+          <div className="mt-1">
+            <FileDropZone
+              file={backgroundFile}
+              onFileChange={handleBackgroundChange}
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              previewUrl={backgroundUrl}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <p className="text-xs text-neutral-500">
+              Posée sous les photos, étirée à la page : visible là où il n&apos;y a pas de photo.
+            </p>
+            {currentBackgroundUrl && !backgroundFile && (
+              <button
+                type="button"
+                onClick={() => setRemoveBackground(true)}
+                className="shrink-0 text-xs text-red-600 hover:underline"
+              >
+                Retirer le fond
+              </button>
+            )}
+            {removeBackground && !backgroundFile && (
+              <button
+                type="button"
+                onClick={() => setRemoveBackground(false)}
+                className="shrink-0 text-xs text-neutral-600 hover:underline"
+              >
+                Annuler le retrait
+              </button>
+            )}
           </div>
         </div>
+
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <label className="block text-sm font-medium">
+              Emplacements photo ({slots.length})
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => startDrawing("new")}
+                disabled={slots.length >= MAX_THEME_SLOTS || !template || Boolean(drawing)}
+                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+              >
+                ✎ Tracer un emplacement
+              </button>
+              <button
+                type="button"
+                onClick={addSlot}
+                disabled={slots.length >= MAX_THEME_SLOTS || Boolean(drawing)}
+                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+              >
+                + Ajouter un emplacement
+              </button>
+            </div>
+          </div>
+          {template && (
+            <div className="mt-3 space-y-2">
+              {slots.map((slot, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="w-16 font-medium text-neutral-700">Photo {i + 1}</span>
+                  <div className="flex overflow-hidden rounded-lg border border-neutral-300">
+                    {SHAPE_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setSlotShape(i, option.value)}
+                        aria-pressed={slotShape(slot) === option.value}
+                        className={`px-2.5 py-1 ${
+                          slotShape(slot) === option.value
+                            ? "bg-blue-600 text-white"
+                            : "bg-white text-neutral-700 hover:bg-neutral-50"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => startDrawing(i)}
+                    disabled={Boolean(drawing)}
+                    className="rounded-lg border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                  >
+                    ✎ Tracer
+                  </button>
+                  {slotShape(slot) === "polygon" && (
+                    <label className="flex items-center gap-1.5 text-neutral-600">
+                      Côtés
+                      <input
+                        type="number"
+                        min={MIN_POLYGON_SIDES}
+                        max={MAX_POLYGON_SIDES}
+                        value={slot.points!.length}
+                        onChange={(e) => setPolygonSides(i, parseInt(e.target.value, 10))}
+                        className="w-14 rounded border border-neutral-300 px-2 py-1"
+                      />
+                      <span className="text-neutral-400">(remet une forme régulière)</span>
+                    </label>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-60"
+          >
+            {loading && <SpinnerIcon className="h-4 w-4" />}
+            {isEditing ? "Enregistrer" : "Créer le thème"}
+          </button>
+        </div>
+      </div>
+
+      {/* Aperçu de travail : toute la place restante, à la hauteur de l'écran. */}
+      <div className="lg:sticky lg:top-0 lg:self-start">
         {drawing && (
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
             <span>
@@ -504,12 +572,28 @@ export default function ThemeForm({
           <div
             ref={previewBoxRef}
             className="relative mx-auto touch-none select-none overflow-hidden rounded-lg border border-neutral-200 bg-[repeating-conic-gradient(#e5e5e5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px]"
-            style={{ aspectRatio: String(pageAspectRatio), maxWidth: 480 }}
+            style={{
+              aspectRatio: String(pageAspectRatio),
+              // Aussi grand que possible sans dépasser la hauteur de la fenêtre.
+              width: `min(100%, calc((96vh - 10rem) * ${pageAspectRatio}))`,
+            }}
           >
             {backgroundUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={backgroundUrl}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute inset-0 h-full w-full object-fill"
+              />
+            )}
+            {/* Graphisme SOUS les emplacements, ici seulement : on voit et on attrape
+                les cases pendant le travail. Le rendu, lui, pose toujours le
+                graphisme par-dessus les photos (voir lib/pdf/theme.ts). */}
+            {overlayUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={overlayUrl}
                 alt=""
                 draggable={false}
                 className="pointer-events-none absolute inset-0 h-full w-full object-fill"
@@ -569,7 +653,7 @@ export default function ThemeForm({
                 }}
               >
                 <div className="pointer-events-auto absolute right-1 top-1 flex gap-1">
-                  {slots.length < MAX_SLOTS && (
+                  {slots.length < MAX_THEME_SLOTS && (
                     <button
                       type="button"
                       // `onPointerDown` doit aussi être arrêté ici, pas
@@ -626,15 +710,6 @@ export default function ThemeForm({
                 />
               </div>
             ))}
-            {overlayUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={overlayUrl}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute inset-0 h-full w-full object-fill opacity-70"
-              />
-            )}
             {/* Tracé en cours : une couche au-dessus de tout, qui reçoit les
                 clics (les emplacements dessous ne bougent pas pendant ce
                 temps). */}
@@ -685,67 +760,6 @@ export default function ThemeForm({
           Glisse chaque case pour la positionner, la poignée du coin pour la redimensionner. Pour un polygone,
           glisse ses sommets (points ronds), ou trace-le directement avec « Tracer ».
         </p>
-        {template && (
-          <div className="mt-3 space-y-2">
-            {slots.map((slot, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="w-16 font-medium text-neutral-700">Photo {i + 1}</span>
-                <div className="flex overflow-hidden rounded-lg border border-neutral-300">
-                  {SHAPE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setSlotShape(i, option.value)}
-                      aria-pressed={slotShape(slot) === option.value}
-                      className={`px-2.5 py-1 ${
-                        slotShape(slot) === option.value
-                          ? "bg-blue-600 text-white"
-                          : "bg-white text-neutral-700 hover:bg-neutral-50"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => startDrawing(i)}
-                  disabled={Boolean(drawing)}
-                  className="rounded-lg border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-                >
-                  ✎ Tracer
-                </button>
-                {slotShape(slot) === "polygon" && (
-                  <label className="flex items-center gap-1.5 text-neutral-600">
-                    Côtés
-                    <input
-                      type="number"
-                      min={MIN_POLYGON_SIDES}
-                      max={MAX_POLYGON_SIDES}
-                      value={slot.points!.length}
-                      onChange={(e) => setPolygonSides(i, parseInt(e.target.value, 10))}
-                      className="w-14 rounded border border-neutral-300 px-2 py-1"
-                    />
-                    <span className="text-neutral-400">(remet une forme régulière)</span>
-                  </label>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <div className="flex justify-end gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-pico-maroon px-4 py-2 text-sm font-medium text-white hover:bg-pico-maroon-dark disabled:opacity-60"
-        >
-          {loading && <SpinnerIcon className="h-4 w-4" />}
-          {isEditing ? "Enregistrer" : "Créer le thème"}
-        </button>
       </div>
     </form>
   );

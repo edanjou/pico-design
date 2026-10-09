@@ -12,9 +12,14 @@ import type { ThemeSlot, ThemeSlotPoint, ThemeSlotShape } from "@/lib/types";
  * déplace la forme avec lui.
  */
 
+// Nombre d'emplacements d'un thème : autant qu'on veut, borné seulement
+// pour garder les envois raisonnables (une photo par emplacement).
+export const MAX_THEME_SLOTS = 50;
+
 export const MIN_POLYGON_SIDES = 3;
-export const MAX_POLYGON_SIDES = 12;
-const MAX_POINTS = 24;
+// Même limite pour un polygone régulier (« Côtés ») et pour un tracé au clic.
+export const MAX_POLYGON_SIDES = 50;
+export const MAX_POINTS = 50;
 
 /** Polygone régulier inscrit dans le rectangle, premier sommet en haut. */
 export function regularPolygon(sides: number): ThemeSlotPoint[] {

@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { parseThemeSlotsField } from "@/lib/pdf/theme";
+import { MAX_THEME_SLOTS } from "@/lib/themeShapes";
 
 /**
  * CRUD des Thèmes (voir supabase/migrations/0046_themes.sql et
  * lib/pdf/theme.ts) — un graphisme préfait, attribué à un modèle précis,
- * affiché par-dessus 1 à 3 photos du client. `GET` optionnellement filtré
+ * affiché par-dessus les photos du client. `GET` optionnellement filtré
  * par `templateId` (utilisé par Design Shopify, qui n'a besoin que des
  * thèmes du modèle en cours, voir DesignTypePicker).
  */
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Graphisme manquant." }, { status: 400 });
   }
   if (!slots) {
-    return NextResponse.json({ error: "Emplacements invalides (1 à 3 attendus)." }, { status: 400 });
+    return NextResponse.json({ error: `Emplacements invalides (1 à ${MAX_THEME_SLOTS} attendus).` }, { status: 400 });
   }
 
   const themeId = randomUUID();

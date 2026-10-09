@@ -31,7 +31,7 @@ export interface ResolveProductImageInput {
   // cases — voir composeMosaicImage. Absent = photos centrées.
   mosaicCellAdjust?: ThemeSlotAdjust[] | null;
   // Thème (Design Shopify, étape « Type de design ») : un graphisme préfait
-  // attribué au modèle, avec 1 à 3 emplacements où les photos du client sont
+  // attribué au modèle, avec un ou plusieurs emplacements où les photos du client sont
   // recadrées — voir composeThemeImage. Prioritaire sur mosaic/file/visualId.
   themeId?: string | null;
   themeSlotFiles?: (File | null)[] | null;

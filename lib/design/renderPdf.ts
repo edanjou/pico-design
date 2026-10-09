@@ -7,7 +7,7 @@ import { mmToPx } from "@/lib/pdf/units";
 import { applyOrientation } from "@/lib/pdf/orientation";
 import { pdfDownloadName } from "@/lib/imposition/saved";
 import { resolveLayersFromForm } from "@/lib/pdf/layers";
-import { parseThemeSlotAdjustField } from "@/lib/pdf/theme";
+import { parseThemeSlotAdjustField, themeSlotFilesFromForm } from "@/lib/pdf/theme";
 import type { Template } from "@/lib/types";
 
 type Db = ReturnType<typeof createAdminSupabaseClient>;
@@ -66,12 +66,6 @@ function mosaicFromForm(formData: FormData, side: "front" | "back"): (File | nul
 function themeIdFromForm(formData: FormData): string | null {
   const raw = formData.get("themeId");
   return typeof raw === "string" && raw ? raw : null;
-}
-function themeSlotFilesFromForm(formData: FormData): (File | null)[] {
-  return [0, 1, 2].map((i) => {
-    const f = formData.get(`themeSlot${i}`);
-    return f instanceof File && f.size > 0 ? f : null;
-  });
 }
 
 export interface RenderedPdf {

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/server";
-import { designIdOfLineItem, shopDomainOfOrder, verifyWebhookSignature, type ShopifyOrder } from "@/lib/shopify";
+import {
+  designIdOfLineItem,
+  productIdOfLineItem,
+  shopDomainOfOrder,
+  verifyWebhookSignature,
+  type ShopifyOrder,
+} from "@/lib/shopify";
 
 export const runtime = "nodejs";
 
@@ -70,6 +76,7 @@ export async function POST(request: Request) {
   const items = (order.line_items ?? []).map((item) => ({
     order_id: orderId,
     design_submission_id: designIdOfLineItem(item),
+    product_id: productIdOfLineItem(item),
     title: item.title ?? null,
     quantity: item.quantity ?? 1,
   }));
@@ -77,19 +84,34 @@ export async function POST(request: Request) {
   if (items.length > 0) {
     // Un design référencé mais absent (lien forgé, base réinitialisée) ferait
     // échouer la clé étrangère : on ne garde que les identifiants existants.
-    const referenced = items.map((i) => i.design_submission_id).filter((v): v is string => Boolean(v));
-    const known = new Set<string>();
-    if (referenced.length > 0) {
-      const { data: rows } = await admin.from("design_submissions").select("id").in("id", referenced);
-      for (const row of (rows as { id: string }[]) ?? []) known.add(row.id);
-    }
-    const { error: itemsError } = await admin
-      .from("order_items")
-      .insert(items.map((i) => ({ ...i, design_submission_id: i.design_submission_id && known.has(i.design_submission_id) ? i.design_submission_id : null })));
+    // Même chose pour un produit Pico (supprimé, ou id mal collé dans Shopify).
+    const known = await existingIds(admin, "design_submissions", items.map((i) => i.design_submission_id));
+    const knownProducts = await existingIds(admin, "products", items.map((i) => i.product_id));
+    const { error: itemsError } = await admin.from("order_items").insert(
+      items.map((i) => ({
+        ...i,
+        design_submission_id: i.design_submission_id && known.has(i.design_submission_id) ? i.design_submission_id : null,
+        product_id: i.product_id && knownProducts.has(i.product_id) ? i.product_id : null,
+      }))
+    );
     if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, lignes: items.length });
+}
+
+// Ceux des identifiants donnés qui existent dans la table.
+async function existingIds(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  table: "design_submissions" | "products",
+  ids: (string | null)[]
+): Promise<Set<string>> {
+  const referenced = ids.filter((v): v is string => Boolean(v));
+  const known = new Set<string>();
+  if (referenced.length === 0) return known;
+  const { data: rows } = await admin.from(table).select("id").in("id", referenced);
+  for (const row of (rows as { id: string }[]) ?? []) known.add(row.id);
+  return known;
 }
 
 /**

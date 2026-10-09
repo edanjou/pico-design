@@ -11,7 +11,7 @@ export default async function OrdersPage() {
 
   const { data } = await supabase
     .from("orders")
-    .select("*, order_items(id, title, quantity, design_submission_id)")
+    .select("*, order_items(id, title, quantity, design_submission_id, product_id)")
     .order("created_at", { ascending: false })
     .limit(200);
 

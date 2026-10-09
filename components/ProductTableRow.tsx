@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Product } from "@/lib/types";
 import { formatIn } from "@/lib/pdf/units";
-import { DownloadIcon, FilePenIcon, LayersIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, DownloadIcon, FilePenIcon, LayersIcon, ShopifyIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
 
 export default function ProductTableRow({
   product,
@@ -33,6 +33,20 @@ export default function ProductTableRow({
   onRefresh: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  // L'identifiant à coller dans le produit Shopify (champ « Produit Pico ») pour
+  // vendre ce produit tel quel : la commande arrive avec son PDF.
+  async function handleCopyId() {
+    try {
+      await navigator.clipboard.writeText(product.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 1500);
+    } catch {
+      // Presse-papiers indisponible (permissions navigateur) : l'id reste
+      // lisible dans l'infobulle du bouton.
+    }
+  }
 
   async function handleDelete() {
     if (!confirm(`Supprimer le produit « ${product.name} » ?`)) return;
@@ -106,6 +120,14 @@ export default function ProductTableRow({
               <LayersIcon className="h-4 w-4" />
             </button>
           )}
+          <button
+            onClick={handleCopyId}
+            title={copiedId ? "Id copié" : `Copier l'id pour Shopify (${product.id})`}
+            aria-label="Copier l'id pour Shopify"
+            className="inline-flex rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-pico-black"
+          >
+            {copiedId ? <CheckIcon className="h-4 w-4 text-green-600" /> : <ShopifyIcon className="h-4 w-4" />}
+          </button>
           <button
             onClick={() => onEdit(product)}
             title="Modifier"

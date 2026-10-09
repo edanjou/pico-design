@@ -194,6 +194,34 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
   </script>
 {%- endif -%}`;
 
+const READY_PRODUCT_BLOCK = String.raw`{%- comment -%}
+  Pico Design : produit déjà fait, vendu tel quel (sans passer par l'outil).
+  Ajoute l'id du produit Pico (métachamp custom.pico_product, copié depuis
+  Pico Design > Produits) à l'article mis au panier : la commande arrive dans
+  Pico Design avec le PDF du produit. Sans id, ce bloc ne fait rien.
+{%- endcomment -%}
+{%- assign pico_product = product.metafields.custom.pico_product.value -%}
+{%- if pico_product != blank -%}
+<script>
+  (function () {
+    var ID = {{ pico_product | json }};
+    function apply() {
+      document.querySelectorAll('form[action*="/cart/add"]').forEach(function (form) {
+        if (form.querySelector('input[name="properties[_pico_product]"]')) return;
+        var input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "properties[_pico_product]";
+        input.value = ID;
+        form.appendChild(input);
+      });
+    }
+    apply();
+    // Certains thèmes recréent le formulaire (changement de variante) : on repasse.
+    new MutationObserver(apply).observe(document.body, { childList: true, subtree: true });
+  })();
+</script>
+{%- endif -%}`;
+
 const AURORA_CART_LINES = String.raw`{% assign pico_design = item.properties['_design'] %}
 {% if pico_design != blank %}
   <img src='${SITE}/api/design/preview/{{ pico_design }}' alt='Aperçu de ton design' class='cart-item__image shape__target-image' style='object-fit: contain !important'>
@@ -256,6 +284,7 @@ const SECTIONS = [
   { id: "panier", title: "5. Aperçu dans le panier" },
   { id: "commandes", title: "6. Recevoir les commandes" },
   { id: "habillage", title: "7. Habillage (facultatif)" },
+  { id: "produit-fait", title: "8. Produit déjà fait" },
   { id: "tester", title: "Tester" },
   { id: "depannage", title: "Dépannage" },
 ];
@@ -479,6 +508,40 @@ export default async function AidePage() {
           </Link>
           , l&apos;onglet de la boutique règle aussi le logo, le favicon, les couleurs et les polices de l&apos;Outil
           Shopify pour ses clients. Sans réglage, l&apos;outil prend l&apos;habillage par défaut.
+        </p>
+      </Section>
+
+      <Section id="produit-fait" title="8. Vendre un produit déjà fait, sans personnalisation">
+        <p>
+          Un produit de la page{" "}
+          <Link href="/products" className="text-primary underline">
+            Produits
+          </Link>{" "}
+          peut se vendre tel quel : le client l&apos;achète sans passer par l&apos;outil, et la commande arrive dans
+          Pico Design avec le PDF du produit.
+        </p>
+        <Steps>
+          <li>
+            Shopify : Paramètres → Données personnalisées → Produits → Ajouter une définition. Nom :{" "}
+            <K>Produit Pico</K>, espace de nom et clé : <K>custom.pico_product</K>, type{" "}
+            <strong>Texte sur une ligne</strong>. Une seule fois.
+          </li>
+          <li>
+            Dans Pico Design → Produits, sur la ligne du produit, le bouton <strong>Copier l&apos;id pour Shopify</strong>{" "}
+            (icône Shopify) copie son identifiant.
+          </li>
+          <li>
+            Dans Shopify, le coller dans le champ <strong>Produit Pico</strong> de la fiche produit. Laisser{" "}
+            <strong>Modèle Pico</strong> vide : le client ne doit pas personnaliser ce produit.
+          </li>
+          <li>
+            Thèmes → Personnaliser → modèle de page Produit → Ajouter un bloc → <strong>Liquid personnalisé</strong> →
+            coller le code ci-dessous, puis Enregistrer. Une seule fois : le bloc ne fait rien sur un produit sans id.
+          </li>
+        </Steps>
+        <CodeBlock label="Bloc Liquid personnalisé — produit déjà fait" code={READY_PRODUCT_BLOCK} />
+        <p>
+          Les webhooks de commande (étape 6) suffisent : dans Commandes, la ligne propose le PDF du produit.
         </p>
       </Section>
 

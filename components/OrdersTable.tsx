@@ -20,6 +20,8 @@ export interface OrderRow {
     title: string | null;
     quantity: number;
     design_submission_id: string | null;
+    // Produit Pico vendu tel quel (voir 0070_order_items_product.sql).
+    product_id: string | null;
   }[];
 }
 
@@ -459,9 +461,14 @@ export default function OrdersTable({
                         <span className="text-text-muted">
                           {item.quantity} × {item.title ?? "Article"}
                         </span>
-                        {item.design_submission_id ? (
+                        {item.design_submission_id || item.product_id ? (
                           <a
-                            href={`/api/orders/${item.design_submission_id}/pdf`}
+                            // Design du client, sinon le PDF déjà fabriqué du produit Pico.
+                            href={
+                              item.design_submission_id
+                                ? `/api/orders/${item.design_submission_id}/pdf`
+                                : `/api/products/${item.product_id}/pdf`
+                            }
                             onClick={() => setBusy(item.id)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
                           >

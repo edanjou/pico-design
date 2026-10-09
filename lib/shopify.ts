@@ -69,6 +69,19 @@ export function designIdOfLineItem(item: ShopifyLineItem): string | null {
 }
 
 /**
+ * Produit Pico déjà fait porté par une ligne de commande, vendu tel quel
+ * (sans passer par l'outil). Le thème Shopify pose l'id du produit, lu dans
+ * le métachamp « Produit Pico », en propriété de ligne `_pico_product` à
+ * l'ajout au panier — voir la page Aide.
+ */
+export function productIdOfLineItem(item: ShopifyLineItem): string | null {
+  const property = (item.properties ?? []).find((p) => p.name === "_pico_product");
+  const value = property?.value?.trim();
+  // Même filtre que le design : la valeur vient du panier, donc du client.
+  return value && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
+}
+
+/**
  * Domaine de la boutique déduit de la charge utile, quand l'en-tête
  * X-Shopify-Shop-Domain manque : l'adresse de suivi de la commande le porte.
  */

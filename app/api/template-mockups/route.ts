@@ -98,12 +98,14 @@ export async function POST(request: Request) {
   // de toute la scène) dès la création, sans réglage manuel. Un mockup dont
   // le bundle n'a pas de masque garde des marges nulles.
   const bounds = await loadMaskBounds(supabase.storage, xmlPath);
-  const round2 = (n: number) => Math.round(n * 100) / 100;
+  // Arrondi vers l'extérieur, comme « Caler sur le produit » : au plus proche,
+  // le visuel pouvait commencer en dedans et laisser un liseré le long du bord.
+  const floor2 = (n: number) => Math.floor(n * 100) / 100;
   const margins = {
-    margin_left: parseZoneMarginValue(formData.get("marginLeft") ?? (bounds ? String(round2(bounds.left)) : null)),
-    margin_right: parseZoneMarginValue(formData.get("marginRight") ?? (bounds ? String(round2(bounds.right)) : null)),
-    margin_top: parseZoneMarginValue(formData.get("marginTop") ?? (bounds ? String(round2(bounds.top)) : null)),
-    margin_bottom: parseZoneMarginValue(formData.get("marginBottom") ?? (bounds ? String(round2(bounds.bottom)) : null)),
+    margin_left: parseZoneMarginValue(formData.get("marginLeft") ?? (bounds ? String(floor2(bounds.left)) : null)),
+    margin_right: parseZoneMarginValue(formData.get("marginRight") ?? (bounds ? String(floor2(bounds.right)) : null)),
+    margin_top: parseZoneMarginValue(formData.get("marginTop") ?? (bounds ? String(floor2(bounds.top)) : null)),
+    margin_bottom: parseZoneMarginValue(formData.get("marginBottom") ?? (bounds ? String(floor2(bounds.bottom)) : null)),
   };
 
   // Placé en dernier par défaut, pour ne pas bousculer l'ordre existant.

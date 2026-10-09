@@ -196,7 +196,7 @@ const PRODUCT_BLOCK = String.raw`{%- comment -%}
 
 const AURORA_CART_LINES = String.raw`{% assign pico_design = item.properties['_design'] %}
 {% if pico_design != blank %}
-  <img src='${SITE}/api/design/preview/{{ pico_design }}' alt='Aperçu de ton design' class='cart-item__image shape__target-image'>
+  <img src='${SITE}/api/design/preview/{{ pico_design }}' alt='Aperçu de ton design' class='cart-item__image shape__target-image' style='object-fit: contain !important'>
 {% elsif item.image %}`;
 
 const GENERIC_CART_BLOCK = String.raw`{%- assign pico_design = item.properties['_design'] -%}
@@ -205,6 +205,7 @@ const GENERIC_CART_BLOCK = String.raw`{%- assign pico_design = item.properties['
     src="${SITE}/api/design/preview/{{ pico_design | url_encode }}"
     alt="Aperçu de ton design"
     width="150"
+    style="object-fit: contain !important"
     loading="lazy"
   >
 {%- else -%}
@@ -236,6 +237,8 @@ const MEDIACLIP_CART_BLOCK = String.raw`{%- comment -%}
         img.src = PREVIEW + id;
         img.removeAttribute("srcset");
         img.alt = "Aperçu de ton design";
+        // Le visuel au complet : la vignette du panier le recadrerait.
+        img.style.setProperty("object-fit", "contain", "important");
       });
     }
     apply();

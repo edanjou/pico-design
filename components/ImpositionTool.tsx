@@ -24,6 +24,7 @@ import { DUPLO_MARKS, computeDuploLayout } from "@/lib/imposition/duplo";
 import { MAX_DOCUMENT_COPIES, leafAt, planDocument } from "@/lib/imposition/documentPlan";
 import { regMarkRects, type MmRect } from "@/lib/imposition/regmark";
 import { formatInches, sheetLabel } from "@/lib/imposition/presets";
+import { IMAGE_TYPES, imageToPdf, isImageFile } from "@/lib/imposition/imageToPdf";
 import { MM_TO_PT, formatIn } from "@/lib/pdf/units";
 import { MACHINES, MACHINE_LABELS, type CutterMachine } from "@/lib/imposition/machines";
 import type { SavedImposition } from "@/lib/imposition/saved";
@@ -54,6 +55,8 @@ interface SourceItem {
   name: string;
   productId?: string;
   file?: File;
+  // Image d'origine quand `file` en est la conversion en PDF (refaite si le format change).
+  image?: File;
   // PDF téléversé déjà enregistré avec l'imposition qu'on modifie.
   storedPath?: string;
   // Taille de la page du PDF (mm), null tant qu'elle n'est pas lue.
@@ -406,6 +409,16 @@ export default function ImpositionTool({
   async function handleFiles(files: FileList | null) {
     if (!files) return;
     for (const file of Array.from(files)) {
+      if (isImageFile(file)) {
+        try {
+          const pdf = await imageToPdf(file, piece.widthMm, piece.heightMm);
+          const size = await readPdfPageSizeMm(pdf);
+          addItem({ kind: "upload", name: file.name, file: pdf, image: file, widthMm: size?.widthMm ?? null, heightMm: size?.heightMm ?? null });
+        } catch {
+          setError(`Impossible de lire l'image « ${file.name} ».`);
+        }
+        continue;
+      }
       const size = await readPdfPageSizeMm(file);
       addItem({
         kind: "upload",
@@ -428,6 +441,32 @@ export default function ImpositionTool({
       return current.map((i) => (i.key === key ? { ...i, copies: Math.max(1, cellCount - others) } : i));
     });
   }
+
+  // Une image suit le format : si celui-ci change, on refait son PDF (et sa miniature).
+  useEffect(() => {
+    let cancelled = false;
+    for (const item of items) {
+      if (!item.image || matchesPiece(item, piece.widthMm, piece.heightMm)) continue;
+      const image = item.image;
+      imageToPdf(image, piece.widthMm, piece.heightMm)
+        .then(async (pdf) => {
+          const size = await readPdfPageSizeMm(pdf);
+          if (cancelled) return;
+          thumbsRequested.current.delete(item.key);
+          setItems((current) =>
+            current.map((i) =>
+              i.key === item.key && i.image === image
+                ? { ...i, file: pdf, widthMm: size?.widthMm ?? null, heightMm: size?.heightMm ?? null }
+                : i
+            )
+          );
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [items, piece.widthMm, piece.heightMm]);
 
   const mismatched = items.filter((i) => !matchesPiece(i, piece.widthMm, piece.heightMm));
   const machineProblem = isDuplo
@@ -702,7 +741,7 @@ export default function ImpositionTool({
           <UpdatingBadge show={isRefreshing} />
         </h1>
         <p className="text-sm text-neutral-500">
-          Placez des PDF d&apos;impression sur une feuille selon le format et les paramètres de la machine.
+          Placez des PDF d&apos;impression ou des images sur une feuille selon le format et les paramètres de la machine.
         </p>
       </div>
 
@@ -1044,7 +1083,7 @@ export default function ImpositionTool({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className={`text-xs ${ok ? "text-neutral-500" : "text-red-600"}`}>
-                          {item.kind === "product" ? "Produit" : "PDF téléversé"}
+                          {item.kind === "product" ? "Produit" : item.image ? "Image téléversée" : "PDF téléversé"}
                           {item.widthMm !== null && item.heightMm !== null
                             ? ` · ${sizeLabel(item.widthMm, item.heightMm)}`
                             : ""}
@@ -1113,7 +1152,7 @@ export default function ImpositionTool({
               <input
                 ref={fileInput}
                 type="file"
-                accept="application/pdf"
+                accept={["application/pdf", ...IMAGE_TYPES].join(",")}
                 multiple
                 onChange={(e) => handleFiles(e.target.files)}
                 className="block w-full text-sm"
